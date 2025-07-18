@@ -31,7 +31,7 @@ export default function SoundscapeController({
   };
 
   return (
-    <div className="absolute bottom-8 right-8">
+    <div className="absolute bottom-8 right-8 z-10">
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
           <Button size="icon" className="rounded-full w-16 h-16 shadow-lg">

@@ -63,7 +63,7 @@ export default function EtherealAcousticsClient() {
     <div className="relative w-full h-screen">
       <FogVisualizer ref={fogVisualizerRef} onShapeClick={handleShapeClick} />
       <AudioEngine ref={audioEngineRef} />
-      <header className="absolute top-0 left-0 p-4 md:p-8">
+      <header className="absolute top-0 left-0 p-4 md:p-8 z-10">
         <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-4xl">
           Ethereal Acoustics
         </h1>
