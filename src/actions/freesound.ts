@@ -19,7 +19,7 @@ async function fetchSample(query: string, apiKey: string): Promise<{ url: string
   try {
     const url = `${FREESOUND_API_URL}/search/text/?query=${encodeURIComponent(
       query
-    )}&fields=id,name,previews,duration&filter=duration:[10%20TO%20180]&token=${apiKey}`;
+    )}&fields=id,name,previews,duration&token=${apiKey}`;
     const response = await fetch(url, {
       headers: {
         Authorization: `Api-Key ${apiKey}`,
