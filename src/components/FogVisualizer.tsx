@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import type { Shape } from '@/lib/types';
 
 interface Layer {
@@ -11,13 +11,35 @@ interface Layer {
 
 interface FogVisualizerProps {
   layers: Layer[];
-  onShapeClick: (id:string) => void;
+  onShapeClick: (id: string) => void;
 }
 
-export default function FogVisualizer({ layers, onShapeClick }: FogVisualizerProps) {
+type FogVisualizerHandle = {
+    createShape: (id: string) => Shape | null;
+};
+
+const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(({ layers, onShapeClick }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const layersRef = useRef(layers);
   layersRef.current = layers;
+
+  useImperativeHandle(ref, () => ({
+    createShape: (id: string): Shape | null => {
+        const canvas = canvasRef.current;
+        if (!canvas) return null;
+
+        const { width, height } = canvas.getBoundingClientRect();
+        if (width === 0 || height === 0) return null;
+
+        const radius = Math.random() * 20 + 20;
+        const x = Math.random() * (width - radius * 2) + radius;
+        const y = Math.random() * (height - radius * 2) + radius;
+        const colors = ['#fc79bc', '#fcec79', '#fafafa'];
+        const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+        return { id, x, y, radius, color: randomColor };
+    }
+  }));
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -92,4 +114,7 @@ export default function FogVisualizer({ layers, onShapeClick }: FogVisualizerPro
   }, [onShapeClick]);
 
   return <canvas ref={canvasRef} className="absolute inset-0 -z-10" />;
-}
+});
+
+FogVisualizer.displayName = 'FogVisualizer';
+export default FogVisualizer;

@@ -21,34 +21,18 @@ type Layer = {
 
 export default function EtherealAcousticsClient() {
   const audioEngineRef = useRef<AudioEngineHandle>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const fogVisualizerRef = useRef<{ createShape: (id: string) => Shape | null }>(null);
   const [layers, setLayers] = useState<Layer[]>([]);
   const { toast } = useToast();
 
-  const createShape = (id: string): Shape | null => {
-    const container = containerRef.current;
-    if (!container) return null;
-
-    const { width, height } = container.getBoundingClientRect();
-    if (width === 0 || height === 0) return null;
-
-    const radius = Math.random() * 20 + 20;
-    const x = Math.random() * (width - radius * 2) + radius;
-    const y = Math.random() * (height - radius * 2) + radius;
-    const colors = ['#fc79bc', '#fcec79', '#fafafa'];
-    const randomColor = colors[Math.floor(Math.random() * colors.length)];
-
-    return { id, x, y, radius, color: randomColor };
-  };
-
   const addSynthLayer = () => {
-    if (!audioEngineRef.current) return;
+    if (!audioEngineRef.current || !fogVisualizerRef.current) return;
 
     const newSynth = audioEngineRef.current.startSynthPad();
     if (!newSynth) return;
 
     const id = `layer_${Date.now()}`;
-    const newShape = createShape(id);
+    const newShape = fogVisualizerRef.current.createShape(id);
 
     if (newShape) {
       setLayers((prevLayers) => [
@@ -59,7 +43,7 @@ export default function EtherealAcousticsClient() {
   };
 
   const addFreesoundLayer = async () => {
-    if (!audioEngineRef.current) return;
+    if (!audioEngineRef.current || !fogVisualizerRef.current) return;
 
     const queries = ['ambient', 'drone', 'texture', 'pad', 'atmosphere'];
     const randomQuery = queries[Math.floor(Math.random() * queries.length)];
@@ -92,7 +76,7 @@ export default function EtherealAcousticsClient() {
     if (!newPlayer) return;
 
     const id = `layer_${Date.now()}`;
-    const newShape = createShape(id);
+    const newShape = fogVisualizerRef.current.createShape(id);
 
     if (newShape) {
       setLayers((prevLayers) => [
@@ -119,8 +103,8 @@ export default function EtherealAcousticsClient() {
   };
 
   return (
-    <div ref={containerRef} className="relative w-full h-screen">
-      <FogVisualizer layers={layers} onShapeClick={handleShapeClick} />
+    <div className="relative w-full h-screen">
+      <FogVisualizer ref={fogVisualizerRef} layers={layers} onShapeClick={handleShapeClick} />
       <AudioEngine ref={audioEngineRef} />
       <header className="absolute top-0 left-0 p-4 md:p-8 z-10">
         <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-4xl">
