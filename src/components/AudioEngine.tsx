@@ -87,8 +87,11 @@ export function AudioEngine({ soundscapeState }: AudioEngineProps) {
       if (layering.texture) {
         getFreesoundSample().then(sample => {
           if (sample && sample.url) {
+            // Use the new proxy endpoint
+            const proxiedUrl = `/api/freesound-proxy?url=${encodeURIComponent(sample.url)}`;
+
             texturePlayer.current = new Tone.Player({
-              url: sample.url,
+              url: proxiedUrl,
               loop: true,
               fadeIn: 2,
               fadeOut: 2,
