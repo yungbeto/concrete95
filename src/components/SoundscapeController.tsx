@@ -12,11 +12,13 @@ import { Plus, Waves, Zap } from 'lucide-react';
 interface SoundscapeControllerProps {
   onAddSynthLayer: () => void;
   onAddFreesoundLayer: () => void;
+  isReady: boolean;
 }
 
 export default function SoundscapeController({
   onAddSynthLayer,
   onAddFreesoundLayer,
+  isReady,
 }: SoundscapeControllerProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -34,7 +36,7 @@ export default function SoundscapeController({
     <div className="absolute bottom-8 right-8 z-10">
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
-          <Button size="icon" className="rounded-full w-16 h-16 shadow-lg">
+          <Button size="icon" className="rounded-full w-16 h-16 shadow-lg" disabled={!isReady}>
             <Plus className="h-8 w-8" />
           </Button>
         </PopoverTrigger>

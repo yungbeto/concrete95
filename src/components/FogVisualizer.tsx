@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Shape } from '@/lib/types';
 
 interface Layer {
@@ -12,35 +12,15 @@ interface Layer {
 interface FogVisualizerProps {
   layers: Layer[];
   onShapeClick: (id: string) => void;
+  onReady: (size: { width: number; height: number }) => void;
 }
 
-type FogVisualizerHandle = {
-    createShape: (id: string) => Shape | null;
-};
-
-const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(({ layers, onShapeClick }, ref) => {
+const FogVisualizer = ({ layers, onShapeClick, onReady }: FogVisualizerProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const layersRef = useRef(layers);
-  layersRef.current = layers;
+  layersRef.current = layers; // Keep a mutable ref to the latest layers for the click handler
 
-  useImperativeHandle(ref, () => ({
-    createShape: (id: string): Shape | null => {
-        const canvas = canvasRef.current;
-        if (!canvas) return null;
-
-        const { width, height } = canvas.getBoundingClientRect();
-        if (width === 0 || height === 0) return null;
-
-        const radius = Math.random() * 20 + 20;
-        const x = Math.random() * (width - radius * 2) + radius;
-        const y = Math.random() * (height - radius * 2) + radius;
-        const colors = ['#fc79bc', '#fcec79', '#fafafa'];
-        const randomColor = colors[Math.floor(Math.random() * colors.length)];
-
-        return { id, x, y, radius, color: randomColor };
-    }
-  }));
-
+  // Main effect for resizing and setting up the animation loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -53,12 +33,18 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(({ lay
     const resizeCanvas = () => {
       const container = canvas.parentElement;
       if (container) {
-        canvas.width = container.clientWidth;
-        canvas.height = container.clientHeight;
+        const { clientWidth, clientHeight } = container;
+        if (canvas.width !== clientWidth || canvas.height !== clientHeight) {
+          canvas.width = clientWidth;
+          canvas.height = clientHeight;
+          // Report the new size back to the parent component
+          onReady({ width: clientWidth, height: clientHeight });
+        }
       }
     };
-
+    
     const render = () => {
+      resizeCanvas(); // Check for resize on each frame
       context.clearRect(0, 0, canvas.width, canvas.height);
 
       layersRef.current.forEach((layer) => {
@@ -72,17 +58,19 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(({ lay
       animationFrameId = window.requestAnimationFrame(render);
     };
 
-    resizeCanvas();
     render();
 
+    // Initial resize call
+    resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
     return () => {
       window.removeEventListener('resize', resizeCanvas);
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, []);
+  }, [onReady]);
 
+  // Effect for handling clicks
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -92,6 +80,7 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(({ lay
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
 
+      // Find the topmost clicked layer
       const clickedLayer = [...layersRef.current]
         .reverse()
         .find((layer) => {
@@ -114,7 +103,6 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(({ lay
   }, [onShapeClick]);
 
   return <canvas ref={canvasRef} className="absolute inset-0 -z-10" />;
-});
+};
 
-FogVisualizer.displayName = 'FogVisualizer';
 export default FogVisualizer;

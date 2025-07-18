@@ -3,7 +3,9 @@
 
 import { useRef, useState, useEffect } from 'react';
 import type { PolySynth, Player } from 'tone';
-import FogVisualizer from '@/components/FogVisualizer';
+import FogVisualizer, {
+  type FogVisualizerHandle,
+} from '@/components/FogVisualizer';
 import AudioEngine, {
   type AudioEngineHandle,
 } from '@/components/AudioEngine';
@@ -21,18 +23,33 @@ type Layer = {
 
 export default function EtherealAcousticsClient() {
   const audioEngineRef = useRef<AudioEngineHandle>(null);
-  const fogVisualizerRef = useRef<{ createShape: (id: string) => Shape | null }>(null);
   const [layers, setLayers] = useState<Layer[]>([]);
+  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
   const { toast } = useToast();
 
+  const createShape = (id: string): Shape | null => {
+    if (!canvasSize) return null;
+
+    const { width, height } = canvasSize;
+    if (width === 0 || height === 0) return null;
+
+    const radius = Math.random() * 20 + 20;
+    const x = Math.random() * (width - radius * 2) + radius;
+    const y = Math.random() * (height - radius * 2) + radius;
+    const colors = ['#fc79bc', '#fcec79', '#fafafa'];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+    return { id, x, y, radius, color: randomColor };
+  };
+
   const addSynthLayer = () => {
-    if (!audioEngineRef.current || !fogVisualizerRef.current) return;
+    if (!audioEngineRef.current) return;
 
     const newSynth = audioEngineRef.current.startSynthPad();
     if (!newSynth) return;
 
     const id = `layer_${Date.now()}`;
-    const newShape = fogVisualizerRef.current.createShape(id);
+    const newShape = createShape(id);
 
     if (newShape) {
       setLayers((prevLayers) => [
@@ -43,7 +60,7 @@ export default function EtherealAcousticsClient() {
   };
 
   const addFreesoundLayer = async () => {
-    if (!audioEngineRef.current || !fogVisualizerRef.current) return;
+    if (!audioEngineRef.current) return;
 
     const queries = ['ambient', 'drone', 'texture', 'pad', 'atmosphere'];
     const randomQuery = queries[Math.floor(Math.random() * queries.length)];
@@ -76,7 +93,7 @@ export default function EtherealAcousticsClient() {
     if (!newPlayer) return;
 
     const id = `layer_${Date.now()}`;
-    const newShape = fogVisualizerRef.current.createShape(id);
+    const newShape = createShape(id);
 
     if (newShape) {
       setLayers((prevLayers) => [
@@ -104,7 +121,11 @@ export default function EtherealAcousticsClient() {
 
   return (
     <div className="relative w-full h-screen">
-      <FogVisualizer ref={fogVisualizerRef} layers={layers} onShapeClick={handleShapeClick} />
+      <FogVisualizer
+        layers={layers}
+        onShapeClick={handleShapeClick}
+        onReady={setCanvasSize}
+      />
       <AudioEngine ref={audioEngineRef} />
       <header className="absolute top-0 left-0 p-4 md:p-8 z-10">
         <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-4xl">
@@ -117,6 +138,7 @@ export default function EtherealAcousticsClient() {
       <SoundscapeController
         onAddSynthLayer={addSynthLayer}
         onAddFreesoundLayer={addFreesoundLayer}
+        isReady={!!canvasSize}
       />
     </div>
   );
