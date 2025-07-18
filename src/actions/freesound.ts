@@ -28,7 +28,7 @@ export async function getFreesoundSample(tags: string[]): Promise<string | null>
   const query = tags.join(' ');
 
   try {
-    const url = `${FREESOUND_API_URL}/search/text/?query=${encodeURIComponent(query)}&fields=id,name,previews&filter=duration:[5 TO 90]`;
+    const url = `${FREESOUND_API_URL}/search/text/?query=${encodeURIComponent(query)}&fields=id,name,previews&filter=duration:[5%20TO%2090]&token=${apiKey}`;
     const response = await fetch(url, { 
         headers: {
             'Authorization': `Token ${apiKey}`
