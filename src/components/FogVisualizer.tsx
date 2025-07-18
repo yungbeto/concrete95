@@ -1,143 +1,95 @@
 
 'use client';
 
-import {
-  useEffect,
-  useRef,
-  forwardRef,
-  useImperativeHandle,
-  useState,
-} from 'react';
+import { useEffect, useRef } from 'react';
+import type { Shape } from '@/lib/types';
 
-export type Shape = {
+interface Layer {
   id: string;
-  x: number;
-  y: number;
-  radius: number;
-  color: string;
-};
-
-export type FogVisualizerHandle = {
-  addBody: (id: string) => Shape | null;
-  removeBody: (id: string) => void;
-};
-
-interface FogVisualizerProps {
-  onShapeClick: (id: string) => void;
+  shape: Shape;
 }
 
-const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
-  ({ onShapeClick }, ref) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [shapes, setShapes] = useState<Shape[]>([]);
-    // Use a ref to hold the shapes for the animation loop to prevent re-triggering the effect
-    const shapesRef = useRef(shapes);
-    shapesRef.current = shapes;
+interface FogVisualizerProps {
+  layers: Layer[];
+  onShapeClick: (id:string) => void;
+}
 
-    const createShape = (id: string): Shape | null => {
-      const canvas = canvasRef.current;
-      if (!canvas || canvas.width === 0 || canvas.height === 0) {
-        console.error('Canvas not ready for shape creation');
-        return null; // Don't create a shape if the canvas isn't ready
+export default function FogVisualizer({ layers, onShapeClick }: FogVisualizerProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const layersRef = useRef(layers);
+  layersRef.current = layers;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const context = canvas.getContext('2d');
+    if (!context) return;
+
+    let animationFrameId: number;
+
+    const resizeCanvas = () => {
+      const container = canvas.parentElement;
+      if (container) {
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
       }
-
-      const radius = Math.random() * 20 + 20; // Random radius between 20 and 40
-      const x = Math.random() * (canvas.width - radius * 2) + radius;
-      const y = Math.random() * (canvas.height - radius * 2) + radius;
-
-      const colors = ['#fc79bc', '#fcec79', '#fafafa'];
-      const randomColor = colors[Math.floor(Math.random() * colors.length)];
-
-      return { id, x, y, radius, color: randomColor };
     };
 
-    useImperativeHandle(ref, () => ({
-      addBody: (id: string) => {
-        const newShape = createShape(id);
-        if (newShape) {
-          setShapes((prevShapes) => [...prevShapes, newShape]);
-        }
-        return newShape;
-      },
-      removeBody: (id: string) => {
-        setShapes((prevShapes) =>
-          prevShapes.filter((shape) => shape.id !== id)
-        );
-      },
-    }));
+    const render = () => {
+      context.clearRect(0, 0, canvas.width, canvas.height);
 
-    useEffect(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
+      layersRef.current.forEach((layer) => {
+        const { shape } = layer;
+        context.beginPath();
+        context.arc(shape.x, shape.y, shape.radius, 0, Math.PI * 2);
+        context.fillStyle = shape.color;
+        context.fill();
+      });
 
-      const context = canvas.getContext('2d');
-      if (!context) return;
+      animationFrameId = window.requestAnimationFrame(render);
+    };
 
-      let animationFrameId: number;
+    resizeCanvas();
+    render();
 
-      const resizeCanvas = () => {
-        const container = canvas.parentElement;
-        if (container) {
-          canvas.width = container.clientWidth;
-          canvas.height = container.clientHeight;
-        }
-      };
+    window.addEventListener('resize', resizeCanvas);
 
-      const render = () => {
-        context.clearRect(0, 0, canvas.width, canvas.height);
+    return () => {
+      window.removeEventListener('resize', resizeCanvas);
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, []);
 
-        shapesRef.current.forEach((shape) => {
-          context.beginPath();
-          context.arc(shape.x, shape.y, shape.radius, 0, Math.PI * 2);
-          context.fillStyle = shape.color;
-          context.fill();
-        });
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-        animationFrameId = window.requestAnimationFrame(render);
-      };
+    const handleClick = (event: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
 
-      resizeCanvas();
-      render();
-
-      window.addEventListener('resize', resizeCanvas);
-
-      return () => {
-        window.removeEventListener('resize', resizeCanvas);
-        window.cancelAnimationFrame(animationFrameId);
-      };
-    }, []); // This effect runs only once on mount
-
-    useEffect(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const handleClick = (event: MouseEvent) => {
-        const rect = canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-
-        // Iterate backwards to select the top-most shape
-        const clickedShape = [...shapesRef.current].reverse().find((shape) => {
+      const clickedLayer = [...layersRef.current]
+        .reverse()
+        .find((layer) => {
+          const { shape } = layer;
           const distance = Math.sqrt(
             Math.pow(x - shape.x, 2) + Math.pow(y - shape.y, 2)
           );
           return distance < shape.radius;
         });
 
-        if (clickedShape) {
-          onShapeClick(clickedShape.id);
-        }
-      };
+      if (clickedLayer) {
+        onShapeClick(clickedLayer.id);
+      }
+    };
 
-      canvas.addEventListener('click', handleClick);
-      return () => {
-        canvas.removeEventListener('click', handleClick);
-      };
-    }, [onShapeClick]); // Re-bind click handler only if onShapeClick changes
+    canvas.addEventListener('click', handleClick);
+    return () => {
+      canvas.removeEventListener('click', handleClick);
+    };
+  }, [onShapeClick]);
 
-    return <canvas ref={canvasRef} className="absolute inset-0 -z-10" />;
-  }
-);
-
-FogVisualizer.displayName = 'FogVisualizer';
-export default FogVisualizer;
+  return <canvas ref={canvasRef} className="absolute inset-0 -z-10" />;
+}

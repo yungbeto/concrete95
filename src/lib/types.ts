@@ -1,1 +1,8 @@
-// We will define our types here as we build the application.
+
+export type Shape = {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+  color: string;
+};
