@@ -30,6 +30,7 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
   ({ onShapeClick }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [shapes, setShapes] = useState<Shape[]>([]);
+    // Use a ref to hold the shapes for the animation loop to prevent re-triggering the effect
     const shapesRef = useRef(shapes);
     shapesRef.current = shapes;
 
@@ -37,14 +38,13 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
       const canvas = canvasRef.current;
       if (!canvas || canvas.width === 0 || canvas.height === 0) {
         console.error('Canvas not ready for shape creation');
-        return null;
+        return null; // Don't create a shape if the canvas isn't ready
       }
 
       const radius = Math.random() * 20 + 20; // Random radius between 20 and 40
-      // Ensure shapes are not placed too close to the edge
       const x = Math.random() * (canvas.width - radius * 2) + radius;
       const y = Math.random() * (canvas.height - radius * 2) + radius;
-      
+
       const colors = ['#fc79bc', '#fcec79', '#fafafa'];
       const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
@@ -82,16 +82,17 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
           canvas.height = container.clientHeight;
         }
       };
-      
+
       const render = () => {
         context.clearRect(0, 0, canvas.width, canvas.height);
-        
+
         shapesRef.current.forEach((shape) => {
           context.beginPath();
           context.arc(shape.x, shape.y, shape.radius, 0, Math.PI * 2);
           context.fillStyle = shape.color;
           context.fill();
         });
+
         animationFrameId = window.requestAnimationFrame(render);
       };
 
@@ -104,7 +105,7 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
         window.removeEventListener('resize', resizeCanvas);
         window.cancelAnimationFrame(animationFrameId);
       };
-    }, []);
+    }, []); // This effect runs only once on mount
 
     useEffect(() => {
       const canvas = canvasRef.current;
@@ -115,7 +116,8 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
 
-        const clickedShape = [...shapes].reverse().find((shape) => {
+        // Iterate backwards to select the top-most shape
+        const clickedShape = [...shapesRef.current].reverse().find((shape) => {
           const distance = Math.sqrt(
             Math.pow(x - shape.x, 2) + Math.pow(y - shape.y, 2)
           );
@@ -128,8 +130,10 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
       };
 
       canvas.addEventListener('click', handleClick);
-      return () => canvas.removeEventListener('click', handleClick);
-    }, [shapes, onShapeClick]);
+      return () => {
+        canvas.removeEventListener('click', handleClick);
+      };
+    }, [onShapeClick]); // Re-bind click handler only if onShapeClick changes
 
     return <canvas ref={canvasRef} className="absolute inset-0 -z-10" />;
   }

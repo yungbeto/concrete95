@@ -1,7 +1,8 @@
+
 'use client';
 
 import { useRef, useState } from 'react';
-import type { Tone } from 'tone';
+import type { PolySynth, Player } from 'tone';
 import FogVisualizer, {
   type FogVisualizerHandle,
   type Shape,
@@ -16,8 +17,8 @@ import { useToast } from '@/hooks/use-toast';
 type Layer = {
   id: string;
   shape: Shape;
-  synth?: Tone.PolySynth;
-  player?: Tone.Player;
+  synth?: PolySynth;
+  player?: Player;
 };
 
 export default function EtherealAcousticsClient() {
