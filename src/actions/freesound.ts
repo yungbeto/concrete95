@@ -28,10 +28,11 @@ export async function getFreesoundSample(tags: string[]): Promise<string | null>
   const query = tags.join(' ');
 
   try {
+    // The Freesound API requires the API key in both the Authorization header and as a `token` query parameter.
     const url = `${FREESOUND_API_URL}/search/text/?query=${encodeURIComponent(query)}&fields=id,name,previews&filter=duration:[5%20TO%2090]&token=${apiKey}`;
     const response = await fetch(url, { 
         headers: {
-            'Authorization': `Token ${apiKey}`
+            'Authorization': `Api-Key ${apiKey}`
         }
     });
 
