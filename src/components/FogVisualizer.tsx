@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -112,9 +113,6 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
       if (!canvas || !container) return;
 
       const resizeCanvas = () => {
-        const context = canvas.getContext('2d');
-        if (!context) return;
-        
         const currentWidth = container.clientWidth;
         const currentHeight = container.clientHeight;
 
@@ -123,24 +121,31 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
           canvas.height = currentHeight;
         }
 
-
+        const context = canvas.getContext('2d');
+        if (!context) return;
+        
         context.clearRect(0, 0, canvas.width, canvas.height);
+        
         shapes.forEach((shape) => {
-          context.fillStyle = shape.color;
-          context.beginPath();
-          context.moveTo(shape.vertices[0].x, shape.vertices[0].y);
-          for (let i = 1; i < shape.vertices.length; i++) {
-            context.lineTo(shape.vertices[i].x, shape.vertices[i].y);
+          if (shape.vertices.length > 0) {
+            context.fillStyle = shape.color;
+            context.beginPath();
+            context.moveTo(shape.vertices[0].x, shape.vertices[0].y);
+            for (let i = 1; i < shape.vertices.length; i++) {
+              context.lineTo(shape.vertices[i].x, shape.vertices[i].y);
+            }
+            context.closePath();
+            context.fill();
           }
-          context.closePath();
-          context.fill();
         });
       };
 
-      const animationFrameId = requestAnimationFrame(function animate() {
+      let animationFrameId: number;
+      const animate = () => {
         resizeCanvas();
-        requestAnimationFrame(animate);
-      });
+        animationFrameId = requestAnimationFrame(animate);
+      }
+      animate();
       
       window.addEventListener('resize', resizeCanvas);
 
