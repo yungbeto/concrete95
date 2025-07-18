@@ -81,10 +81,38 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const player = new Tone.Player({
         url: url,
         loop: true,
-        autostart: true,
         fadeOut: 1,
       }).toDestination();
+
+      // Wait for the player to load the audio buffer
       await Tone.loaded();
+
+      // Get the duration of the loaded audio
+      const duration = player.buffer.duration;
+
+      // Define loop duration constraints
+      const minLoopDuration = 0.5;
+      const maxLoopDuration = 3.5;
+
+      // Ensure the audio is long enough for our loop constraints
+      if (duration > minLoopDuration) {
+        // Calculate a random loop duration
+        const loopDuration =
+          Math.random() * (maxLoopDuration - minLoopDuration) +
+          minLoopDuration;
+
+        // Calculate a random start time, ensuring the loop fits
+        const maxStartTime = duration - loopDuration;
+        const startTime = Math.random() * maxStartTime;
+
+        // Set the loop start and end points
+        player.loopStart = startTime;
+        player.loopEnd = startTime + loopDuration;
+      }
+
+      // Start the player
+      player.start();
+
       return player;
     },
     stopFreesoundLoop: (player) => {
