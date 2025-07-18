@@ -17,10 +17,11 @@ type FreesoundResponse = {
 
 async function fetchSample(query: string, apiKey: string): Promise<{ url: string; duration: number } | null> {
   try {
-    const randomPage = Math.floor(Math.random() * 50) + 1;
+    // Removed random page logic to prevent errors on queries with few results.
+    // Always fetching page 1 of a broad query is more reliable.
     const url = `${FREESOUND_API_URL}/search/text/?query=${encodeURIComponent(
       query
-    )}&page=${randomPage}&fields=id,name,previews,duration&token=${apiKey}`;
+    )}&page=1&fields=id,name,previews,duration&token=${apiKey}`;
     
     const response = await fetch(url, {
       headers: {
