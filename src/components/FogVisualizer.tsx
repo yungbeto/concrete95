@@ -8,12 +8,16 @@ import {
   useState,
 } from 'react';
 
+type Vertex = { x: number; y: number };
+
 export type Shape = {
   id: string;
   x: number;
   y: number;
-  radius: number;
+  vertices: Vertex[];
   color: string;
+  // We need to know the rough "size" for click detection
+  radius: number;
 };
 
 export type FogVisualizerHandle = {
@@ -33,14 +37,26 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
     const createShape = (id: string) => {
       if (!canvasRef.current) return null;
       const canvas = canvasRef.current;
-      const radius = Math.random() * 20 + 20;
-      const x = Math.random() * (canvas.width - radius * 2) + radius;
-      const y = Math.random() * (canvas.height - radius * 2) + radius;
+      
+      const maxRadius = 40;
+      const x = Math.random() * (canvas.width - maxRadius * 2) + maxRadius;
+      const y = Math.random() * (canvas.height - maxRadius * 2) + maxRadius;
 
+      const sides = Math.floor(Math.random() * (8 - 4 + 1)) + 4;
+      const vertices = [];
+      for (let i = 0; i < sides; i++) {
+        const angle = ((Math.PI * 2) / sides) * i;
+        const radius = Math.random() * maxRadius * 0.5 + maxRadius * 0.5;
+        vertices.push({
+          x: x + radius * Math.cos(angle),
+          y: y + radius * Math.sin(angle),
+        });
+      }
+      
       const colors = ['#fc79bc', '#fcec79', '#fafafa'];
       const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
-      const newShape = { id, x, y, radius, color: randomColor };
+      const newShape = { id, x, y, vertices, color: randomColor, radius: maxRadius };
       return newShape;
     };
 
@@ -69,6 +85,7 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
         const y = event.clientY - rect.top;
 
         // Find the topmost shape that was clicked
+        // We'll use the center and max radius for a simpler hit detection
         const clickedShape = [...shapes]
           .reverse()
           .find((shape) => {
@@ -95,30 +112,45 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
       if (!canvas || !container) return;
 
       const resizeCanvas = () => {
-        canvas.width = container.clientWidth;
-        canvas.height = container.clientHeight;
-
         const context = canvas.getContext('2d');
         if (!context) return;
+        
+        const currentWidth = container.clientWidth;
+        const currentHeight = container.clientHeight;
+
+        if (canvas.width !== currentWidth || canvas.height !== currentHeight) {
+          canvas.width = currentWidth;
+          canvas.height = currentHeight;
+        }
+
 
         context.clearRect(0, 0, canvas.width, canvas.height);
         shapes.forEach((shape) => {
           context.fillStyle = shape.color;
           context.beginPath();
-          context.arc(shape.x, shape.y, shape.radius, 0, Math.PI * 2);
+          context.moveTo(shape.vertices[0].x, shape.vertices[0].y);
+          for (let i = 1; i < shape.vertices.length; i++) {
+            context.lineTo(shape.vertices[i].x, shape.vertices[i].y);
+          }
+          context.closePath();
           context.fill();
         });
       };
 
-      resizeCanvas();
+      const animationFrameId = requestAnimationFrame(function animate() {
+        resizeCanvas();
+        requestAnimationFrame(animate);
+      });
+      
       window.addEventListener('resize', resizeCanvas);
 
       return () => {
         window.removeEventListener('resize', resizeCanvas);
+        cancelAnimationFrame(animationFrameId);
       };
     }, [shapes]);
 
-    return <canvas ref={canvasRef} className="absolute inset-0 z-0" />;
+    return <canvas ref={canvasRef} className="absolute inset-0 -z-10" />;
   }
 );
 
