@@ -16,7 +16,7 @@ type FreesoundResponse = {
 
 export async function getFreesoundSample(tags: string[]): Promise<string | null> {
   const apiKey = process.env.FREESOUND_API_KEY;
-  if (!apiKey) {
+  if (!apiKey || apiKey === 'YOUR_FREESOUND_API_KEY_HERE') {
     console.error('Freesound API key not found. Please add FREESOUND_API_KEY to your .env.local file.');
     return null;
   }
@@ -28,8 +28,13 @@ export async function getFreesoundSample(tags: string[]): Promise<string | null>
   const query = tags.join(' ');
 
   try {
-    const url = `${FREESOUND_API_URL}/search/text/?query=${encodeURIComponent(query)}&fields=id,name,previews&token=${apiKey}&filter=duration:[5 TO 90]`;
-    const response = await fetch(url, { cache: 'no-store' });
+    const url = `${FREESOUND_API_URL}/search/text/?query=${encodeURIComponent(query)}&fields=id,name,previews&filter=duration:[5 TO 90]`;
+    const response = await fetch(url, { 
+        headers: {
+            'Authorization': `Token ${apiKey}`
+        },
+        cache: 'no-store' 
+    });
 
     if (!response.ok) {
       console.error('Freesound API error:', response.status, await response.text());
