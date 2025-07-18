@@ -9,16 +9,12 @@ import {
   useState,
 } from 'react';
 
-type Vertex = { x: number; y: number };
-
 export type Shape = {
   id: string;
   x: number;
   y: number;
-  vertices: Vertex[];
-  color: string;
-  // We need to know the rough "size" for click detection
   radius: number;
+  color: string;
 };
 
 export type FogVisualizerHandle = {
@@ -33,12 +29,9 @@ interface FogVisualizerProps {
 const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
   ({ onShapeClick }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    // shapes state stores the data for our shapes
     const [shapes, setShapes] = useState<Shape[]>([]);
-    // Keep a ref to the shapes to use in the animation loop without dependency issues
     const shapesRef = useRef(shapes);
     shapesRef.current = shapes;
-
 
     const createShape = (id: string): Shape | null => {
       const canvas = canvasRef.current;
@@ -47,27 +40,15 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
         return null;
       }
 
-      const maxRadius = 40;
+      const radius = Math.random() * 20 + 20; // Random radius between 20 and 40
       // Ensure shapes are not placed too close to the edge
-      const x = Math.random() * (canvas.width - maxRadius * 2) + maxRadius;
-      const y = Math.random() * (canvas.height - maxRadius * 2) + maxRadius;
-
-      const sides = Math.floor(Math.random() * (8 - 4 + 1)) + 4;
-      const vertices: Vertex[] = [];
-      for (let i = 0; i < sides; i++) {
-        const angle = ((Math.PI * 2) / sides) * i;
-        // Use a base radius and add some randomness
-        const radius = maxRadius * 0.75 + Math.random() * (maxRadius * 0.25);
-        vertices.push({
-          x: radius * Math.cos(angle),
-          y: radius * Math.sin(angle),
-        });
-      }
+      const x = Math.random() * (canvas.width - radius * 2) + radius;
+      const y = Math.random() * (canvas.height - radius * 2) + radius;
       
       const colors = ['#fc79bc', '#fcec79', '#fafafa'];
       const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
-      return { id, x, y, vertices, color: randomColor, radius: maxRadius };
+      return { id, x, y, radius, color: randomColor };
     };
 
     useImperativeHandle(ref, () => ({
@@ -85,7 +66,6 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
       },
     }));
 
-     // Main effect for rendering and resizing
     useEffect(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -107,19 +87,10 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
         context.clearRect(0, 0, canvas.width, canvas.height);
         
         shapesRef.current.forEach((shape) => {
-            if (shape.vertices.length > 0) {
-              context.save();
-              context.translate(shape.x, shape.y);
-              context.beginPath();
-              context.moveTo(shape.vertices[0].x, shape.vertices[0].y);
-              for (let i = 1; i < shape.vertices.length; i++) {
-                context.lineTo(shape.vertices[i].x, shape.vertices[i].y);
-              }
-              context.closePath();
-              context.fillStyle = shape.color;
-              context.fill();
-              context.restore();
-            }
+          context.beginPath();
+          context.arc(shape.x, shape.y, shape.radius, 0, Math.PI * 2);
+          context.fillStyle = shape.color;
+          context.fill();
         });
         animationFrameId = window.requestAnimationFrame(render);
       };
@@ -133,9 +104,8 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
         window.removeEventListener('resize', resizeCanvas);
         window.cancelAnimationFrame(animationFrameId);
       };
-    }, []); // This effect runs only once on mount
+    }, []);
 
-    // Effect for handling clicks
     useEffect(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -145,7 +115,6 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
 
-        // Iterate backwards so we click the top-most shape
         const clickedShape = [...shapes].reverse().find((shape) => {
           const distance = Math.sqrt(
             Math.pow(x - shape.x, 2) + Math.pow(y - shape.y, 2)
