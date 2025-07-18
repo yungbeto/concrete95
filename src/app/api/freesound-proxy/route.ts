@@ -1,4 +1,3 @@
-// /src/app/api/freesound-proxy/route.ts
 import { type NextRequest } from 'next/server'
 
 export async function GET(request: NextRequest) {
@@ -15,7 +14,6 @@ export async function GET(request: NextRequest) {
       throw new Error('Freesound API key not configured');
     }
 
-    // Fetch the audio file from Freesound using the API key for authorization
     const audioResponse = await fetch(audioUrl, {
       headers: {
         'Authorization': `Api-Key ${apiKey}`
@@ -28,7 +26,6 @@ export async function GET(request: NextRequest) {
       return new Response(`Failed to fetch audio from Freesound: ${errorText}`, { status: audioResponse.status });
     }
 
-    // Stream the audio data back to the client
     const headers = new Headers({
       'Content-Type': audioResponse.headers.get('Content-Type') || 'audio/mpeg',
       'Content-Length': audioResponse.headers.get('Content-Length') || '',

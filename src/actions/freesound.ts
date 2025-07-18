@@ -17,8 +17,6 @@ type FreesoundResponse = {
 
 async function fetchSample(query: string, apiKey: string): Promise<{ url: string; duration: number } | null> {
   try {
-    // Removed random page logic to prevent errors on queries with few results.
-    // Always fetching page 1 of a broad query is more reliable.
     const url = `${FREESOUND_API_URL}/search/text/?query=${encodeURIComponent(
       query
     )}&page=1&fields=id,name,previews,duration&token=${apiKey}`;
@@ -59,7 +57,6 @@ export async function getFreesoundSample(): Promise<{ url: string; duration: num
     return null;
   }
 
-  // Fetch a random sound using a general query.
   const query = 'field recording';
   return await fetchSample(query, apiKey);
 }

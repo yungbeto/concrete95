@@ -31,7 +31,6 @@ export function AudioEngine({ soundscapeState }: AudioEngineProps) {
     lfo.current?.dispose();
     pulseLoop.current?.dispose();
     
-    // Check if Transport exists before trying to use it
     if(Tone.Transport.state !== "stopped") {
         Tone.Transport.stop();
         Tone.Transport.cancel();
@@ -62,9 +61,11 @@ export function AudioEngine({ soundscapeState }: AudioEngineProps) {
 
       const { tone, layering } = soundscapeState;
 
-      reverb.current.wet.value = tone.reverbWet;
-      lfo.current = new Tone.LFO(tone.lfoRate, tone.filterFrequency / 2, tone.filterFrequency).start();
-      lfo.current.connect(filter.current.frequency);
+      if (reverb.current) reverb.current.wet.value = tone.reverbWet;
+      if (filter.current) {
+        lfo.current = new Tone.LFO(tone.lfoRate, tone.filterFrequency / 2, tone.filterFrequency).start();
+        lfo.current.connect(filter.current.frequency);
+      }
       
       if (layering.drone) {
         droneSynth.current = new Tone.AMSynth({
@@ -87,7 +88,6 @@ export function AudioEngine({ soundscapeState }: AudioEngineProps) {
       if (layering.texture) {
         getFreesoundSample().then(sample => {
           if (sample && sample.url) {
-            // Use the new proxy endpoint
             const proxiedUrl = `/api/freesound-proxy?url=${encodeURIComponent(sample.url)}`;
 
             texturePlayer.current = new Tone.Player({
@@ -95,28 +95,33 @@ export function AudioEngine({ soundscapeState }: AudioEngineProps) {
               loop: true,
               fadeIn: 2,
               fadeOut: 2,
-            }).toDestination(); // Connect directly to destination to bypass filter effects for now
+            }).connect(filter.current!);
             
             texturePlayer.current.onload = () => {
                 const bufferDuration = texturePlayer.current?.buffer.duration || 0;
                 
-                // Random loop duration between 0.1 and 3.5 seconds
                 const loopDuration = Math.random() * (3.5 - 0.1) + 0.1;
                 
-                // Ensure loop doesn't exceed buffer duration
                 const safeLoopDuration = Math.min(loopDuration, bufferDuration);
 
-                // Random start time
                 const startTime = Math.random() * (bufferDuration - safeLoopDuration);
 
                 texturePlayer.current!.loopStart = startTime;
                 texturePlayer.current!.loopEnd = startTime + safeLoopDuration;
                 texturePlayer.current!.autostart = true;
             };
+            texturePlayer.current.onerror = (e) => {
+              console.error("Texture player error:", e);
+              toast({
+                variant: "destructive",
+                title: "Texture not found",
+                description: "Error loading texture audio.",
+              });
+            }
 
           } else {
              toast({
-                variant: "default",
+                variant: "destructive",
                 title: "Texture not found",
                 description: "Could not find a suitable texture sample. Try different settings.",
             });
@@ -134,7 +139,7 @@ export function AudioEngine({ soundscapeState }: AudioEngineProps) {
     
     startAudio();
 
-  }, [soundscapeState]);
+  }, [soundscapeState, toast, isStarted]);
 
   return null;
 }
