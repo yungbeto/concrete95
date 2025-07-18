@@ -32,8 +32,7 @@ export async function getFreesoundSample(tags: string[]): Promise<string | null>
     const response = await fetch(url, { 
         headers: {
             'Authorization': `Token ${apiKey}`
-        },
-        cache: 'no-store' 
+        }
     });
 
     if (!response.ok) {
