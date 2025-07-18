@@ -1,21 +1,76 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import Matter from 'matter-js';
 
-export default function FogVisualizer() {
+export type FogVisualizerHandle = {
+  addBody: () => void;
+};
+
+const FogVisualizer = forwardRef<FogVisualizerHandle, {}>((props, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<Matter.Engine>();
   const renderRef = useRef<Matter.Render>();
   const mousePosition = useRef({ x: 0, y: 0 });
 
+  const createBody = (x?: number, y?: number) => {
+    if (!containerRef.current) return;
+    const homeDiv = containerRef.current;
+    const spawnX = x || Math.random() * homeDiv.clientWidth;
+    const spawnY = y || -100; // Start bodies above the top edge
+    const sides = Math.floor(Math.random() * (8 - 4 + 1)) + 4;
+    const maxRadius = 40;
+    const vertices = [];
+    for (let i = 0; i < sides; i++) {
+      const angle = ((Math.PI * 2) / sides) * i;
+      const radius = Math.random() * maxRadius * 0.5 + maxRadius * 0.5;
+      vertices.push({
+        x: spawnX + radius * Math.cos(angle),
+        y: spawnY + radius * Math.sin(angle),
+      });
+    }
+
+    const colors = ['#fc79bc', '#fcec79', '#fafafa'];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+
+    const body = Matter.Bodies.fromVertices(
+      spawnX,
+      spawnY,
+      [vertices],
+      {
+        frictionAir: 0.05,
+        inertia: Infinity, // Prevents rotation
+        render: {
+          fillStyle: randomColor,
+          strokeStyle: '#3F3F46',
+          lineWidth: 1,
+        },
+      },
+      true
+    );
+
+    Matter.Body.setVelocity(body, {
+      x: (Math.random() - 0.5) * 0.2,
+      y: Math.random() * 2, // Slight downward velocity
+    });
+
+    if (engineRef.current) {
+      Matter.World.add(engineRef.current.world, body);
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    addBody: () => createBody(),
+  }));
+
   useEffect(() => {
     if (!containerRef.current) return;
 
     const homeDiv = containerRef.current;
-    
-    // Ensure mousePosition is initialized
-    mousePosition.current = { x: homeDiv.clientWidth / 2, y: homeDiv.clientHeight / 2 };
+    mousePosition.current = {
+      x: homeDiv.clientWidth / 2,
+      y: homeDiv.clientHeight / 2,
+    };
 
     const engine = Matter.Engine.create({
       gravity: {
@@ -38,73 +93,59 @@ export default function FogVisualizer() {
     renderRef.current = render;
 
     const createWalls = () => {
+      if (!engineRef.current) return;
       // Clear only old walls
-      engine.world.bodies.forEach((body) => {
+      engineRef.current.world.bodies.forEach((body) => {
         if (body.isStatic) {
-          Matter.Composite.remove(engine.world, body);
+          Matter.Composite.remove(engineRef.current!.world, body);
         }
       });
       const wallOptions = {
         isStatic: true,
         render: { visible: false },
       };
-      Matter.World.add(engine.world, [
+      Matter.World.add(engineRef.current.world, [
         // top
-        Matter.Bodies.rectangle(homeDiv.clientWidth / 2, -25, homeDiv.clientWidth, 50, wallOptions),
+        Matter.Bodies.rectangle(
+          homeDiv.clientWidth / 2,
+          -25,
+          homeDiv.clientWidth,
+          50,
+          wallOptions
+        ),
         // bottom
-        Matter.Bodies.rectangle( homeDiv.clientWidth / 2, homeDiv.clientHeight + 25, homeDiv.clientWidth, 50, wallOptions),
+        Matter.Bodies.rectangle(
+          homeDiv.clientWidth / 2,
+          homeDiv.clientHeight + 25,
+          homeDiv.clientWidth,
+          50,
+          wallOptions
+        ),
         // left
-        Matter.Bodies.rectangle(-25, homeDiv.clientHeight / 2, 50, homeDiv.clientHeight, wallOptions),
+        Matter.Bodies.rectangle(
+          -25,
+          homeDiv.clientHeight / 2,
+          50,
+          homeDiv.clientHeight,
+          wallOptions
+        ),
         // right
-        Matter.Bodies.rectangle(homeDiv.clientWidth + 25, homeDiv.clientHeight / 2, 50, homeDiv.clientHeight, wallOptions),
+        Matter.Bodies.rectangle(
+          homeDiv.clientWidth + 25,
+          homeDiv.clientHeight / 2,
+          50,
+          homeDiv.clientHeight,
+          wallOptions
+        ),
       ]);
     };
 
-    const createBody = () => {
-        const x = Math.random() * homeDiv.clientWidth;
-        const y = -100; // Start bodies above the top edge
-        const sides = Math.floor(Math.random() * (8 - 4 + 1)) + 4;
-        const maxRadius = 40;
-        const vertices = [];
-        for (let i = 0; i < sides; i++) {
-          const angle = ((Math.PI * 2) / sides) * i;
-          const radius = Math.random() * maxRadius * 0.5 + maxRadius * 0.5;
-          vertices.push({ x: x + radius * Math.cos(angle), y: y + radius * Math.sin(angle) });
-        }
-    
-        const colors = ['#fc79bc', '#fcec79', '#fafafa'];
-        const randomColor = colors[Math.floor(Math.random() * colors.length)];
-    
-        const body = Matter.Bodies.fromVertices(
-            x, y, [vertices],
-            {
-              frictionAir: 0.05,
-              inertia: Infinity, // Prevents rotation
-              render: {
-                fillStyle: randomColor,
-                strokeStyle: '#3F3F46',
-                lineWidth: 1,
-              },
-            },
-            true
-          );
-    
-        Matter.Body.setVelocity(body, {
-          x: (Math.random() - 0.5) * 0.2,
-          y: Math.random() * 2, // Slight downward velocity
-        });
-    
-        Matter.World.add(engine.world, body);
-    }
-    
     createWalls();
-    createBody(); // Create one immediately
-    const bodyInterval = setInterval(createBody, 5000); // And one every 5 seconds
 
     const applyCursorAttraction = () => {
       const bodies = Matter.Composite.allBodies(engine.world);
       bodies.forEach((body) => {
-        if(body.isStatic) return;
+        if (body.isStatic) return;
         const dx = mousePosition.current.x - body.position.x;
         const dy = mousePosition.current.y - body.position.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
@@ -115,13 +156,13 @@ export default function FogVisualizer() {
         });
       });
     };
-    
+
     Matter.Events.on(engine, 'beforeUpdate', applyCursorAttraction);
     Matter.Engine.run(engine);
     Matter.Render.run(render);
 
     const handleResize = () => {
-      if(renderRef.current && containerRef.current) {
+      if (renderRef.current && containerRef.current) {
         render.canvas.width = containerRef.current.clientWidth;
         render.canvas.height = containerRef.current.clientHeight;
         render.options.width = containerRef.current.clientWidth;
@@ -131,7 +172,7 @@ export default function FogVisualizer() {
     };
 
     const handleMouseMove = (event: MouseEvent) => {
-        mousePosition.current = { x: event.clientX, y: event.clientY };
+      mousePosition.current = { x: event.clientX, y: event.clientY };
     };
 
     window.addEventListener('resize', handleResize);
@@ -139,14 +180,16 @@ export default function FogVisualizer() {
 
     // Cleanup function
     return () => {
-      clearInterval(bodyInterval);
       window.removeEventListener('resize', handleResize);
       document.removeEventListener('mousemove', handleMouseMove);
-      Matter.Render.stop(render);
-      Matter.Engine.clear(engine);
-      render.canvas.remove();
+      if (render) Matter.Render.stop(render);
+      if (engine) Matter.Engine.clear(engine);
+      if (render) render.canvas.remove();
     };
   }, []);
 
   return <div ref={containerRef} className="absolute inset-0 z-0" />;
-}
+});
+
+FogVisualizer.displayName = 'FogVisualizer';
+export default FogVisualizer;

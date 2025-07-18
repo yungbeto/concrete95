@@ -1,12 +1,19 @@
 'use client';
 
-import FogVisualizer from '@/components/FogVisualizer';
+import { useRef } from 'react';
+import FogVisualizer, { FogVisualizerHandle } from '@/components/FogVisualizer';
 import SoundscapeController from '@/components/SoundscapeController';
 
 export default function EtherealAcousticsClient() {
+  const fogVisualizerRef = useRef<FogVisualizerHandle>(null);
+
+  const addLayer = () => {
+    fogVisualizerRef.current?.addBody();
+  };
+
   return (
     <div className="relative w-full h-screen">
-      <FogVisualizer />
+      <FogVisualizer ref={fogVisualizerRef} />
       <header className="absolute top-0 left-0 p-4 md:p-8">
         <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-4xl">
           Ethereal Acoustics
@@ -15,7 +22,7 @@ export default function EtherealAcousticsClient() {
           Design your soundscape.
         </p>
       </header>
-      <SoundscapeController />
+      <SoundscapeController onAddLayer={addLayer} />
     </div>
   );
 }

@@ -8,7 +8,11 @@ import {
 } from '@/components/ui/popover';
 import { Plus, Waves, Zap } from 'lucide-react';
 
-export default function SoundscapeController() {
+interface SoundscapeControllerProps {
+  onAddLayer: () => void;
+}
+
+export default function SoundscapeController({ onAddLayer }: SoundscapeControllerProps) {
   return (
     <div className="absolute bottom-8 right-8">
       <Popover>
@@ -26,11 +30,11 @@ export default function SoundscapeController() {
               </p>
             </div>
             <div className="grid gap-2">
-              <Button variant="outline">
+              <Button variant="outline" onClick={onAddLayer}>
                 <Waves className="mr-2" />
                 Freesound Loop
               </Button>
-              <Button variant="outline">
+              <Button variant="outline" onClick={onAddLayer}>
                 <Zap className="mr-2" />
                 Synth Pad
               </Button>
