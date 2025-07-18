@@ -10,17 +10,21 @@ import AudioEngine, {
   type AudioEngineHandle,
 } from '@/components/AudioEngine';
 import SoundscapeController from '@/components/SoundscapeController';
+import { searchFreesound } from '@/actions/freesound';
+import { useToast } from '@/hooks/use-toast';
 
 type Layer = {
   id: string;
   shape: Shape;
-  synth: Tone.PolySynth | null;
+  synth?: Tone.PolySynth;
+  player?: Tone.Player;
 };
 
 export default function EtherealAcousticsClient() {
   const fogVisualizerRef = useRef<FogVisualizerHandle>(null);
   const audioEngineRef = useRef<AudioEngineHandle>(null);
   const [layers, setLayers] = useState<Layer[]>([]);
+  const { toast } = useToast();
 
   const addSynthLayer = () => {
     if (!audioEngineRef.current || !fogVisualizerRef.current) return;
@@ -39,11 +43,48 @@ export default function EtherealAcousticsClient() {
     }
   };
 
-  const addFreesoundLayer = () => {
-    if (!fogVisualizerRef.current) return;
+  const addFreesoundLayer = async () => {
+    if (!audioEngineRef.current || !fogVisualizerRef.current) return;
+
+    const queries = ['ambient', 'drone', 'texture', 'pad', 'atmosphere'];
+    const randomQuery = queries[Math.floor(Math.random() * queries.length)];
+
+    const soundUrls = await searchFreesound(randomQuery);
+
+    if ('error' in soundUrls) {
+      toast({
+        variant: 'destructive',
+        title: 'Freesound Error',
+        description: soundUrls.error,
+      });
+      return;
+    }
+
+    if (soundUrls.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Freesound Error',
+        description: `No sounds found for query: "${randomQuery}"`,
+      });
+      return;
+    }
+
+    const randomSoundUrl =
+      soundUrls[Math.floor(Math.random() * soundUrls.length)];
+
+    const newPlayer =
+      await audioEngineRef.current.startFreesoundLoop(randomSoundUrl);
+    if (!newPlayer) return;
+
     const id = `layer_${Date.now()}`;
-    fogVisualizerRef.current.addBody(id);
-    // We will add Freesound logic here later
+    const newShape = fogVisualizerRef.current.addBody(id);
+
+    if (newShape) {
+      setLayers((prevLayers) => [
+        ...prevLayers,
+        { id, shape: newShape, player: newPlayer },
+      ]);
+    }
   };
 
   const handleShapeClick = (id: string) => {
@@ -53,6 +94,10 @@ export default function EtherealAcousticsClient() {
 
     if (layerToStop?.synth) {
       audioEngineRef.current.stopSynth(layerToStop.synth);
+    }
+
+    if (layerToStop?.player) {
+      audioEngineRef.current.stopFreesoundLoop(layerToStop.player);
     }
 
     fogVisualizerRef.current?.removeBody(id);
