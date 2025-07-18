@@ -1,3 +1,9 @@
+import EtherealAcousticsClient from '@/components/EtherealAcousticsClient';
+
 export default function Home() {
-  return <></>;
+  return (
+    <main>
+      <EtherealAcousticsClient />
+    </main>
+  );
 }
