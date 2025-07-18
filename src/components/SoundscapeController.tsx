@@ -31,11 +31,11 @@ export default function SoundscapeController({ onAddLayer }: SoundscapeControlle
             </div>
             <div className="grid gap-2">
               <Button variant="outline" onClick={onAddLayer}>
-                <Waves className="mr-2" />
+                <Waves className="mr-2 h-4 w-4" />
                 Freesound Loop
               </Button>
               <Button variant="outline" onClick={onAddLayer}>
-                <Zap className="mr-2" />
+                <Zap className="mr-2 h-4 w-4" />
                 Synth Pad
               </Button>
             </div>

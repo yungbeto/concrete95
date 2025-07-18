@@ -14,7 +14,7 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, {}>((props, ref) => {
   const mousePosition = useRef({ x: 0, y: 0 });
 
   const createBody = (x?: number, y?: number) => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !engineRef.current) return;
     const homeDiv = containerRef.current;
     const spawnX = x || Math.random() * homeDiv.clientWidth;
     const spawnY = y || -100; // Start bodies above the top edge
@@ -51,16 +51,17 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, {}>((props, ref) => {
 
     Matter.Body.setVelocity(body, {
       x: (Math.random() - 0.5) * 0.2,
-      y: Math.random() * 2, // Slight downward velocity
+      y: 2, // Positive y-velocity to simulate dropping
     });
 
-    if (engineRef.current) {
-      Matter.World.add(engineRef.current.world, body);
-    }
+    Matter.World.add(engineRef.current.world, body);
   };
 
   useImperativeHandle(ref, () => ({
-    addBody: () => createBody(),
+    addBody: () => {
+      // Spawn in a random location at the top
+      createBody(Math.random() * (containerRef.current?.clientWidth || window.innerWidth), -100);
+    },
   }));
 
   useEffect(() => {
@@ -95,11 +96,9 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, {}>((props, ref) => {
     const createWalls = () => {
       if (!engineRef.current) return;
       // Clear only old walls
-      engineRef.current.world.bodies.forEach((body) => {
-        if (body.isStatic) {
-          Matter.Composite.remove(engineRef.current!.world, body);
-        }
-      });
+      const staticBodies = Matter.Composite.allBodies(engineRef.current.world).filter(b => b.isStatic);
+      Matter.Composite.remove(engineRef.current.world, staticBodies);
+
       const wallOptions = {
         isStatic: true,
         render: { visible: false },
@@ -149,11 +148,13 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, {}>((props, ref) => {
         const dx = mousePosition.current.x - body.position.x;
         const dy = mousePosition.current.y - body.position.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        const forceMagnitude = 0.00005 * body.mass;
-        Matter.Body.applyForce(body, body.position, {
-          x: (dx / distance) * forceMagnitude,
-          y: (dy / distance) * forceMagnitude,
-        });
+        if (distance > 0) {
+            const forceMagnitude = 0.00005 * body.mass;
+            Matter.Body.applyForce(body, body.position, {
+              x: (dx / distance) * forceMagnitude,
+              y: (dy / distance) * forceMagnitude,
+            });
+        }
       });
     };
 
@@ -162,13 +163,13 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, {}>((props, ref) => {
     Matter.Render.run(render);
 
     const handleResize = () => {
-      if (renderRef.current && containerRef.current) {
-        render.canvas.width = containerRef.current.clientWidth;
-        render.canvas.height = containerRef.current.clientHeight;
-        render.options.width = containerRef.current.clientWidth;
-        render.options.height = containerRef.current.clientHeight;
-        createWalls();
-      }
+        if (renderRef.current && containerRef.current && renderRef.current.canvas) {
+            renderRef.current.canvas.width = containerRef.current.clientWidth;
+            renderRef.current.canvas.height = containerRef.current.clientHeight;
+            renderRef.current.options.width = containerRef.current.clientWidth;
+            renderRef.current.options.height = containerRef.current.clientHeight;
+            createWalls();
+        }
     };
 
     const handleMouseMove = (event: MouseEvent) => {
@@ -182,9 +183,14 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, {}>((props, ref) => {
     return () => {
       window.removeEventListener('resize', handleResize);
       document.removeEventListener('mousemove', handleMouseMove);
-      if (render) Matter.Render.stop(render);
-      if (engine) Matter.Engine.clear(engine);
-      if (render) render.canvas.remove();
+      if (renderRef.current) {
+        Matter.Render.stop(renderRef.current);
+        if(renderRef.current.canvas) renderRef.current.canvas.remove();
+      }
+      if (engineRef.current) {
+         Matter.Events.off(engineRef.current, 'beforeUpdate', applyCursorAttraction);
+         Matter.Engine.clear(engineRef.current);
+      }
     };
   }, []);
 
