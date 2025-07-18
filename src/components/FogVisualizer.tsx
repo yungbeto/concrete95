@@ -40,6 +40,9 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
       const canvas = canvasRef.current;
       
       const maxRadius = 40;
+      // Ensure canvas has dimensions before creating a shape
+      if (canvas.width === 0 || canvas.height === 0) return null;
+
       const x = Math.random() * (canvas.width - maxRadius * 2) + maxRadius;
       const y = Math.random() * (canvas.height - maxRadius * 2) + maxRadius;
 
@@ -120,7 +123,12 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
           canvas.width = currentWidth;
           canvas.height = currentHeight;
         }
+      };
 
+      let animationFrameId: number;
+      
+      const render = () => {
+        resizeCanvas();
         const context = canvas.getContext('2d');
         if (!context) return;
         
@@ -138,20 +146,17 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, FogVisualizerProps>(
             context.fill();
           }
         });
+        
+        animationFrameId = window.requestAnimationFrame(render);
       };
-
-      let animationFrameId: number;
-      const animate = () => {
-        resizeCanvas();
-        animationFrameId = requestAnimationFrame(animate);
-      }
-      animate();
+      
+      render();
       
       window.addEventListener('resize', resizeCanvas);
 
       return () => {
         window.removeEventListener('resize', resizeCanvas);
-        cancelAnimationFrame(animationFrameId);
+        window.cancelAnimationFrame(animationFrameId);
       };
     }, [shapes]);
 
