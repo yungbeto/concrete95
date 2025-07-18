@@ -85,15 +85,32 @@ export function AudioEngine({ soundscapeState }: AudioEngineProps) {
       }
 
       if (layering.texture && freesound.tags.length > 0) {
-        getFreesoundSample(freesound.tags).then(sampleUrl => {
-          if (sampleUrl) {
+        getFreesoundSample(freesound.tags).then(sample => {
+          if (sample && sample.url) {
             texturePlayer.current = new Tone.Player({
-              url: sampleUrl,
+              url: sample.url,
               loop: true,
               fadeIn: 2,
               fadeOut: 2,
-            }).connect(filter.current);
-            texturePlayer.current.autostart = true;
+            }).toDestination(); // Connect directly to destination to bypass filter effects for now
+            
+            texturePlayer.current.onload = () => {
+                const bufferDuration = texturePlayer.current?.buffer.duration || 0;
+                
+                // Random loop duration between 0.1 and 3.5 seconds
+                const loopDuration = Math.random() * (3.5 - 0.1) + 0.1;
+                
+                // Ensure loop doesn't exceed buffer duration
+                const safeLoopDuration = Math.min(loopDuration, bufferDuration);
+
+                // Random start time
+                const startTime = Math.random() * (bufferDuration - safeLoopDuration);
+
+                texturePlayer.current!.loopStart = startTime;
+                texturePlayer.current!.loopEnd = startTime + safeLoopDuration;
+                texturePlayer.current!.autostart = true;
+            };
+
           } else {
              toast({
                 variant: "default",

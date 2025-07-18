@@ -5,6 +5,7 @@ const FREESOUND_API_URL = 'https://freesound.org/apiv2';
 type FreesoundSound = {
   id: number;
   name: string;
+  duration: number;
   previews: {
     'preview-hq-mp3': string;
   };
@@ -14,13 +15,15 @@ type FreesoundResponse = {
   results: FreesoundSound[];
 };
 
-async function fetchSample(query: string, apiKey: string): Promise<string | null> {
+async function fetchSample(query: string, apiKey: string): Promise<{ url: string; duration: number } | null> {
   try {
-    const url = `${FREESOUND_API_URL}/search/text/?query=${encodeURIComponent(query)}&fields=id,name,previews&filter=duration:[5%20TO%2090]&token=${apiKey}`;
+    const url = `${FREESOUND_API_URL}/search/text/?query=${encodeURIComponent(
+      query
+    )}&fields=id,name,previews,duration&filter=duration:[10%20TO%20180]&token=${apiKey}`;
     const response = await fetch(url, {
       headers: {
-        'Authorization': `Api-Key ${apiKey}`
-      }
+        Authorization: `Api-Key ${apiKey}`,
+      },
     });
 
     if (!response.ok) {
@@ -33,9 +36,12 @@ async function fetchSample(query: string, apiKey: string): Promise<string | null
     if (data.results && data.results.length > 0) {
       const randomIndex = Math.floor(Math.random() * data.results.length);
       const randomSound = data.results[randomIndex];
-      return randomSound.previews['preview-hq-mp3'];
+      return {
+        url: randomSound.previews['preview-hq-mp3'],
+        duration: randomSound.duration,
+      };
     }
-    
+
     return null;
   } catch (error) {
     console.error(`Error fetching from Freesound with query "${query}":`, error);
@@ -43,13 +49,13 @@ async function fetchSample(query: string, apiKey: string): Promise<string | null
   }
 }
 
-export async function getFreesoundSample(tags: string[]): Promise<string | null> {
+export async function getFreesoundSample(tags: string[]): Promise<{ url: string; duration: number } | null> {
   const apiKey = process.env.FREESOUND_API_KEY;
   if (!apiKey || apiKey === 'YOUR_FREESOUND_API_KEY_HERE') {
     console.error('Freesound API key not found. Please add FREESOUND_API_KEY to your .env.local file.');
     return null;
   }
-  
+
   // First, try with the specific tags from the AI
   if (tags.length > 0) {
     const query = tags.join(' ');
@@ -61,6 +67,6 @@ export async function getFreesoundSample(tags: string[]): Promise<string | null>
   }
 
   // If no tags provided or if the initial query failed, use a fallback query
-  const fallbackQuery = 'ambient texture';
+  const fallbackQuery = 'field recording';
   return await fetchSample(fallbackQuery, apiKey);
 }
