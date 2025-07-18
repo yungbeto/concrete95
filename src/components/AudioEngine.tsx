@@ -1,60 +1,73 @@
 'use client';
 
 import {
-  useState,
-  useEffect,
   forwardRef,
+  useEffect,
   useImperativeHandle,
 } from 'react';
 import * as Tone from 'tone';
 
 export type AudioEngineHandle = {
-  playSynthPad: () => void;
+  startSynthPad: () => Tone.PolySynth | null;
+  stopSynth: (synth: Tone.PolySynth) => void;
 };
 
 const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
-  const [synth, setSynth] = useState<Tone.PolySynth | null>(null);
-
   useEffect(() => {
-    const reverb = new Tone.Reverb({
-        decay: 4,
-        wet: 0.5,
-        preDelay: 0.1,
-    }).toDestination();
-
-    const synthInstance = new Tone.PolySynth(Tone.Synth, {
-        oscillator: {
-            type: 'fatsawtooth',
-            count: 3,
-            spread: 30,
-        },
-        envelope: {
-            attack: 0.5,
-            decay: 0.1,
-            sustain: 0.5,
-            release: 1,
-        },
-    }).connect(reverb);
-    
-    setSynth(synthInstance);
-
+    // This effect can be used for global audio setup if needed
     return () => {
-        synthInstance.dispose();
-        reverb.dispose();
+      // Cleanup global effects if any
     };
   }, []);
 
   useImperativeHandle(ref, () => ({
-    playSynthPad: () => {
-      if (synth) {
-        // Ensure Tone.js is started
-        Tone.start();
-        
-        // Play a random note from a C major pentatonic scale
-        const notes = ['C4', 'D4', 'E4', 'G4', 'A4', 'C5'];
-        const randomNote = notes[Math.floor(Math.random() * notes.length)];
-        synth.triggerAttackRelease(randomNote, '2n');
-      }
+    startSynthPad: () => {
+      // Ensure Tone.js is started by a user interaction
+      Tone.start();
+
+      const oscillatorTypes = ['fatsawtooth', 'fatsquare', 'fattriangle'];
+      const randomOscillatorType = oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)] as 'fatsawtooth' | 'fatsquare' | 'fattriangle';
+
+      const reverb = new Tone.Reverb({
+        decay: Math.random() * 5 + 2,
+        wet: Math.random() * 0.3 + 0.2,
+        preDelay: Math.random() * 0.2,
+      }).toDestination();
+      
+      const synth = new Tone.PolySynth(Tone.Synth, {
+        oscillator: {
+          type: randomOscillatorType,
+          count: 3,
+          spread: Math.random() * 40 + 20,
+        },
+        envelope: {
+          attack: Math.random() * 2 + 0.5,
+          decay: 0.1,
+          sustain: 0.8,
+          release: Math.random() * 2 + 1,
+        },
+      }).connect(reverb);
+
+      const notes = ['C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'D4', 'E4', 'G4'];
+      const randomNote = notes[Math.floor(Math.random() * notes.length)];
+      
+      synth.triggerAttack(randomNote);
+
+      return synth;
+    },
+    stopSynth: (synth) => {
+      synth.triggerRelease();
+      // Clean up the synth and its reverb after the release envelope has finished
+      setTimeout(() => {
+        if (synth.onsilence) {
+           synth.onsilence = () => {
+            synth.dispose();
+           }
+        } else {
+            // Fallback disposal if onsilence is not available
+            setTimeout(() => synth.dispose(), 2000);
+        }
+      }, (synth.get().envelope.release as number) * 1000);
     },
   }));
 
