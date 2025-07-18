@@ -9,10 +9,14 @@ import {
 import { Plus, Waves, Zap } from 'lucide-react';
 
 interface SoundscapeControllerProps {
-  onAddLayer: () => void;
+  onAddSynthLayer: () => void;
+  onAddFreesoundLayer: () => void;
 }
 
-export default function SoundscapeController({ onAddLayer }: SoundscapeControllerProps) {
+export default function SoundscapeController({
+  onAddSynthLayer,
+  onAddFreesoundLayer,
+}: SoundscapeControllerProps) {
   return (
     <div className="absolute bottom-8 right-8">
       <Popover>
@@ -30,11 +34,11 @@ export default function SoundscapeController({ onAddLayer }: SoundscapeControlle
               </p>
             </div>
             <div className="grid gap-2">
-              <Button variant="outline" onClick={onAddLayer}>
+              <Button variant="outline" onClick={onAddFreesoundLayer}>
                 <Waves className="mr-2 h-4 w-4" />
                 Freesound Loop
               </Button>
-              <Button variant="outline" onClick={onAddLayer}>
+              <Button variant="outline" onClick={onAddSynthLayer}>
                 <Zap className="mr-2 h-4 w-4" />
                 Synth Pad
               </Button>
