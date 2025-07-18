@@ -13,8 +13,5 @@ export type Layering = {
 
 export type SoundscapeState = {
   tone: ToneParams;
-  freesound: {
-    tags: string[];
-  };
   layering: Layering;
 };

@@ -19,7 +19,6 @@ const CreateSoundscapeSurpriseInputSchema = z.object({
     lfoRate: z.number().optional(),
     filterFrequency: z.number().optional(),
   }).optional(),
-  currentFreesoundTags: z.array(z.string()).optional(),
   currentLayering: z.object({
     drone: z.boolean().optional(),
     texture: z.boolean().optional(),
@@ -35,7 +34,6 @@ const CreateSoundscapeSurpriseOutputSchema = z.object({
     lfoRate: z.number().optional(),
     filterFrequency: z.number().optional(),
   }).optional(),
-  freesoundTags: z.array(z.string()).optional(),
   layering: z.object({
     drone: z.boolean().optional(),
     texture: z.boolean().optional(),
@@ -56,11 +54,10 @@ const prompt = ai.definePrompt({
 
 Current parameters:
 Tone parameters: {{{currentToneParams}}}
-Freesound tags: {{{currentFreesoundTags}}}
 Layering: {{{currentLayering}}}
 
 Provide the new soundscape parameters in the same format.
-Do not deviate wildly from the existing parameters, instead only create subtle variations.`,
+Do not deviate wildly from the existing parameters, instead only create subtle variations. Do not include freesound tags.`,
 });
 
 const createSoundscapeSurpriseFlow = ai.defineFlow(

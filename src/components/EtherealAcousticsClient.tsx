@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { type SoundscapeState } from '@/lib/types';
 import { generateSoundscapeParameters, type GenerateSoundscapeParametersOutput } from '@/ai/flows/generate-soundscape-parameters';
-import { createSoundscapeSurprise, type CreateSoundscapeSurpriseOutput } from '@/ai/flows/create-soundscape-surprise';
+import { createSoundscapeSurprise } from '@/ai/flows/create-soundscape-surprise';
 import { SoundscapeController } from './SoundscapeController';
 import { AudioEngine } from './AudioEngine';
 import FogVisualizer from './FogVisualizer';
@@ -16,9 +16,6 @@ function normalizeAIResponse(response: GenerateSoundscapeParametersOutput): Soun
             reverbWet: response.tone_params?.reverbWet ?? 0.5,
             lfoRate: response.tone_params?.lfoRate ?? 0.1,
             filterFrequency: response.tone_params?.filterFrequency ?? 500,
-        },
-        freesound: {
-            tags: response.freesound_tags || [],
         },
         layering: {
             drone: response.layering?.drone || false,
@@ -67,7 +64,6 @@ export default function EtherealAcousticsClient() {
     try {
       const currentParamsForAI = {
         currentToneParams: soundscapeState.tone,
-        currentFreesoundTags: soundscapeState.freesound.tags,
         currentLayering: soundscapeState.layering,
       };
       
@@ -76,7 +72,6 @@ export default function EtherealAcousticsClient() {
       if (result) {
         const newState: SoundscapeState = {
             tone: { ...soundscapeState.tone, ...result.toneParams },
-            freesound: { tags: result.freesoundTags || soundscapeState.freesound.tags },
             layering: { ...soundscapeState.layering, ...result.layering },
         };
         setSoundscapeState(newState);

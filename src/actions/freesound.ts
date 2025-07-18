@@ -17,9 +17,11 @@ type FreesoundResponse = {
 
 async function fetchSample(query: string, apiKey: string): Promise<{ url: string; duration: number } | null> {
   try {
+    const randomPage = Math.floor(Math.random() * 50) + 1;
     const url = `${FREESOUND_API_URL}/search/text/?query=${encodeURIComponent(
       query
-    )}&fields=id,name,previews,duration&token=${apiKey}`;
+    )}&page=${randomPage}&fields=id,name,previews,duration&token=${apiKey}`;
+    
     const response = await fetch(url, {
       headers: {
         Authorization: `Api-Key ${apiKey}`,
@@ -49,24 +51,14 @@ async function fetchSample(query: string, apiKey: string): Promise<{ url: string
   }
 }
 
-export async function getFreesoundSample(tags: string[]): Promise<{ url: string; duration: number } | null> {
+export async function getFreesoundSample(): Promise<{ url: string; duration: number } | null> {
   const apiKey = process.env.FREESOUND_API_KEY;
   if (!apiKey || apiKey === 'YOUR_FREESOUND_API_KEY_HERE') {
     console.error('Freesound API key not found. Please add FREESOUND_API_KEY to your .env.local file.');
     return null;
   }
 
-  // First, try with the specific tags from the AI
-  if (tags.length > 0) {
-    const query = tags.join(' ');
-    const result = await fetchSample(query, apiKey);
-    if (result) {
-      return result;
-    }
-    console.log(`No results for "${query}", trying fallback.`);
-  }
-
-  // If no tags provided or if the initial query failed, use a fallback query
-  const fallbackQuery = 'field recording';
-  return await fetchSample(fallbackQuery, apiKey);
+  // Fetch a random sound using a general query.
+  const query = 'field recording';
+  return await fetchSample(query, apiKey);
 }

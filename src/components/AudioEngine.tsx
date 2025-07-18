@@ -60,7 +60,7 @@ export function AudioEngine({ soundscapeState }: AudioEngineProps) {
       reverb.current = new Tone.Reverb().toDestination();
       filter.current = new Tone.Filter(20000, 'lowpass').connect(reverb.current);
 
-      const { tone, layering, freesound } = soundscapeState;
+      const { tone, layering } = soundscapeState;
 
       reverb.current.wet.value = tone.reverbWet;
       lfo.current = new Tone.LFO(tone.lfoRate, tone.filterFrequency / 2, tone.filterFrequency).start();
@@ -84,8 +84,8 @@ export function AudioEngine({ soundscapeState }: AudioEngineProps) {
         }, '2n').start(0);
       }
 
-      if (layering.texture && freesound.tags.length > 0) {
-        getFreesoundSample(freesound.tags).then(sample => {
+      if (layering.texture) {
+        getFreesoundSample().then(sample => {
           if (sample && sample.url) {
             texturePlayer.current = new Tone.Player({
               url: sample.url,

@@ -27,7 +27,6 @@ const GenerateSoundscapeParametersOutputSchema = z.object({
     lfoRate: z.number().describe('The LFO rate for modulation.'),
     filterFrequency: z.number().describe('The filter frequency for audio processing.'),
   }).describe('Sound synthesis parameters for Tone.js.'),
-  freesound_tags: z.array(z.string()).describe('Array of search tags for the Freesound API.'),
   layering: z.object({
     drone: z.boolean().describe('Whether to include a drone layer.'),
     texture: z.boolean().describe('Whether to include a texture layer.'),
@@ -44,7 +43,7 @@ const generateSoundscapeParametersPrompt = ai.definePrompt({
   name: 'generateSoundscapeParametersPrompt',
   input: {schema: GenerateSoundscapeParametersInputSchema},
   output: {schema: GenerateSoundscapeParametersOutputSchema},
-  prompt: `You are an AI soundscape generator. The user will provide you with a set of emotional slider values, and you will return a JSON object containing sound synthesis parameters for Tone.js and search tags for the Freesound API.
+  prompt: `You are an AI soundscape generator. The user will provide you with a set of emotional slider values, and you will return a JSON object containing sound synthesis parameters for Tone.js.
 
 Ennui: {{{ennui}}}
 Fluidity: {{{fluidity}}}
@@ -54,10 +53,9 @@ Permanence: {{{permanence}}}
 Based on these values, generate appropriate values for the following:
 
 *   tone_params: oscillatorType, reverbWet, lfoRate, filterFrequency
-*   freesound_tags: An array of relevant search tags
 *   layering: drone, texture, pulse
 
-Return a JSON object with these fields populated. Do not include any explanation, justification or other text, only the JSON.
+Return a JSON object with these fields populated. Do not include any explanation, justification or other text, only the JSON. Do not include freesound tags.
 
 Here is the format:
 
@@ -68,7 +66,6 @@ Here is the format:
     "lfoRate": 0.1,
     "filterFrequency": 500
   },
-  "freesound_tags": ["ambient", "drone"],
   "layering": {
     "drone": true,
     "texture": false,
