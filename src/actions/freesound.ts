@@ -14,26 +14,13 @@ type FreesoundResponse = {
   results: FreesoundSound[];
 };
 
-export async function getFreesoundSample(tags: string[]): Promise<string | null> {
-  const apiKey = process.env.FREESOUND_API_KEY;
-  if (!apiKey || apiKey === 'YOUR_FREESOUND_API_KEY_HERE') {
-    console.error('Freesound API key not found. Please add FREESOUND_API_KEY to your .env.local file.');
-    return null;
-  }
-
-  if (tags.length === 0) {
-    return null;
-  }
-
-  const query = tags.join(' ');
-
+async function fetchSample(query: string, apiKey: string): Promise<string | null> {
   try {
-    // The Freesound API requires the API key in both the Authorization header and as a `token` query parameter.
     const url = `${FREESOUND_API_URL}/search/text/?query=${encodeURIComponent(query)}&fields=id,name,previews&filter=duration:[5%20TO%2090]&token=${apiKey}`;
-    const response = await fetch(url, { 
-        headers: {
-            'Authorization': `Api-Key ${apiKey}`
-        }
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Api-Key ${apiKey}`
+      }
     });
 
     if (!response.ok) {
@@ -48,10 +35,32 @@ export async function getFreesoundSample(tags: string[]): Promise<string | null>
       const randomSound = data.results[randomIndex];
       return randomSound.previews['preview-hq-mp3'];
     }
-
+    
     return null;
   } catch (error) {
-    console.error('Error fetching from Freesound:', error);
+    console.error(`Error fetching from Freesound with query "${query}":`, error);
     return null;
   }
+}
+
+export async function getFreesoundSample(tags: string[]): Promise<string | null> {
+  const apiKey = process.env.FREESOUND_API_KEY;
+  if (!apiKey || apiKey === 'YOUR_FREESOUND_API_KEY_HERE') {
+    console.error('Freesound API key not found. Please add FREESOUND_API_KEY to your .env.local file.');
+    return null;
+  }
+  
+  // First, try with the specific tags from the AI
+  if (tags.length > 0) {
+    const query = tags.join(' ');
+    const result = await fetchSample(query, apiKey);
+    if (result) {
+      return result;
+    }
+    console.log(`No results for "${query}", trying fallback.`);
+  }
+
+  // If no tags provided or if the initial query failed, use a fallback query
+  const fallbackQuery = 'ambient texture';
+  return await fetchSample(fallbackQuery, apiKey);
 }
