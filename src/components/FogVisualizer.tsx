@@ -17,41 +17,25 @@ const FogVisualizer = forwardRef<FogVisualizerHandle, {}>((props, ref) => {
     if (!containerRef.current || !engineRef.current) return;
     const homeDiv = containerRef.current;
     const spawnX = x || Math.random() * homeDiv.clientWidth;
-    const spawnY = y || -100; // Start bodies above the top edge
-    const sides = Math.floor(Math.random() * (8 - 4 + 1)) + 4;
-    const maxRadius = 40;
-    const vertices = [];
-    for (let i = 0; i < sides; i++) {
-      const angle = ((Math.PI * 2) / sides) * i;
-      const radius = Math.random() * maxRadius * 0.5 + maxRadius * 0.5;
-      vertices.push({
-        x: spawnX + radius * Math.cos(angle),
-        y: spawnY + radius * Math.sin(angle),
-      });
-    }
+    const spawnY = y || -100;
+    const radius = Math.random() * 20 + 20; // Simple circle radius
 
     const colors = ['#fc79bc', '#fcec79', '#fafafa'];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
-    const body = Matter.Bodies.fromVertices(
-      spawnX,
-      spawnY,
-      [vertices],
-      {
-        frictionAir: 0.05,
-        inertia: Infinity, // Prevents rotation
-        render: {
-          fillStyle: randomColor,
-          strokeStyle: '#3F3F46',
-          lineWidth: 1,
-        },
+    const body = Matter.Bodies.circle(spawnX, spawnY, radius, {
+      frictionAir: 0.05,
+      restitution: 0.4,
+      render: {
+        fillStyle: randomColor,
+        strokeStyle: '#3F3F46',
+        lineWidth: 1,
       },
-      true
-    );
+    });
 
     Matter.Body.setVelocity(body, {
-      x: (Math.random() - 0.5) * 0.2,
-      y: 2, // Positive y-velocity to simulate dropping
+      x: (Math.random() - 0.5) * 2,
+      y: 0,
     });
 
     Matter.World.add(engineRef.current.world, body);
