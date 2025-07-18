@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Popover,
@@ -17,9 +18,21 @@ export default function SoundscapeController({
   onAddSynthLayer,
   onAddFreesoundLayer,
 }: SoundscapeControllerProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const handleAddSynthLayer = () => {
+    onAddSynthLayer();
+    setIsOpen(false);
+  };
+
+  const handleAddFreesoundLayer = () => {
+    onAddFreesoundLayer();
+    setIsOpen(false);
+  };
+
   return (
     <div className="absolute bottom-8 right-8">
-      <Popover>
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
           <Button size="icon" className="rounded-full w-16 h-16 shadow-lg">
             <Plus className="h-8 w-8" />
@@ -34,11 +47,11 @@ export default function SoundscapeController({
               </p>
             </div>
             <div className="grid gap-2">
-              <Button variant="outline" onClick={onAddFreesoundLayer}>
+              <Button variant="outline" onClick={handleAddFreesoundLayer}>
                 <Waves className="mr-2 h-4 w-4" />
                 Freesound Loop
               </Button>
-              <Button variant="outline" onClick={onAddSynthLayer}>
+              <Button variant="outline" onClick={handleAddSynthLayer}>
                 <Zap className="mr-2 h-4 w-4" />
                 Synth Pad
               </Button>

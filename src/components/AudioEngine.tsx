@@ -25,8 +25,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       // Ensure Tone.js is started by a user interaction
       Tone.start();
 
-      const oscillatorTypes = ['fatsawtooth', 'fatsquare', 'fattriangle'];
-      const randomOscillatorType = oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)] as 'fatsawtooth' | 'fatsquare' | 'fattriangle';
+      const oscillatorTypes = ['fatsawtooth', 'fatsquare', 'fattriangle', 'fatsine'];
+      const randomOscillatorType = oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)] as 'fatsawtooth' | 'fatsquare' | 'fattriangle' | 'fatsine';
 
       const reverb = new Tone.Reverb({
         decay: Math.random() * 5 + 2,
@@ -44,11 +44,11 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
           attack: Math.random() * 2 + 0.5,
           decay: 0.1,
           sustain: 0.8,
-          release: Math.random() * 2 + 1,
+          release: Math.random() * 3 + 2,
         },
       }).connect(reverb);
 
-      const notes = ['C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'D4', 'E4', 'G4'];
+      const notes = ['C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'D4', 'E4', 'G4', 'A4', 'C5'];
       const randomNote = notes[Math.floor(Math.random() * notes.length)];
       
       synth.triggerAttack(randomNote);
@@ -65,7 +65,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
            }
         } else {
             // Fallback disposal if onsilence is not available
-            setTimeout(() => synth.dispose(), 2000);
+            setTimeout(() => synth.dispose(), (synth.get().envelope.release as number) * 1000 + 500);
         }
       }, (synth.get().envelope.release as number) * 1000);
     },
