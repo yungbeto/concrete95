@@ -38,14 +38,14 @@ function SoundRecorderDisplay({ isLoading = false }: { isLoading?: boolean }) {
   return (
     <div className="flex flex-col gap-2 p-2" onMouseDown={(e) => e.stopPropagation()}>
       <div className="flex items-stretch justify-between gap-2 text-black text-xs">
-        <div className="border-2 border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white p-4 text-center">
+        <div className="border border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white p-4 text-center">
           <p>Position:</p>
           {isLoading ? <Skeleton className="h-4 w-12 mt-1" /> : <p>0.00 sec.</p>}
         </div>
-        <div className="flex-grow h-auto bg-black border-2 border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white flex items-center justify-center p-1">
+        <div className="flex-grow h-auto bg-black  flex items-center justify-center p-1">
           <div className="w-full h-[2px] bg-green-500" />
         </div>
-        <div className="border-2 border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white p-4 text-center">
+        <div className="border border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white p-4 text-center">
           <p>Length:</p>
           {isLoading ? <Skeleton className="h-4 w-12 mt-1" /> : <p>0.00 sec.</p>}
         </div>
