@@ -10,6 +10,7 @@ import SoundscapeController from '@/components/SoundscapeController';
 import { searchFreesound } from '@/actions/freesound';
 import { useToast } from '@/hooks/use-toast';
 import LayerCard from '@/components/LayerCard';
+import { Info } from 'lucide-react';
 
 type Layer = {
   id: string;
@@ -42,10 +43,11 @@ function DigitalClock() {
   const [time, setTime] = useState<Date | null>(null);
 
   useEffect(() => {
+    // This will only run on the client, after initial hydration
     setTime(new Date());
     const timerId = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timerId);
-  }, []);
+  }, []); // Empty dependency array ensures this runs once on mount
 
   return (
     <div className="font-lcd text-lg text-neutral-800">
@@ -310,9 +312,19 @@ export default function EtherealAcousticsClient() {
             />
           ))}
           {layers.length === 0 && (
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-muted-foreground p-8 bg-black/50 rounded-lg">
-              <p>Your canvas is empty.</p>
-              <p>Click the "Start" button to add a sound layer.</p>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+              <div className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans">
+                <div className="bg-blue-800 text-white flex items-center p-1">
+                  <span className="font-bold text-sm select-none">Ethereal Acoustics</span>
+                </div>
+                <div className="p-4 flex items-start gap-4">
+                  <Info className="w-8 h-8 text-blue-600 flex-shrink-0" />
+                  <div className="text-black">
+                    <p>Your canvas is empty.</p>
+                    <p>Click the "Start" button to add a sound layer.</p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
