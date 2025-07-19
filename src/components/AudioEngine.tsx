@@ -103,7 +103,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       synth.connect(filter);
       synth.connect(sendGain);
       
-      const scale = ['C3', 'E3', 'G3', 'A3', 'C4', 'E4', 'G4', 'A4'];
+      const scale = ['C2', 'E2', 'G2', 'A2', 'C3', 'E3', 'G3', 'A3', 'C4', 'E4', 'G4', 'A4'];
       const notesAndChords = [
         scale[Math.floor(Math.random() * scale.length)],
         [scale[0], scale[2], scale[4]],
