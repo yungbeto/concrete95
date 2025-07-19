@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import * as Tone from 'tone';
 import AudioEngine, {
   type AudioEngineHandle,
@@ -19,7 +19,15 @@ type Layer = {
   node: Tone.Player | Tone.Sequence | null;
   type: 'freesound' | 'synth' | 'melodic';
   status: 'loading' | 'loaded';
+  position: { x: number; y: number };
+  zIndex: number;
 };
+
+type DragState = {
+  layerId: string;
+  offsetX: number;
+  offsetY: number;
+} | null;
 
 const adjectives = ['Wandering', 'Cosmic', 'Gentle', 'Fading', 'Shimmering', 'Echoing', 'Distant', 'Lucid', 'Dreamy', 'Ethereal'];
 const nouns = ['Pad', 'Drone', 'Melody', 'Echo', 'Texture', 'Chord', 'Arp', 'Fragment', 'Wash', 'Wave'];
@@ -51,10 +59,22 @@ export default function EtherealAcousticsClient() {
   const audioEngineRef = useRef<AudioEngineHandle>(null);
   const [layers, setLayers] = useState<Layer[]>([]);
   const { toast } = useToast();
+  const [dragState, setDragState] = useState<DragState>(null);
+  const nextZIndex = useRef(1);
 
-  const addSynthLayer = () => {
-    if (!audioEngineRef.current) return;
+  const bringToFront = (id: string) => {
+    setLayers(prevLayers => {
+      const maxZIndex = Math.max(...prevLayers.map(l => l.zIndex), 0);
+      return prevLayers.map(l => 
+        l.id === id ? { ...l, zIndex: maxZIndex + 1 } : l
+      );
+    });
+  };
 
+  const addLayer = (
+    type: 'synth' | 'freesound' | 'melodic',
+    baseProperties: Partial<Layer> = {}
+  ) => {
     const id = `layer_${Date.now()}_${Math.random()}`;
     const newLayerStub: Layer = {
       id,
@@ -62,11 +82,23 @@ export default function EtherealAcousticsClient() {
       volume: -12,
       send: -40,
       node: null,
-      type: 'synth',
+      type: type,
       status: 'loading',
+      position: { 
+        x: Math.random() * (window.innerWidth / 2),
+        y: Math.random() * (window.innerHeight / 4)
+      },
+      zIndex: nextZIndex.current++,
+      ...baseProperties,
     };
     setLayers((prevLayers) => [...prevLayers, newLayerStub]);
+    return id;
+  };
 
+  const addSynthLayer = () => {
+    if (!audioEngineRef.current) return;
+    const id = addLayer('synth', { volume: -12 });
+    
     const newSynthLoop = audioEngineRef.current.startSynthLoop();
     if (!newSynthLoop) {
       handleRemoveLayer(id);
@@ -84,18 +116,7 @@ export default function EtherealAcousticsClient() {
 
   const addFreesoundLayer = async () => {
     if (!audioEngineRef.current) return;
-
-    const id = `layer_${Date.now()}_${Math.random()}`;
-    const newLayerStub: Layer = {
-      id,
-      title: generateRandomName(),
-      volume: -12,
-      send: -40,
-      node: null,
-      type: 'freesound',
-      status: 'loading',
-    };
-    setLayers((prevLayers) => [...prevLayers, newLayerStub]);
+    const id = addLayer('freesound', { volume: -12 });
     
     const queries = ['ambient', 'drone', 'texture', 'pad', 'atmosphere'];
     const randomQuery = queries[Math.floor(Math.random() * queries.length)];
@@ -132,20 +153,9 @@ export default function EtherealAcousticsClient() {
     );
   };
 
-    const addMelodicLayer = () => {
+  const addMelodicLayer = () => {
     if (!audioEngineRef.current) return;
-    
-    const id = `layer_${Date.now()}_${Math.random()}`;
-    const newLayerStub: Layer = {
-      id,
-      title: generateRandomName(),
-      volume: -15,
-      send: -40,
-      node: null,
-      type: 'melodic',
-      status: 'loading',
-    };
-    setLayers((prevLayers) => [...prevLayers, newLayerStub]);
+    const id = addLayer('melodic', { volume: -15 });
 
     const newSequence = audioEngineRef.current.startMelodicLoop();
     if (!newSequence) {
@@ -161,6 +171,55 @@ export default function EtherealAcousticsClient() {
       )
     );
   };
+  
+  const handleDragStart = (id: string, e: React.MouseEvent) => {
+    bringToFront(id);
+    const layer = layers.find(l => l.id === id);
+    if (!layer) return;
+
+    setDragState({
+      layerId: id,
+      offsetX: e.clientX - layer.position.x,
+      offsetY: e.clientY - layer.position.y,
+    });
+  };
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!dragState) return;
+
+    setLayers(prevLayers =>
+      prevLayers.map(l =>
+        l.id === dragState.layerId
+          ? {
+              ...l,
+              position: {
+                x: e.clientX - dragState.offsetX,
+                y: e.clientY - dragState.offsetY,
+              },
+            }
+          : l
+      )
+    );
+  }, [dragState]);
+
+  const handleMouseUp = useCallback(() => {
+    setDragState(null);
+  }, []);
+
+  useEffect(() => {
+    if (dragState) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    } else {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [dragState, handleMouseMove, handleMouseUp]);
 
   const handleRemoveLayer = (id: string) => {
     if (!audioEngineRef.current) return;
@@ -206,33 +265,34 @@ export default function EtherealAcousticsClient() {
 
 
   return (
-    <div className="relative w-full h-screen flex flex-col">
+    <div className="relative w-full h-screen flex flex-col overflow-hidden">
       <AudioEngine ref={audioEngineRef} />
 
       <main className="flex-grow blueprint-grid relative">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl px-4">
-          <div className="flex flex-wrap items-center justify-center gap-4">
-            {layers.map((layer) => (
-              <LayerCard
-                key={layer.id}
-                id={layer.id}
-                title={layer.title}
-                volume={layer.volume}
-                send={layer.send}
-                status={layer.status}
-                type={layer.type}
-                onRemove={handleRemoveLayer}
-                onVolumeChange={handleVolumeChange}
-                onSendChange={handleSendChange}
-              />
-            ))}
-            {layers.length === 0 && (
-              <div className="text-center text-muted-foreground p-8 bg-black/50 rounded-lg">
-                <p>Your canvas is empty.</p>
-                <p>Click the "Start" button to add a sound layer.</p>
-              </div>
-            )}
-          </div>
+        <div className="absolute top-0 left-0 w-full h-full">
+          {layers.map((layer) => (
+            <LayerCard
+              key={layer.id}
+              id={layer.id}
+              title={layer.title}
+              volume={layer.volume}
+              send={layer.send}
+              status={layer.status}
+              type={layer.type}
+              position={layer.position}
+              zIndex={layer.zIndex}
+              onRemove={handleRemoveLayer}
+              onVolumeChange={handleVolumeChange}
+              onSendChange={handleSendChange}
+              onMouseDown={(e) => handleDragStart(layer.id, e)}
+            />
+          ))}
+          {layers.length === 0 && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-muted-foreground p-8 bg-black/50 rounded-lg">
+              <p>Your canvas is empty.</p>
+              <p>Click the "Start" button to add a sound layer.</p>
+            </div>
+          )}
         </div>
       </main>
       

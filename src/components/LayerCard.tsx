@@ -24,9 +24,12 @@ interface LayerCardProps {
   send: number;
   status: 'loading' | 'loaded';
   type: 'synth' | 'freesound' | 'melodic';
+  position: { x: number; y: number };
+  zIndex: number;
   onRemove: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
   onSendChange: (id: string, send: number) => void;
+  onMouseDown: (e: React.MouseEvent) => void;
 }
 
 const layerIcons = {
@@ -42,13 +45,25 @@ export default function LayerCard({
   send,
   status,
   type,
+  position,
+  zIndex,
   onRemove,
   onVolumeChange,
   onSendChange,
+  onMouseDown,
 }: LayerCardProps) {
+  const cardStyle = {
+    left: `${position.x}px`,
+    top: `${position.y}px`,
+    zIndex: zIndex,
+  };
+
   if (status === 'loading') {
     return (
-      <div className="w-64 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-1 font-sans">
+      <div
+        className="w-64 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-1 font-sans absolute"
+        style={cardStyle}
+      >
         <div className="bg-neutral-500 h-[26px] flex items-center px-1">
            <Skeleton className="h-5 w-full bg-neutral-400" />
         </div>
@@ -61,9 +76,13 @@ export default function LayerCard({
   }
 
   return (
-    <div className="w-64 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-1 font-sans">
+    <div 
+      className="w-64 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute"
+      style={cardStyle}
+      onMouseDown={onMouseDown}
+    >
       {/* Title Bar */}
-      <div className="bg-blue-800 text-white flex items-center justify-between p-1">
+      <div className="bg-blue-800 text-white flex items-center justify-between p-1 cursor-move">
         <div className="flex items-center gap-2">
           {layerIcons[type]}
           <span className="font-bold text-sm select-none">{title}</span>
@@ -72,18 +91,22 @@ export default function LayerCard({
           variant="retro"
           size="icon"
           className="w-5 h-5"
-          onClick={() => onRemove(id)}
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent drag from starting
+            onRemove(id);
+          }}
           aria-label="Close"
+          onMouseDown={(e) => e.stopPropagation()} // Prevent drag
         >
           <X className="w-3 h-3 text-black" />
         </Button>
       </div>
 
       {/* Content */}
-      <div className="p-4 flex items-center justify-center space-x-4">
+      <div className="p-4 flex items-center justify-center space-x-4" onMouseDown={(e) => e.stopPropagation()}>
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="retro" size="icon" title="Volume">
+            <Button variant="retro" size="icon" title="Volume" onMouseDown={(e) => e.stopPropagation()}>
               <Volume2 />
             </Button>
           </PopoverTrigger>
@@ -102,7 +125,7 @@ export default function LayerCard({
         </Popover>
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="retro" size="icon" title="FX Send">
+            <Button variant="retro" size="icon" title="FX Send" onMouseDown={(e) => e.stopPropagation()}>
               <Send />
             </Button>
           </PopoverTrigger>
