@@ -390,6 +390,30 @@ export default function EtherealAcousticsClient() {
     );
   };
 
+  const handlePlay = (id: string) => {
+    if (!audioEngineRef.current) return;
+    const layer = layers.find((l) => l.id === id);
+    if (layer?.node) {
+      audioEngineRef.current.play(layer.node);
+    }
+  };
+
+  const handleStop = (id: string) => {
+    if (!audioEngineRef.current) return;
+    const layer = layers.find((l) => l.id === id);
+    if (layer?.node) {
+      audioEngineRef.current.stop(layer.node);
+    }
+  };
+
+  const handleSeek = (id: string, direction: 'forward' | 'backward') => {
+    if (!audioEngineRef.current) return;
+    const layer = layers.find((l) => l.id === id);
+    if (layer?.node && layer.type === 'freesound') {
+      audioEngineRef.current.seek(layer.node as Tone.Player, direction);
+    }
+  };
+
 
   return (
     <div className="relative w-full h-screen flex flex-col overflow-hidden">
@@ -420,6 +444,9 @@ export default function EtherealAcousticsClient() {
               onVolumeChange={handleVolumeChange}
               onSendChange={handleSendChange}
               onPlaybackRateChange={handlePlaybackRateChange}
+              onPlay={handlePlay}
+              onStop={handleStop}
+              onSeek={handleSeek}
               onMouseDown={(e) => handleDragStart(layer.id, 'layer', e)}
             />
           ))}
