@@ -2,7 +2,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Player } from 'tone';
+import { Player, Sequence } from 'tone';
 import type { PolySynth } from 'tone';
 import AudioEngine, {
   type AudioEngineHandle,
@@ -16,7 +16,7 @@ type Layer = {
   id: string;
   title: string;
   volume: number;
-  node: PolySynth | Player;
+  node: PolySynth | Player | Sequence;
 };
 
 export default function EtherealAcousticsClient() {
@@ -84,6 +84,22 @@ export default function EtherealAcousticsClient() {
     setLayers((prevLayers) => [...prevLayers, newLayer]);
   };
 
+    const addMelodicLayer = () => {
+    if (!audioEngineRef.current) return;
+
+    const newSequence = audioEngineRef.current.startMelodicLoop();
+    if (!newSequence) return;
+
+    const id = `layer_${Date.now()}`;
+    const newLayer: Layer = {
+      id,
+      title: 'Melodic Loop',
+      volume: 0,
+      node: newSequence,
+    };
+    setLayers((prevLayers) => [...prevLayers, newLayer]);
+  };
+
   const handleRemoveLayer = (id: string) => {
     if (!audioEngineRef.current) return;
     const layerToRemove = layers.find((l) => l.id === id);
@@ -91,7 +107,10 @@ export default function EtherealAcousticsClient() {
 
     if (layerToRemove.node instanceof Player) {
       audioEngineRef.current.stopFreesoundLoop(layerToRemove.node);
-    } else {
+    } else if (layerToRemove.node instanceof Sequence) {
+      audioEngineRef.current.stopMelodicLoop(layerToRemove.node);
+    }
+    else {
       audioEngineRef.current.stopSynth(layerToRemove.node as PolySynth);
     }
 
@@ -103,7 +122,13 @@ export default function EtherealAcousticsClient() {
     const layer = layers.find((l) => l.id === id);
     if (!layer) return;
 
-    audioEngineRef.current.setVolume(layer.node, volume);
+    const synth = (layer.node as any).synth;
+    if (synth) {
+       audioEngineRef.current.setVolume(synth, volume);
+    } else {
+       audioEngineRef.current.setVolume(layer.node, volume);
+    }
+
     setLayers((prevLayers) =>
       prevLayers.map((l) => (l.id === id ? { ...l, volume } : l))
     );
@@ -145,6 +170,7 @@ export default function EtherealAcousticsClient() {
       <SoundscapeController
         onAddSynthLayer={addSynthLayer}
         onAddFreesoundLayer={addFreesoundLayer}
+        onAddMelodicLayer={addMelodicLayer}
         isReady={true}
       />
     </div>

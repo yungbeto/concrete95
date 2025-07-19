@@ -8,17 +8,19 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Plus, Waves, Zap } from 'lucide-react';
+import { Plus, Waves, Zap, Music } from 'lucide-react';
 
 interface SoundscapeControllerProps {
   onAddSynthLayer: () => void;
   onAddFreesoundLayer: () => void;
+  onAddMelodicLayer: () => void;
   isReady: boolean;
 }
 
 export default function SoundscapeController({
   onAddSynthLayer,
   onAddFreesoundLayer,
+  onAddMelodicLayer,
   isReady,
 }: SoundscapeControllerProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -32,6 +34,12 @@ export default function SoundscapeController({
     onAddFreesoundLayer();
     setIsOpen(false);
   };
+  
+  const handleAddMelodicLayer = () => {
+    onAddMelodicLayer();
+    setIsOpen(false);
+  };
+
 
   return (
     <div className="absolute bottom-8 right-8 z-10">
@@ -57,6 +65,10 @@ export default function SoundscapeController({
               <Button variant="outline" onClick={handleAddSynthLayer}>
                 <Zap className="mr-2 h-4 w-4" />
                 Synth Pad
+              </Button>
+               <Button variant="outline" onClick={handleAddMelodicLayer}>
+                <Music className="mr-2 h-4 w-4" />
+                Melodic Loop
               </Button>
             </div>
           </div>

@@ -9,7 +9,9 @@ export type AudioEngineHandle = {
   stopSynth: (synth: Tone.PolySynth) => void;
   startFreesoundLoop: (url: string) => Promise<Tone.Player | null>;
   stopFreesoundLoop: (player: Tone.Player) => void;
-  setVolume: (node: Tone.Player | Tone.PolySynth, volume: number) => void;
+  startMelodicLoop: () => Tone.Sequence | null;
+  stopMelodicLoop: (sequence: Tone.Sequence) => void;
+  setVolume: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth, volume: number) => void;
 };
 
 const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
@@ -116,9 +118,76 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       player.stop();
       player.dispose();
     },
+    startMelodicLoop: () => {
+      Tone.start();
+
+      const reverb = new Tone.Reverb({
+        decay: Math.random() * 4 + 1, // 1 to 5 seconds
+        wet: Math.random() * 0.4 + 0.1, // 0.1 to 0.5
+      }).toDestination();
+
+      const delay = new Tone.FeedbackDelay({
+        delayTime: ['8n', '4n', '16n'][Math.floor(Math.random() * 3)],
+        feedback: Math.random() * 0.6 + 0.1, // 0.1 to 0.7
+        wet: Math.random() * 0.5 + 0.1, // 0.1 to 0.6
+      }).connect(reverb);
+      
+      const synth = new Tone.PluckSynth({
+        attackNoise: 0.5,
+        dampening: 4000,
+        resonance: 0.8,
+        release: 1,
+        volume: 0,
+      }).connect(delay);
+      
+      const scale = ['C4', 'D4', 'E4', 'G4', 'A4', 'C5', 'D5', 'E5'];
+      const noteDurations = ['8n', '16n', '4n', '32n'];
+
+      const sequence = new Tone.Sequence(
+        (time, note) => {
+          synth.triggerAttack(note, time);
+        },
+        [
+          scale[Math.floor(Math.random() * scale.length)],
+          null,
+          scale[Math.floor(Math.random() * scale.length)],
+          [
+            scale[Math.floor(Math.random() * scale.length)],
+            scale[Math.floor(Math.random() * scale.length)],
+          ],
+          null,
+          scale[Math.floor(Math.random() * scale.length)],
+        ],
+        noteDurations[Math.floor(Math.random() * noteDurations.length)]
+      );
+
+      sequence.loop = true;
+      sequence.start(0);
+      Tone.Transport.start();
+
+      // We associate the synth with the sequence for volume control
+      (sequence as any).synth = synth;
+
+      return sequence;
+    },
+    stopMelodicLoop: (sequence) => {
+      const synth = (sequence as any).synth;
+      if (synth && !synth.disposed) {
+        synth.dispose();
+      }
+      sequence.stop();
+      sequence.dispose();
+    },
     setVolume: (node, volume) => {
       if (node && !node.disposed) {
-        node.volume.value = volume;
+        if (node instanceof Tone.Sequence) {
+          const synth = (node as any).synth;
+          if (synth && !synth.disposed) {
+             synth.volume.value = volume;
+          }
+        } else {
+            node.volume.value = volume;
+        }
       }
     },
   }));
