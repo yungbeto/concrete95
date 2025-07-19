@@ -14,7 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Volume2, X, Send } from 'lucide-react';
+import { Volume2, X, Send, Zap, Waves, Music } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface LayerCardProps {
@@ -23,10 +23,17 @@ interface LayerCardProps {
   volume: number;
   send: number;
   status: 'loading' | 'loaded';
+  type: 'synth' | 'freesound' | 'melodic';
   onRemove: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
   onSendChange: (id: string, send: number) => void;
 }
+
+const layerIcons = {
+  synth: <Zap className="w-4 h-4 mr-2" />,
+  freesound: <Waves className="w-4 h-4 mr-2" />,
+  melodic: <Music className="w-4 h-4 mr-2" />,
+};
 
 export default function LayerCard({
   id,
@@ -34,6 +41,7 @@ export default function LayerCard({
   volume,
   send,
   status,
+  type,
   onRemove,
   onVolumeChange,
   onSendChange,
@@ -43,7 +51,10 @@ export default function LayerCard({
     return (
         <Card className="w-64 bg-card/80 backdrop-blur-sm shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <Skeleton className="h-5 w-24" />
+                <div className="flex items-center">
+                    {layerIcons[type]}
+                    <Skeleton className="h-5 w-24" />
+                </div>
                 <Button
                     variant="ghost"
                     size="icon"
@@ -64,7 +75,10 @@ export default function LayerCard({
   return (
     <Card className="w-64 bg-card/80 backdrop-blur-sm shadow-lg">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <CardTitle className="text-sm font-medium flex items-center">
+            {layerIcons[type]}
+            {title}
+        </CardTitle>
         <Button
           variant="ghost"
           size="icon"
@@ -106,7 +120,7 @@ export default function LayerCard({
               max={10}
               min={-40}
               step={1}
-              onValueChange={(value) => onSendChange(id, value[0])}
+              onValueeChange={(value) => onSendChange(id, value[0])}
             />
           </PopoverContent>
         </Popover>

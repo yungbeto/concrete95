@@ -21,6 +21,15 @@ type Layer = {
   status: 'loading' | 'loaded';
 };
 
+const adjectives = ['Wandering', 'Cosmic', 'Gentle', 'Fading', 'Shimmering', 'Echoing', 'Distant', 'Lucid', 'Dreamy', 'Ethereal'];
+const nouns = ['Pad', 'Drone', 'Melody', 'Echo', 'Texture', 'Chord', 'Arp', 'Fragment', 'Wash', 'Wave'];
+
+const generateRandomName = () => {
+  const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  return `${adjective} ${noun}`;
+};
+
 export default function EtherealAcousticsClient() {
   const audioEngineRef = useRef<AudioEngineHandle>(null);
   const [layers, setLayers] = useState<Layer[]>([]);
@@ -32,7 +41,7 @@ export default function EtherealAcousticsClient() {
     const id = `layer_${Date.now()}_${Math.random()}`;
     const newLayerStub: Layer = {
       id,
-      title: 'Synth Pad',
+      title: generateRandomName(),
       volume: -12,
       send: -40,
       node: null,
@@ -62,7 +71,7 @@ export default function EtherealAcousticsClient() {
     const id = `layer_${Date.now()}_${Math.random()}`;
     const newLayerStub: Layer = {
       id,
-      title: 'Freesound Loop',
+      title: generateRandomName(),
       volume: -12,
       send: -40,
       node: null,
@@ -112,7 +121,7 @@ export default function EtherealAcousticsClient() {
     const id = `layer_${Date.now()}_${Math.random()}`;
     const newLayerStub: Layer = {
       id,
-      title: 'Melodic Loop',
+      title: generateRandomName(),
       volume: -15,
       send: -40,
       node: null,
@@ -201,6 +210,7 @@ export default function EtherealAcousticsClient() {
               volume={layer.volume}
               send={layer.send}
               status={layer.status}
+              type={layer.type}
               onRemove={handleRemoveLayer}
               onVolumeChange={handleVolumeChange}
               onSendChange={handleSendChange}
