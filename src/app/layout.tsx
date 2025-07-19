@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'Ethereal Acoustics',
+  title: 'Concrete 95',
   description: 'AI-Driven Generative Soundscapes',
 };
 

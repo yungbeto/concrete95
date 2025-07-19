@@ -82,11 +82,11 @@ export default function EtherealAcousticsClient() {
   const [windows, setWindows] = useState<WindowState[]>([
     {
       id: 'about',
-      title: 'About Ethereal Acoustics',
+      title: 'About Concrete 95',
       content: (
         <div className="text-black space-y-2 text-sm">
           <p>
-            Welcome to Ethereal Acoustics, your personal AI-driven soundscape
+            Welcome to Concrete 95, your personal AI-driven soundscape
             generator.
           </p>
           <p>
@@ -425,7 +425,7 @@ export default function EtherealAcousticsClient() {
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
               <div className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans">
                 <div className="bg-blue-800 text-white flex items-center p-1">
-                  <span className="font-bold text-sm select-none">Ethereal Acoustics</span>
+                  <span className="font-bold text-sm select-none">Concrete 95</span>
                 </div>
                 <div className="p-4 flex flex-col items-center gap-4 text-black">
                     <div className="flex items-start gap-4 self-stretch">
