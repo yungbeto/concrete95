@@ -154,8 +154,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         synth.releaseAll();
         synth.dispose();
       }
-      if (Tone.Transport.state === 'started') sequence.stop();
-      sequence.dispose();
+      if (sequence && !sequence.disposed) {
+        if (Tone.Transport.state === 'started') sequence.stop();
+        sequence.dispose();
+      }
     },
     startFreesoundLoop: async (url) => {
       if (!masterLimiter.current || !fxBus.current) return null;
@@ -214,8 +216,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (lfo && !lfo.disposed) lfo.stop().dispose();
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
-      if (Tone.Transport.state === 'started' && player.state === 'started') player.stop();
-      player.dispose();
+      if (player && !player.disposed) {
+        if (Tone.Transport.state === 'started' && player.state === 'started') player.stop();
+        player.dispose();
+      }
     },
     startMelodicLoop: () => {
       if (!masterLimiter.current || !fxBus.current) return null;
@@ -299,11 +303,13 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
       if (synth && !synth.disposed) {
-        synth.triggerRelease();
+        synth.releaseAll();
         synth.dispose();
       }
-      if (Tone.Transport.state === 'started') sequence.stop();
-      sequence.dispose();
+      if (sequence && !sequence.disposed) {
+        if (Tone.Transport.state === 'started') sequence.stop();
+        sequence.dispose();
+      }
     },
     setVolume: (node, volume) => {
       if (node && !node.disposed) {
@@ -349,7 +355,11 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         if (node instanceof Tone.Player) {
           if (node.state === 'started') node.stop();
         } else if (node instanceof Tone.Sequence) {
-          if (node.state === 'started') node.stop();
+          if (node.state === 'started') {
+             const synth = (node as any).synth;
+             if (synth && !synth.disposed) synth.releaseAll();
+             node.stop();
+          }
         }
     },
   }));
@@ -359,3 +369,5 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
 AudioEngine.displayName = 'AudioEngine';
 export default AudioEngine;
+
+    
