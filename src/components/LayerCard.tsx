@@ -65,7 +65,7 @@ export default function LayerCard({
   if (status === 'loading') {
     return (
       <div
-        className="w-64 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-1 font-sans absolute"
+        className="w-64 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute"
         style={cardStyle}
       >
         <div className="bg-neutral-500 h-[26px] flex items-center px-1">

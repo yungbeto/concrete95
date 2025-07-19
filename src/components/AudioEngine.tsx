@@ -336,7 +336,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
     },
     setPlaybackRate: (node, rate) => {
       if (node instanceof Tone.Player && !node.disposed) {
-        node.playbackRate.value = rate;
+        node.playbackRate = rate;
       }
     }
   }));
