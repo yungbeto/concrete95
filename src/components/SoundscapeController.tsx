@@ -60,20 +60,28 @@ export default function SoundscapeController({
             <span className="font-bold">Start</span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-64 p-1 mb-2 ml-1 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 !rounded-none" side="top" align="start">
-          <div className="grid gap-1 text-black">
-              <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white" onClick={handleAddFreesoundLayer}>
-                <Waves className="mr-2 h-4 w-4" />
-                Freesound Loop
-              </Button>
-              <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white" onClick={handleAddSynthLayer}>
-                <Zap className="mr-2 h-4 w-4" />
-                Synth Pad
-              </Button>
-               <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white" onClick={handleAddMelodicLayer}>
-                <Music className="mr-2 h-4 w-4" />
-                Melodic Loop
-              </Button>
+        <PopoverContent className="w-auto p-0 mb-2 ml-1 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 !rounded-none" side="top" align="start">
+          <div className="flex">
+            <div
+              className="w-8 flex items-center justify-center bg-neutral-500 text-white font-bold text-lg p-2 select-none"
+              style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
+            >
+              <span className="tracking-widest rotate-180">Concrete 95</span>
+            </div>
+            <div className="grid gap-1 text-black p-1 w-56">
+                <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white" onClick={handleAddFreesoundLayer}>
+                  <Waves className="mr-2 h-4 w-4" />
+                  Freesound Loop
+                </Button>
+                <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white" onClick={handleAddSynthLayer}>
+                  <Zap className="mr-2 h-4 w-4" />
+                  Synth Pad
+                </Button>
+                 <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white" onClick={handleAddMelodicLayer}>
+                  <Music className="mr-2 h-4 w-4" />
+                  Melodic Loop
+                </Button>
+              </div>
             </div>
         </PopoverContent>
       </Popover>
