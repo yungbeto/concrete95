@@ -2,7 +2,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import type { PolySynth, Player } from 'tone';
+import { Player } from 'tone';
+import type { PolySynth } from 'tone';
 import AudioEngine, {
   type AudioEngineHandle,
 } from '@/components/AudioEngine';
