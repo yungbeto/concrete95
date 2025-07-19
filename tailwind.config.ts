@@ -14,6 +14,7 @@ export default {
         body: ['Inter', 'sans-serif'],
         headline: ['Inter', 'sans-serif'],
         code: ['monospace'],
+        lcd: ['Pixel-LCD7', 'monospace'],
       },
       colors: {
         background: 'hsl(var(--background))',

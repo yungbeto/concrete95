@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import * as Tone from 'tone';
 import AudioEngine, {
   type AudioEngineHandle,
@@ -29,6 +29,22 @@ const generateRandomName = () => {
   const noun = nouns[Math.floor(Math.random() * nouns.length)];
   return `${adjective} ${noun}`;
 };
+
+function DigitalClock() {
+  const [time, setTime] = useState(new Date());
+
+  useEffect(() => {
+    const timerId = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(timerId);
+  }, []);
+
+  return (
+    <div className="font-lcd text-lg text-neutral-800">
+      {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+    </div>
+  );
+}
+
 
 export default function EtherealAcousticsClient() {
   const audioEngineRef = useRef<AudioEngineHandle>(null);
@@ -189,48 +205,48 @@ export default function EtherealAcousticsClient() {
 
 
   return (
-    <div className="relative w-full h-screen">
+    <div className="relative w-full h-screen flex flex-col">
       <AudioEngine ref={audioEngineRef} />
-      <header className="absolute top-0 left-0 p-4 md:p-8 z-10">
-        <h1 className="text-l font-bold tracking-tight text-foreground sm:text-4xl">
-          Ethereal Acoustics
-        </h1>
-        <p className="mt-2 text-md leading-8 text-muted-foreground">
-          Design your soundscape by adding layers.
-        </p>
-      </header>
 
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl px-4">
-        <div className="flex flex-wrap items-center justify-center gap-4">
-          {layers.map((layer) => (
-            <LayerCard
-              key={layer.id}
-              id={layer.id}
-              title={layer.title}
-              volume={layer.volume}
-              send={layer.send}
-              status={layer.status}
-              type={layer.type}
-              onRemove={handleRemoveLayer}
-              onVolumeChange={handleVolumeChange}
-              onSendChange={handleSendChange}
-            />
-          ))}
-          {layers.length === 0 && (
-             <div className="text-center text-muted-foreground">
-               <p>Your canvas is empty.</p>
-               <p>Click the plus button to add a sound layer.</p>
-             </div>
-          )}
+      <main className="flex-grow blueprint-grid relative">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-4xl px-4">
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            {layers.map((layer) => (
+              <LayerCard
+                key={layer.id}
+                id={layer.id}
+                title={layer.title}
+                volume={layer.volume}
+                send={layer.send}
+                status={layer.status}
+                type={layer.type}
+                onRemove={handleRemoveLayer}
+                onVolumeChange={handleVolumeChange}
+                onSendChange={handleSendChange}
+              />
+            ))}
+            {layers.length === 0 && (
+              <div className="text-center text-muted-foreground p-8 bg-black/50 rounded-lg">
+                <p>Your canvas is empty.</p>
+                <p>Click the "Start" button to add a sound layer.</p>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </main>
       
-      <SoundscapeController
-        onAddSynthLayer={addSynthLayer}
-        onAddFreesoundLayer={addFreesoundLayer}
-        onAddMelodicLayer={addMelodicLayer}
-        isReady={true}
-      />
+      <footer className="w-full h-10 bg-silver border-t-2 border-t-white flex items-center px-2 z-20">
+         <SoundscapeController
+            onAddSynthLayer={addSynthLayer}
+            onAddFreesoundLayer={addFreesoundLayer}
+            onAddMelodicLayer={addMelodicLayer}
+            isReady={true}
+          />
+          <div className="flex-grow" />
+          <div className="bg-silver border-2 border-r-white border-b-white border-l-neutral-500 border-t-neutral-500 px-2 py-0.5">
+             <DigitalClock />
+          </div>
+      </footer>
     </div>
   );
 }

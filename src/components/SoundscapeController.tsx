@@ -17,6 +17,13 @@ interface SoundscapeControllerProps {
   isReady: boolean;
 }
 
+const WindowsIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path fillRule="evenodd" clipRule="evenodd" d="M0 15L45 10V48H0V15ZM0 52H45V90L0 85V52ZM50 8.5L98 0V48H50V8.5ZM50 52H98V100L50 91.5V52Z" fill="black"/>
+  </svg>
+);
+
+
 export default function SoundscapeController({
   onAddSynthLayer,
   onAddFreesoundLayer,
@@ -42,36 +49,29 @@ export default function SoundscapeController({
 
 
   return (
-    <div className="absolute bottom-8 right-8 z-10">
+    <div className="z-10">
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
-          <Button size="icon" className="rounded-full w-16 h-16 shadow-lg" disabled={!isReady}>
-            <Plus className="h-8 w-8" />
+          <Button variant="start" size="sm" disabled={!isReady}>
+            <WindowsIcon />
+            <span className="font-bold">Start</span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-80 mr-4">
-          <div className="grid gap-4">
-            <div className="space-y-2">
-              <h4 className="font-medium leading-none">Add Layer</h4>
-              <p className="text-sm text-muted-foreground">
-                Select a sound source to add to the soundscape.
-              </p>
-            </div>
-            <div className="grid gap-2">
-              <Button variant="outline" onClick={handleAddFreesoundLayer}>
+        <PopoverContent className="w-64 p-1 mb-2 ml-1 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 !rounded-none" side="top" align="start">
+          <div className="grid gap-1">
+              <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white" onClick={handleAddFreesoundLayer}>
                 <Waves className="mr-2 h-4 w-4" />
                 Freesound Loop
               </Button>
-              <Button variant="outline" onClick={handleAddSynthLayer}>
+              <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white" onClick={handleAddSynthLayer}>
                 <Zap className="mr-2 h-4 w-4" />
                 Synth Pad
               </Button>
-               <Button variant="outline" onClick={handleAddMelodicLayer}>
+               <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white" onClick={handleAddMelodicLayer}>
                 <Music className="mr-2 h-4 w-4" />
                 Melodic Loop
               </Button>
             </div>
-          </div>
         </PopoverContent>
       </Popover>
     </div>
