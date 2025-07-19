@@ -5,9 +5,10 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import * as Tone from 'tone';
 import {
   uniqueNamesGenerator,
-  adjectives,
-  nouns,
 } from 'unique-names-generator';
+import { adjectives } from 'unique-names-generator/lib/dictionaries/adjectives';
+import { nouns } from 'unique-names-generator/lib/dictionaries/nouns';
+
 import AudioEngine, {
   type AudioEngineHandle,
 } from '@/components/AudioEngine';
@@ -76,21 +77,22 @@ export default function EtherealAcousticsClient() {
 
   // Cleanup effect to dispose of all audio nodes on component unmount
   useEffect(() => {
+    const currentAudioEngine = audioEngineRef.current;
     const currentLayers = layers;
     return () => {
-      if (audioEngineRef.current) {
+      if (currentAudioEngine) {
         currentLayers.forEach(layer => {
             if (layer.node) {
               if (layer.type === 'freesound') {
-                audioEngineRef.current?.stopFreesoundLoop(layer.node as Tone.Player);
+                currentAudioEngine.stopFreesoundLoop(layer.node as Tone.Player);
               } else if (layer.type === 'melodic') {
-                audioEngineRef.current?.stopMelodicLoop(layer.node as Tone.Sequence);
+                currentAudioEngine.stopMelodicLoop(layer.node as Tone.Sequence);
               } else if (layer.type === 'synth') {
-                audioEngineRef.current?.stopSynthLoop(layer.node as Tone.Sequence);
+                currentAudioEngine.stopSynthLoop(layer.node as Tone.Sequence);
               }
             }
         });
-        audioEngineRef.current.disposeAll();
+        currentAudioEngine.disposeAll();
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
