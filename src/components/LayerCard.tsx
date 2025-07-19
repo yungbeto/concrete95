@@ -40,6 +40,23 @@ const layerIcons = {
   melodic: <Music className="w-4 h-4" />,
 };
 
+function LoadingAnimation() {
+  return (
+    <div className="w-full h-5 bg-white border-2 border-r-neutral-200 border-b-neutral-200 border-l-neutral-500 border-t-neutral-500 p-0.5 overflow-hidden">
+      <div className="w-full h-full relative animate-progress-flow">
+        {Array.from({ length: 15 }).map((_, i) => (
+          <div
+            key={i}
+            className="absolute top-0 w-2 h-full bg-blue-800"
+            style={{ left: `${i * 10}%` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
 export default function LayerCard({
   id,
   title,
@@ -65,15 +82,17 @@ export default function LayerCard({
   if (status === 'loading') {
     return (
       <div
-        className="w-64 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute"
+        className="w-64 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute select-none"
         style={cardStyle}
       >
-        <div className="bg-neutral-500 h-[26px] flex items-center px-1">
-           <Skeleton className="h-5 w-full bg-neutral-400" />
+        <div className="bg-neutral-500 text-white flex items-center justify-between p-1 cursor-move">
+           <div className="flex items-center gap-2">
+            <span className="font-bold text-sm text-neutral-400">Loading...</span>
+          </div>
         </div>
-        <div className="p-4 flex items-center justify-center space-x-4">
-          <Skeleton className="h-10 w-10 bg-neutral-400" />
-          <Skeleton className="h-10 w-10 bg-neutral-400" />
+        <div className="p-4 flex flex-col items-center justify-center space-y-3">
+          <p className="text-black">Loading sound layer...</p>
+          <LoadingAnimation />
         </div>
       </div>
     );
