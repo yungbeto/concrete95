@@ -11,6 +11,7 @@ import { searchFreesound } from '@/actions/freesound';
 import { useToast } from '@/hooks/use-toast';
 import LayerCard from '@/components/LayerCard';
 import { Info } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 type Layer = {
   id: string;
@@ -63,6 +64,7 @@ export default function EtherealAcousticsClient() {
   const { toast } = useToast();
   const [dragState, setDragState] = useState<DragState>(null);
   const nextZIndex = useRef(1);
+  const [isAlertDismissed, setIsAlertDismissed] = useState(false);
 
   // Cleanup effect to dispose of all audio nodes on component unmount
   useEffect(() => {
@@ -311,18 +313,27 @@ export default function EtherealAcousticsClient() {
               onMouseDown={(e) => handleDragStart(layer.id, e)}
             />
           ))}
-          {layers.length === 0 && (
+          {layers.length === 0 && !isAlertDismissed && (
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
               <div className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans">
                 <div className="bg-blue-800 text-white flex items-center p-1">
                   <span className="font-bold text-sm select-none">Ethereal Acoustics</span>
                 </div>
-                <div className="p-4 flex items-start gap-4">
-                  <Info className="w-8 h-8 text-blue-600 flex-shrink-0" />
-                  <div className="text-black">
-                    <p>Your canvas is empty.</p>
-                    <p>Click the "Start" button to add a sound layer.</p>
-                  </div>
+                <div className="p-4 flex flex-col items-center gap-4 text-black">
+                    <div className="flex items-start gap-4 self-stretch">
+                        <Info className="w-8 h-8 text-blue-600 flex-shrink-0" />
+                        <div>
+                            <p>Your canvas is empty.</p>
+                            <p>Click the "Start" button to add a sound layer.</p>
+                        </div>
+                    </div>
+                    <Button
+                        variant="retro"
+                        className="px-8"
+                        onClick={() => setIsAlertDismissed(true)}
+                    >
+                        OK
+                    </Button>
                 </div>
               </div>
             </div>
