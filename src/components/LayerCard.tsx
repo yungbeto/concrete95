@@ -37,7 +37,7 @@ const layerIcons = {
 function SoundRecorderDisplay({ isLoading = false }: { isLoading?: boolean }) {
   return (
     <div className="flex flex-col gap-2 p-2" onMouseDown={(e) => e.stopPropagation()}>
-      <div className="flex items-center justify-between gap-2 text-black text-xs">
+      <div className="flex items-center justify-between gap-2 text-black text-xs px-2">
         <div className="text-center">
           <p>Position:</p>
           {isLoading ? <Skeleton className="h-4 w-12 mt-1" /> : <p>0.00 sec.</p>}
