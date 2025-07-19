@@ -244,13 +244,22 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
 
-      const synth = new Tone.PluckSynth({
-        attackNoise: 0.5,
-        dampening: 4000,
-        resonance: Math.random() * 0.2 + 0.7, // Randomize resonance
-        release: 1,
+      const synthTypes = [Tone.PluckSynth, Tone.FMSynth, Tone.AMSynth, Tone.DuoSynth, Tone.MonoSynth];
+      const RandomSynth = synthTypes[Math.floor(Math.random() * synthTypes.length)];
+      
+      const synth = new RandomSynth({
         volume: -15,
       });
+
+      if (synth instanceof Tone.PluckSynth) {
+        synth.set({
+          attackNoise: 0.5,
+          dampening: 4000,
+          resonance: Math.random() * 0.2 + 0.7,
+          release: 1,
+        });
+      }
+
       synth.connect(delay);
       synth.connect(sendGain);
       
@@ -259,7 +268,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       const sequence = new Tone.Sequence(
         (time, note) => {
-          synth.triggerAttack(note, time);
+          synth.triggerAttackRelease(note, '8n', time);
         },
         [
           scale[Math.floor(Math.random() * scale.length)],

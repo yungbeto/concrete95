@@ -2,7 +2,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Player, Sequence } from 'tone';
+import * as Tone from 'tone';
 import AudioEngine, {
   type AudioEngineHandle,
 } from '@/components/AudioEngine';
@@ -16,7 +16,7 @@ type Layer = {
   title: string;
   volume: number;
   send: number;
-  node: Player | Sequence;
+  node: Tone.Player | Tone.Sequence;
   type: 'freesound' | 'synth' | 'melodic';
 };
 
@@ -113,11 +113,11 @@ export default function EtherealAcousticsClient() {
     if (!layerToRemove) return;
 
     if (layerToRemove.type === 'freesound') {
-      audioEngineRef.current.stopFreesoundLoop(layerToRemove.node as Player);
+      audioEngineRef.current.stopFreesoundLoop(layerToRemove.node as Tone.Player);
     } else if (layerToRemove.type === 'melodic') {
-      audioEngineRef.current.stopMelodicLoop(layerToRemove.node as Sequence);
+      audioEngineRef.current.stopMelodicLoop(layerToRemove.node as Tone.Sequence);
     } else if (layerToRemove.type === 'synth') {
-      audioEngineRef.current.stopSynthLoop(layerToRemove.node as Sequence);
+      audioEngineRef.current.stopSynthLoop(layerToRemove.node as Tone.Sequence);
     }
 
     setLayers((prevLayers) => prevLayers.filter((layer) => layer.id !== id));
