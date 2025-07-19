@@ -267,7 +267,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       synth.connect(delay);
       synth.connect(sendGain);
       
-      const scale = ['C4', 'D4', 'E4', 'G4', 'A4', 'C5', 'D5', 'E5'];
+      const scale = ['C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'D4', 'E4', 'G4', 'A4', 'C5', 'D5', 'E5'];
       const noteDurations = ['2n', '1m', '4n'];
 
       const sequence = new Tone.Sequence(
