@@ -80,6 +80,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         volume: -12,
       }).connect(delay);
       
+      // Connect the LFO to the detune property of the PolySynth
+      lfo.connect(synth.detune);
+
       const scale = ['C3', 'E3', 'G3', 'A3', 'C4', 'E4', 'G4', 'A4'];
       const notesAndChords = [
         scale[Math.floor(Math.random() * scale.length)],
@@ -98,10 +101,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const sequence = new Tone.Sequence(
         (time, note) => {
           synth.triggerAttackRelease(note, '4m', time);
-          // Connect the LFO to each voice's detune as it's triggered
-           synth.voices.forEach(voice => {
-            lfo.connect(voice.detune);
-          });
         },
         sequenceEvents,
         '2m'
