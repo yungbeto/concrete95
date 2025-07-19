@@ -12,26 +12,45 @@ export type AudioEngineHandle = {
   startMelodicLoop: () => Tone.Sequence | null;
   stopMelodicLoop: (sequence: Tone.Sequence) => void;
   setVolume: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, volume: number) => void;
+  setSendAmount: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, amount: number) => void;
 };
 
 const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
   const masterLimiter = useRef<Tone.Limiter | null>(null);
+  const fxBus = useRef<{ delay: Tone.FeedbackDelay, reverb: Tone.Reverb } | null>(null);
 
   useEffect(() => {
-    // Initialize the master limiter only on the client side
+    // Initialize the master limiter and FX bus only on the client side
     if (!masterLimiter.current) {
         masterLimiter.current = new Tone.Limiter(-6).toDestination();
+    }
+    if (!fxBus.current) {
+        const delay = new Tone.FeedbackDelay({
+            delayTime: '4n',
+            feedback: 0.6,
+            wet: 0.8,
+        });
+        const reverb = new Tone.Reverb({
+            decay: 10,
+            preDelay: 0.05,
+            wet: 0.9,
+        });
+        delay.chain(reverb, masterLimiter.current);
+        fxBus.current = { delay, reverb };
     }
     
     return () => {
       masterLimiter.current?.dispose();
       masterLimiter.current = null;
+      fxBus.current?.delay.dispose();
+      fxBus.current?.reverb.dispose();
+      fxBus.current = null;
     };
   }, []);
 
   useImperativeHandle(ref, () => ({
     startSynthLoop: () => {
-      if (!masterLimiter.current) return null;
+      if (!masterLimiter.current || !fxBus.current) return null;
       Tone.start();
 
       const oscillatorTypes: Tone.ToneOscillatorType[] = [
@@ -66,6 +85,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         min: 200,
         max: 2500,
       }).connect(filter.frequency).start();
+      
+      const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
 
       const synth = new Tone.PolySynth(Tone.Synth, {
         oscillator: {
@@ -78,7 +99,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
           release: Math.random() * 6 + 5,
         },
         volume: -12,
-      }).connect(filter);
+      });
+      synth.connect(filter);
+      synth.connect(sendGain);
       
       const scale = ['C3', 'E3', 'G3', 'A3', 'C4', 'E4', 'G4', 'A4'];
       const notesAndChords = [
@@ -111,14 +134,20 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       (sequence as any).synth = synth;
       (sequence as any).lfo = lfo;
+      (sequence as any).sendGain = sendGain;
       
       return sequence;
     },
     stopSynthLoop: (sequence) => {
       const synth = (sequence as any).synth;
       const lfo = (sequence as any).lfo;
+      const sendGain = (sequence as any).sendGain;
+
       if (lfo && !lfo.disposed) {
         lfo.stop().dispose();
+      }
+       if (sendGain && !sendGain.disposed) {
+        sendGain.dispose();
       }
       if (synth && !synth.disposed) {
         synth.releaseAll();
@@ -132,7 +161,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       sequence.dispose();
     },
     startFreesoundLoop: async (url) => {
-      if (!masterLimiter.current) return null;
+      if (!masterLimiter.current || !fxBus.current) return null;
       await Tone.start();
 
       const filter = new Tone.Filter(Math.random() * 1000 + 400, 'lowpass').connect(masterLimiter.current);
@@ -143,12 +172,17 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         max: 2000,
       }).connect(filter.frequency).start();
 
+      const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
+
       const player = new Tone.Player({
         url: url,
         loop: true,
         fadeOut: 1,
         volume: -12,
-      }).connect(filter);
+      });
+
+      player.connect(filter);
+      player.connect(sendGain);
 
       await Tone.loaded();
       const duration = player.buffer.duration;
@@ -172,19 +206,25 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       player.start();
       (player as any).lfo = lfo;
+      (player as any).sendGain = sendGain;
 
       return player;
     },
     stopFreesoundLoop: (player) => {
       const lfo = (player as any).lfo;
+      const sendGain = (player as any).sendGain;
+
       if (lfo && !lfo.disposed) {
         lfo.stop().dispose();
+      }
+      if (sendGain && !sendGain.disposed) {
+        sendGain.dispose();
       }
       player.stop();
       player.dispose();
     },
     startMelodicLoop: () => {
-      if (!masterLimiter.current) return null;
+      if (!masterLimiter.current || !fxBus.current) return null;
       Tone.start();
 
       const reverb = new Tone.Reverb({
@@ -204,13 +244,17 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         max: 0.6,
       }).connect(delay.wet).start();
 
+      const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
+
       const synth = new Tone.PluckSynth({
         attackNoise: 0.5,
         dampening: 4000,
         resonance: Math.random() * 0.2 + 0.7, // Randomize resonance
         release: 1,
         volume: -15,
-      }).connect(delay);
+      });
+      synth.connect(delay);
+      synth.connect(sendGain);
       
       const scale = ['C4', 'D4', 'E4', 'G4', 'A4', 'C5', 'D5', 'E5'];
       const noteDurations = ['2n', '1m', '4n'];
@@ -239,14 +283,20 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       (sequence as any).synth = synth;
       (sequence as any).lfo = lfo;
+      (sequence as any).sendGain = sendGain;
 
       return sequence;
     },
     stopMelodicLoop: (sequence) => {
       const synth = (sequence as any).synth;
       const lfo = (sequence as any).lfo;
+      const sendGain = (sequence as any).sendGain;
+
       if (lfo && !lfo.disposed) {
         lfo.stop().dispose();
+      }
+      if (sendGain && !sendGain.disposed) {
+        sendGain.dispose();
       }
       if (synth && !synth.disposed) {
         synth.triggerRelease();
@@ -271,6 +321,16 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         }
       }
     },
+    setSendAmount: (node, amount) => {
+      if (node && !node.disposed) {
+        const sendGain = (node as any).sendGain;
+        if (sendGain && !sendGain.disposed) {
+          // Convert decibels to gain
+          const gainValue = amount > -40 ? Tone.dbToGain(amount) : 0;
+          sendGain.gain.value = gainValue;
+        }
+      }
+    }
   }));
 
   return null;

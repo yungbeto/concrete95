@@ -15,7 +15,8 @@ type Layer = {
   id: string;
   title: string;
   volume: number;
-  node: Player | Sequence; // PolySynth is no longer directly stored
+  send: number;
+  node: Player | Sequence;
   type: 'freesound' | 'synth' | 'melodic';
 };
 
@@ -35,6 +36,7 @@ export default function EtherealAcousticsClient() {
       id,
       title: 'Synth Pad',
       volume: -12,
+      send: -40, // Initial send is muted
       node: newSynthLoop,
       type: 'synth',
     };
@@ -79,6 +81,7 @@ export default function EtherealAcousticsClient() {
       id,
       title: 'Freesound Loop',
       volume: -12,
+      send: -40, // Initial send is muted
       node: newPlayer,
       type: 'freesound',
     };
@@ -97,6 +100,7 @@ export default function EtherealAcousticsClient() {
       id,
       title: 'Melodic Loop',
       volume: -15,
+      send: -40, // Initial send is muted
       node: newSequence,
       type: 'melodic',
     };
@@ -124,13 +128,25 @@ export default function EtherealAcousticsClient() {
     const layer = layers.find((l) => l.id === id);
     if (!layer) return;
 
-    // The setVolume function in AudioEngine handles both Players and Sequences with associated synths
     audioEngineRef.current.setVolume(layer.node, volume);
 
     setLayers((prevLayers) =>
       prevLayers.map((l) => (l.id === id ? { ...l, volume } : l))
     );
   };
+  
+  const handleSendChange = (id: string, send: number) => {
+    if (!audioEngineRef.current) return;
+    const layer = layers.find((l) => l.id === id);
+    if (!layer) return;
+
+    audioEngineRef.current.setSendAmount(layer.node, send);
+
+    setLayers((prevLayers) =>
+      prevLayers.map((l) => (l.id === id ? { ...l, send } : l))
+    );
+  };
+
 
   return (
     <div className="relative w-full h-screen">
@@ -152,8 +168,10 @@ export default function EtherealAcousticsClient() {
               id={layer.id}
               title={layer.title}
               volume={layer.volume}
+              send={layer.send}
               onRemove={handleRemoveLayer}
               onVolumeChange={handleVolumeChange}
+              onSendChange={handleSendChange}
             />
           ))}
           {layers.length === 0 && (
