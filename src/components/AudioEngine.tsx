@@ -303,7 +303,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
       if (synth && !synth.disposed) {
-        synth.releaseAll();
         synth.dispose();
       }
       if (sequence && !sequence.disposed) {
@@ -357,7 +356,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         } else if (node instanceof Tone.Sequence) {
           if (node.state === 'started') {
              const synth = (node as any).synth;
-             if (synth && !synth.disposed) synth.releaseAll();
+             if (synth && !synth.disposed && synth instanceof Tone.PolySynth) synth.releaseAll();
              node.stop();
           }
         }
@@ -369,5 +368,3 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
 AudioEngine.displayName = 'AudioEngine';
 export default AudioEngine;
-
-    
