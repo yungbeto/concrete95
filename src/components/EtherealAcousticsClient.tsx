@@ -397,7 +397,8 @@ export default function EtherealAcousticsClient() {
     if (!audioEngineRef.current) return;
     const layer = layers.find((l) => l.id === id);
     if (layer?.node) {
-      audioEngineRef.current.stop(layer.node);
+        const allNodes = layers.map(l => l.node).filter(n => n !== null) as (Tone.Player | Tone.Sequence)[];
+        audioEngineRef.current.stop(layer.node, allNodes);
     }
   };
 

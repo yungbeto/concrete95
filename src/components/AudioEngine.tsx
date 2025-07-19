@@ -15,7 +15,7 @@ export type AudioEngineHandle = {
   setSendAmount: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, amount: number) => void;
   setPlaybackRate: (node: Tone.Player, rate: number) => void;
   play: (node: Tone.Player | Tone.Sequence) => void;
-  stop: (node: Tone.Player | Tone.Sequence) => void;
+  stop: (node: Tone.Player | Tone.Sequence, allNodes?: (Tone.Player | Tone.Sequence)[]) => void;
   disposeAll: () => void;
   getWaveform: (node: Tone.Player | Tone.Sequence) => Float32Array | null;
 };
@@ -349,18 +349,43 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
             Tone.Transport.start();
         }
     },
-    stop: (node) => {
-      if (!node || node.disposed) return;
+    stop: (node, allNodes) => {
+        if (!node || node.disposed) return;
+        
+        // Stop the specific node
         if (node instanceof Tone.Player) {
           if (node.state === 'started') node.stop();
         } else if (node instanceof Tone.Sequence) {
           if (node.state === 'started') {
-             const synth = (node as any).synth;
-             if (synth && !synth.disposed && synth instanceof Tone.PolySynth) {
-                synth.releaseAll();
-             }
-             node.stop();
+            const synth = (node as any).synth;
+            if (synth && !synth.disposed && synth instanceof Tone.PolySynth) {
+              synth.releaseAll();
+            }
+            node.stop();
           }
+        }
+      
+        // If this is a sequence, we need a more robust way to stop sound
+        if (node instanceof Tone.Sequence) {
+            Tone.Transport.cancel(); // This clears all scheduled events
+            
+            // Now, restart any *other* playing nodes
+            if (allNodes) {
+                allNodes.forEach(otherNode => {
+                    if (otherNode !== node && otherNode.state === 'started' && !otherNode.disposed) {
+                        if (otherNode instanceof Tone.Player) {
+                            otherNode.start();
+                        } else if (otherNode instanceof Tone.Sequence) {
+                            otherNode.start(0);
+                        }
+                    }
+                });
+            }
+        }
+
+        const isAnyNodePlaying = allNodes?.some(n => n !== node && n.state === 'started');
+        if (!isAnyNodePlaying && Tone.Transport.state === 'started') {
+            Tone.Transport.stop();
         }
     },
   }));
@@ -370,5 +395,3 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
 AudioEngine.displayName = 'AudioEngine';
 export default AudioEngine;
-
-    
