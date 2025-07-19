@@ -27,6 +27,7 @@ interface LayerCardProps {
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
+  progress?: number;
   onRemove: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
   onSendChange: (id: string, send: number) => void;
@@ -40,15 +41,17 @@ const layerIcons = {
   melodic: <Music className="w-4 h-4" />,
 };
 
-function LoadingAnimation() {
+function LoadingAnimation({ progress = 0 }: { progress?: number }) {
+  const numBlocks = 15;
+  const filledBlocks = Math.round(progress * numBlocks);
+  
   return (
     <div className="w-full h-5 bg-white border-2 border-r-neutral-200 border-b-neutral-200 border-l-neutral-500 border-t-neutral-500 p-0.5 overflow-hidden">
-      <div className="w-full h-full relative animate-progress-flow">
-        {Array.from({ length: 15 }).map((_, i) => (
+      <div className="w-full h-full flex gap-px">
+        {Array.from({ length: numBlocks }).map((_, i) => (
           <div
             key={i}
-            className="absolute top-0 w-2 h-full bg-blue-800"
-            style={{ left: `${i * 10}%` }}
+            className={`w-2 h-full ${i < filledBlocks ? 'bg-blue-800' : 'bg-transparent'}`}
           />
         ))}
       </div>
@@ -67,6 +70,7 @@ export default function LayerCard({
   position,
   zIndex,
   playbackRate,
+  progress,
   onRemove,
   onVolumeChange,
   onSendChange,
@@ -92,7 +96,7 @@ export default function LayerCard({
         </div>
         <div className="p-4 flex flex-col items-center justify-center space-y-3">
           <p className="text-black">Loading sound layer...</p>
-          <LoadingAnimation />
+          <LoadingAnimation progress={progress} />
         </div>
       </div>
     );

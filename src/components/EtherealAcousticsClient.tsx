@@ -24,6 +24,7 @@ type Layer = {
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
+  progress?: number;
 };
 
 type DragState = {
@@ -157,7 +158,7 @@ export default function EtherealAcousticsClient() {
 
   const addFreesoundLayer = async () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
-    const id = addLayer('freesound', { volume: -12, playbackRate: 1 });
+    const id = addLayer('freesound', { volume: -12, playbackRate: 1, progress: 0 });
     
     const queries = ['ambient', 'drone', 'texture', 'pad', 'atmosphere'];
     const randomQuery = queries[Math.floor(Math.random() * queries.length)];
@@ -177,8 +178,12 @@ export default function EtherealAcousticsClient() {
     const randomSoundUrl =
       soundUrls[Math.floor(Math.random() * soundUrls.length)];
 
+    const onProgress = (progress: number) => {
+      setLayers(prev => prev.map(l => l.id === id ? { ...l, progress } : l));
+    };
+
     const newPlayer =
-      await audioEngineRef.current.startFreesoundLoop(randomSoundUrl);
+      await audioEngineRef.current.startFreesoundLoop(randomSoundUrl, onProgress);
     
     if (!newPlayer) {
       handleRemoveLayer(id);
@@ -335,6 +340,7 @@ export default function EtherealAcousticsClient() {
               position={layer.position}
               zIndex={layer.zIndex}
               playbackRate={layer.playbackRate}
+              progress={layer.progress}
               onRemove={handleRemoveLayer}
               onVolumeChange={handleVolumeChange}
               onSendChange={handleSendChange}

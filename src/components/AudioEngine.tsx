@@ -7,7 +7,7 @@ import * as Tone from 'tone';
 export type AudioEngineHandle = {
   startSynthLoop: () => Tone.Sequence | null;
   stopSynthLoop: (synth: Tone.Sequence) => void;
-  startFreesoundLoop: (url: string) => Promise<Tone.Player | null>;
+  startFreesoundLoop: (url: string, onProgress: (progress: number) => void) => Promise<Tone.Player | null>;
   stopFreesoundLoop: (player: Tone.Player) => void;
   startMelodicLoop: () => Tone.Sequence | null;
   stopMelodicLoop: (sequence: Tone.Sequence) => void;
@@ -156,7 +156,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       }
       sequence.dispose();
     },
-    startFreesoundLoop: async (url) => {
+    startFreesoundLoop: async (url, onProgress) => {
       if (!masterLimiter.current || !fxBus.current) return null;
       await Tone.start();
 
@@ -180,8 +180,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       player.connect(filter);
       player.connect(sendGain);
-
-      await Tone.loaded();
+      
+      // Attach progress and load handlers
+      player.buffer.onprogress = onProgress;
+      
+      await player.buffer.load(url);
+      
       const duration = player.buffer.duration;
 
       const minLoopDuration = 0.5;
