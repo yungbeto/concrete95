@@ -18,6 +18,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
   const masterLimiter = useRef<Tone.Limiter | null>(null);
 
   useEffect(() => {
+    // Initialize the master limiter only on the client side
     if (!masterLimiter.current) {
         masterLimiter.current = new Tone.Limiter(-6).toDestination();
     }
@@ -33,11 +34,15 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (!masterLimiter.current) return null;
       Tone.start();
 
-      const oscillatorTypes: Tone.FatOscillatorType[] = [
+      const oscillatorTypes: Tone.ToneOscillatorType[] = [
         'fatsawtooth',
         'fatsquare',
         'fattriangle',
         'fatsine',
+        'sawtooth',
+        'square',
+        'triangle',
+        'sine',
       ];
       const randomOscillatorType =
         oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)];
@@ -204,7 +209,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const synth = new Tone.PluckSynth({
         attackNoise: 0.5,
         dampening: 4000,
-        resonance: 0.8,
+        resonance: Math.random() * 0.2 + 0.7, // Randomize resonance
         release: 1,
         volume: -15,
       }).connect(delay);
