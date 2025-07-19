@@ -138,7 +138,7 @@ export default function LayerCard({
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-48">
-            <p className="text-xs text-muted-foreground mb-2">
+            <p className="text-xs text-black mb-2">
               Volume: {volume > -40 ? `${volume.toFixed(0)} dB` : 'Muted'}
             </p>
             <Slider
@@ -157,7 +157,7 @@ export default function LayerCard({
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-48">
-            <p className="text-xs text-muted-foreground mb-2">
+            <p className="text-xs text-black mb-2">
               Send: {send > -40 ? `${send.toFixed(0)} dB` : 'Muted'}
             </p>
             <Slider
@@ -177,7 +177,7 @@ export default function LayerCard({
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-48">
-              <p className="text-xs text-muted-foreground mb-2">
+              <p className="text-xs text-black mb-2">
                 Speed: {playbackRate.toFixed(2)}x
               </p>
               <Slider
