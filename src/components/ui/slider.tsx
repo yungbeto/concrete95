@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -17,10 +18,10 @@ const Slider = React.forwardRef<
     )}
     {...props}
   >
-    <SliderPrimitive.Track className="relative h-2 w-full grow overflow-hidden rounded-full bg-secondary">
-      <SliderPrimitive.Range className="absolute h-full bg-primary" />
+    <SliderPrimitive.Track className="relative h-4 w-full grow overflow-hidden rounded-none bg-neutral-300 border-2 border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white">
+      <SliderPrimitive.Range className="absolute h-full bg-blue-800" />
     </SliderPrimitive.Track>
-    <SliderPrimitive.Thumb className="block h-5 w-5 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50" />
+    <SliderPrimitive.Thumb className="block h-5 w-3 rounded-none bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50" />
   </SliderPrimitive.Root>
 ))
 Slider.displayName = SliderPrimitive.Root.displayName
