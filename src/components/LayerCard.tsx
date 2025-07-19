@@ -1,12 +1,6 @@
 
 'use client';
 
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import {
@@ -27,7 +21,6 @@ interface LayerCardProps {
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
-  progress?: number;
   onRemove: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
   onSendChange: (id: string, send: number) => void;
@@ -41,20 +34,23 @@ const layerIcons = {
   melodic: <Music className="w-4 h-4" />,
 };
 
-function LoadingAnimation({ progress = 0 }: { progress?: number }) {
-  const numBlocks = 15;
-  const filledBlocks = Math.round(progress * numBlocks);
-  
+function SoundRecorderDisplay({ isLoading = false }: { isLoading?: boolean }) {
   return (
-    <div className="w-full h-5 bg-white border-2 border-r-neutral-200 border-b-neutral-200 border-l-neutral-500 border-t-neutral-500 p-0.5 overflow-hidden">
-      <div className="w-full h-full flex gap-px">
-        {Array.from({ length: numBlocks }).map((_, i) => (
-          <div
-            key={i}
-            className={`flex-grow h-full ${i < filledBlocks ? 'bg-blue-800' : 'bg-transparent'}`}
-          />
-        ))}
+    <div className="flex flex-col gap-2 p-2" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="flex items-center justify-between gap-2 text-black text-xs">
+        <div className="text-center">
+          <p>Position:</p>
+          {isLoading ? <Skeleton className="h-4 w-12 mt-1" /> : <p>0.00 sec.</p>}
+        </div>
+        <div className="flex-grow h-8 bg-black border-2 border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white flex items-center justify-center p-1">
+          <div className="w-full h-[2px] bg-green-500" />
+        </div>
+        <div className="text-center">
+          <p>Length:</p>
+          {isLoading ? <Skeleton className="h-4 w-12 mt-1" /> : <p>0.00 sec.</p>}
+        </div>
       </div>
+      <Slider defaultValue={[0]} max={100} step={1} disabled />
     </div>
   );
 }
@@ -70,7 +66,6 @@ export default function LayerCard({
   position,
   zIndex,
   playbackRate,
-  progress,
   onRemove,
   onVolumeChange,
   onSendChange,
@@ -82,29 +77,11 @@ export default function LayerCard({
     top: `${position.y}px`,
     zIndex: zIndex,
   };
-
-  if (status === 'loading') {
-    return (
-      <div
-        className="w-64 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute select-none"
-        style={cardStyle}
-      >
-        <div className="bg-neutral-500 text-white flex items-center justify-between p-1 cursor-move">
-           <div className="flex items-center gap-2">
-            <span className="font-bold text-sm text-neutral-400">Loading...</span>
-          </div>
-        </div>
-        <div className="p-4 flex flex-col items-center justify-center space-y-3">
-          <p className="text-black">Loading sound layer...</p>
-          <LoadingAnimation progress={progress} />
-        </div>
-      </div>
-    );
-  }
+  const isLoading = status === 'loading';
 
   return (
     <div 
-      className="w-64 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute"
+      className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute select-none"
       style={cardStyle}
       onMouseDown={onMouseDown}
     >
@@ -112,27 +89,33 @@ export default function LayerCard({
       <div className="bg-blue-800 text-white flex items-center justify-between p-1 cursor-move">
         <div className="flex items-center gap-2">
           {layerIcons[type]}
-          <span className="font-bold text-sm select-none">{title}</span>
+          <span className="font-bold text-sm">{isLoading ? 'Loading...' : title}</span>
         </div>
         <Button
           variant="retro"
           size="icon"
           className="w-5 h-5"
           onClick={(e) => {
-            e.stopPropagation(); // Prevent drag from starting
+            e.stopPropagation();
             onRemove(id);
           }}
           aria-label="Close"
-          onMouseDown={(e) => e.stopPropagation()} // Prevent drag
+          onMouseDown={(e) => e.stopPropagation()}
         >
           <X className="w-3 h-3 text-black" />
         </Button>
       </div>
 
-      {/* Content */}
-      <div className="p-4 flex items-center justify-center space-x-4" onMouseDown={(e) => e.stopPropagation()}>
+      {/* Sound Recorder Display */}
+      <SoundRecorderDisplay isLoading={isLoading} />
+      
+      {/* Separator */}
+      <div className="h-[2px] w-full bg-silver border-t-neutral-500 border-b-white" />
+
+      {/* Control Buttons */}
+      <div className="p-2 flex items-center justify-center space-x-2" onMouseDown={(e) => e.stopPropagation()}>
         <Popover>
-          <PopoverTrigger asChild>
+          <PopoverTrigger asChild disabled={isLoading}>
             <Button variant="retro" size="icon" title="Volume" onMouseDown={(e) => e.stopPropagation()}>
               <Volume2 className="text-black" />
             </Button>
@@ -151,7 +134,7 @@ export default function LayerCard({
           </PopoverContent>
         </Popover>
         <Popover>
-          <PopoverTrigger asChild>
+          <PopoverTrigger asChild disabled={isLoading}>
             <Button variant="retro" size="icon" title="FX Send" onMouseDown={(e) => e.stopPropagation()}>
               <Wand2 className="text-black" />
             </Button>
@@ -169,19 +152,19 @@ export default function LayerCard({
             />
           </PopoverContent>
         </Popover>
-        {type === 'freesound' && playbackRate !== undefined && (
+        {type === 'freesound' && (
           <Popover>
-            <PopoverTrigger asChild>
+            <PopoverTrigger asChild disabled={isLoading}>
               <Button variant="retro" size="icon" title="Speed" onMouseDown={(e) => e.stopPropagation()}>
                 <FastForward className="text-black" />
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-48">
               <p className="text-xs text-black mb-2">
-                Speed: {playbackRate.toFixed(2)}x
+                Speed: {playbackRate?.toFixed(2) ?? '1.00'}x
               </p>
               <Slider
-                defaultValue={[playbackRate]}
+                defaultValue={[playbackRate ?? 1]}
                 max={2}
                 min={0.5}
                 step={0.01}

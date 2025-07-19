@@ -81,7 +81,7 @@ export default function SoundscapeController({
             <div className="flex flex-col gap-1 text-black p-1 w-56">
                 <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white disabled:hover:bg-transparent disabled:text-neutral-500" onClick={handleAddFreesoundLayer} disabled={!canAddLayer}>
                   <Waves className="mr-2 h-4 w-4" />
-                  Freesound Loop
+                  Sample Loop
                 </Button>
                 <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white disabled:hover:bg-transparent disabled:text-neutral-500" onClick={handleAddSynthLayer} disabled={!canAddLayer}>
                   <Zap className="mr-2 h-4 w-4" />

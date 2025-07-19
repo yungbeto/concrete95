@@ -27,7 +27,6 @@ type Layer = {
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
-  progress?: number;
 };
 
 type WindowState = {
@@ -194,7 +193,7 @@ export default function EtherealAcousticsClient() {
 
   const addFreesoundLayer = async () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
-    const id = addLayer('freesound', { volume: -12, playbackRate: 1, progress: 0 });
+    const id = addLayer('freesound', { volume: -12, playbackRate: 1 });
     
     // An empty query will fetch the latest sounds from the proxy
     const soundUrls = await searchFreesound('');
@@ -213,7 +212,9 @@ export default function EtherealAcousticsClient() {
       soundUrls[Math.floor(Math.random() * soundUrls.length)];
 
     const onProgress = (progress: number) => {
-      setLayers(prev => prev.map(l => l.id === id ? { ...l, progress } : l));
+       setLayers((prev) =>
+        prev.map((l) => (l.id === id ? { ...l, progress } : l))
+      );
     };
 
     const newPlayer =
@@ -415,7 +416,6 @@ export default function EtherealAcousticsClient() {
               position={layer.position}
               zIndex={layer.zIndex}
               playbackRate={layer.playbackRate}
-              progress={layer.progress}
               onRemove={handleRemoveLayer}
               onVolumeChange={handleVolumeChange}
               onSendChange={handleSendChange}
