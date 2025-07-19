@@ -14,10 +14,9 @@ export type AudioEngineHandle = {
   setVolume: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, volume: number) => void;
   setSendAmount: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, amount: number) => void;
   setPlaybackRate: (node: Tone.Player, rate: number) => void;
-  playNode: (node: Tone.Player | Tone.Sequence) => void;
-  disposeAll: () => void;
   play: (node: Tone.Player | Tone.Sequence) => void;
   stop: (node: Tone.Player | Tone.Sequence) => void;
+  disposeAll: () => void;
 };
 
 const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
@@ -56,14 +55,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
     disposeAll: () => {
         Tone.Transport.stop();
         Tone.Transport.cancel();
-    },
-    playNode: (node) => {
-      if (node instanceof Tone.Player) {
-        node.start();
-      } else if (node instanceof Tone.Sequence) {
-        node.start(0);
-        Tone.Transport.start();
-      }
     },
     startSynthLoop: () => {
       if (!masterLimiter.current || !fxBus.current) return null;
@@ -206,9 +197,15 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       
       const progressEventId = Tone.Transport.scheduleRepeat(() => {
         if (player.state === 'started') {
+          // The time since the player was started
+          const timeSinceStart = Tone.Transport.seconds - (player as any)._startGain.context.currentTime;
+          // The duration of the loop segment
           const loopDuration = player.loopEnd - player.loopStart;
-          const currentPositionInLoop = (Tone.Transport.seconds - player.startTime) % loopDuration;
-          onProgressUpdate(currentPositionInLoop, loopDuration);
+          if (loopDuration > 0) {
+            // The current position within the loop
+            const currentPositionInLoop = timeSinceStart % loopDuration;
+             onProgressUpdate(currentPositionInLoop, loopDuration);
+          }
         }
       }, 0.1);
 
@@ -233,7 +230,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (sendGain && !sendGain.disposed) {
         sendGain.dispose();
       }
-      if (Tone.Transport.state === 'started') {
+      if (Tone.Transport.state === 'started' && player.state === 'started') {
         player.stop();
       }
       player.dispose();
@@ -358,7 +355,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
     },
     play: (node) => {
       if (node && !node.disposed) {
-        if (node instanceof Tone.Player) {
+        if (node instanceof Tone.Player && node.state !== 'started') {
           node.start();
         } else if (node instanceof Tone.Sequence && node.state !== 'started') {
           node.start(0);
@@ -370,7 +367,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
     },
     stop: (node) => {
       if (node && !node.disposed) {
-        if (node instanceof Tone.Player) {
+        if (node instanceof Tone.Player && node.state === 'started') {
           node.stop();
         } else if (node instanceof Tone.Sequence && node.state === 'started') {
           node.stop();

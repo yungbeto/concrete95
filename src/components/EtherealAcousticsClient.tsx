@@ -186,7 +186,7 @@ export default function EtherealAcousticsClient() {
       return;
     }
     
-    audioEngineRef.current.playNode(newSynthLoop);
+    audioEngineRef.current.play(newSynthLoop);
 
     setLayers((prevLayers) =>
       prevLayers.map((l) =>
@@ -231,7 +231,7 @@ export default function EtherealAcousticsClient() {
       return;
     }
 
-    audioEngineRef.current.playNode(newPlayer);
+    audioEngineRef.current.play(newPlayer);
     
     setLayers((prevLayers) =>
       prevLayers.map((l) =>
@@ -250,7 +250,7 @@ export default function EtherealAcousticsClient() {
       return;
     }
 
-    audioEngineRef.current.playNode(newSequence);
+    audioEngineRef.current.play(newSequence);
 
     setLayers((prevLayers) =>
       prevLayers.map((l) =>
