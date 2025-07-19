@@ -196,16 +196,14 @@ export default function EtherealAcousticsClient() {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('freesound', { volume: -12, playbackRate: 1, progress: 0 });
     
-    const queries = ['ambient', 'drone', 'texture', 'pad', 'atmosphere'];
-    const randomQuery = queries[Math.floor(Math.random() * queries.length)];
-
-    const soundUrls = await searchFreesound(randomQuery);
+    // An empty query will fetch the latest sounds from the proxy
+    const soundUrls = await searchFreesound('');
 
     if ('error' in soundUrls || soundUrls.length === 0) {
       toast({
         variant: 'destructive',
         title: 'Freesound Error',
-        description: 'error' in soundUrls ? soundUrls.error : `No sounds found for query: "${randomQuery}"`,
+        description: 'error' in soundUrls ? soundUrls.error : `No sounds found.`,
       });
       handleRemoveLayer(id);
       return;

@@ -1,3 +1,4 @@
+
 import {NextResponse} from 'next/server';
 
 export async function GET(request: Request) {
@@ -11,15 +12,12 @@ export async function GET(request: Request) {
       {status: 500}
     );
   }
-
-  if (!query) {
-    return NextResponse.json({error: 'Query parameter is required.'}, {status: 400});
-  }
-
+  
   // We are searching for sounds that are licensed under the Creative Commons 0 license, have a duration between 1 and 15 seconds,
   // and are of the highest quality. We are also sorting the results by creation date to get more variety.
+  // An empty query will return the latest sounds.
   const freesoundUrl = `https://freesound.org/apiv2/search/text/?query=${encodeURIComponent(
-    query
+    query || ''
   )}&token=${apiKey}&filter=duration:[1%20TO%2015]%20license:"Creative%20Commons%200"&fields=id,name,previews,license,username,duration&sort=created_desc&page_size=50`;
 
   try {
