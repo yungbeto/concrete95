@@ -51,7 +51,7 @@ function LoadingAnimation({ progress = 0 }: { progress?: number }) {
         {Array.from({ length: numBlocks }).map((_, i) => (
           <div
             key={i}
-            className={`w-2 h-full ${i < filledBlocks ? 'bg-blue-800' : 'bg-transparent'}`}
+            className={`flex-grow h-full ${i < filledBlocks ? 'bg-blue-800' : 'bg-transparent'}`}
           />
         ))}
       </div>
