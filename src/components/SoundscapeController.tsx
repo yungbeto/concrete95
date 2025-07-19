@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -45,7 +46,7 @@ export default function SoundscapeController({
             <div className="space-y-2">
               <h4 className="font-medium leading-none">Add Layer</h4>
               <p className="text-sm text-muted-foreground">
-                Select a sound source to add to the canvas.
+                Select a sound source to add to the soundscape.
               </p>
             </div>
             <div className="grid gap-2">

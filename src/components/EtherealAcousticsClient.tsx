@@ -1,46 +1,27 @@
 
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState } from 'react';
 import type { PolySynth, Player } from 'tone';
-import FogVisualizer, {
-  type FogVisualizerHandle,
-} from '@/components/FogVisualizer';
 import AudioEngine, {
   type AudioEngineHandle,
 } from '@/components/AudioEngine';
 import SoundscapeController from '@/components/SoundscapeController';
 import { searchFreesound } from '@/actions/freesound';
 import { useToast } from '@/hooks/use-toast';
-import type { Shape } from '@/lib/types';
+import LayerCard from '@/components/LayerCard';
 
 type Layer = {
   id: string;
-  shape: Shape;
-  synth?: PolySynth;
-  player?: Player;
+  title: string;
+  volume: number;
+  node: PolySynth | Player;
 };
 
 export default function EtherealAcousticsClient() {
   const audioEngineRef = useRef<AudioEngineHandle>(null);
   const [layers, setLayers] = useState<Layer[]>([]);
-  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number } | null>(null);
   const { toast } = useToast();
-
-  const createShape = (id: string): Shape | null => {
-    if (!canvasSize) return null;
-
-    const { width, height } = canvasSize;
-    if (width === 0 || height === 0) return null;
-
-    const radius = Math.random() * 20 + 20;
-    const x = Math.random() * (width - radius * 2) + radius;
-    const y = Math.random() * (height - radius * 2) + radius;
-    const colors = ['#fc79bc', '#fcec79', '#fafafa'];
-    const randomColor = colors[Math.floor(Math.random() * colors.length)];
-
-    return { id, x, y, radius, color: randomColor };
-  };
 
   const addSynthLayer = () => {
     if (!audioEngineRef.current) return;
@@ -49,14 +30,13 @@ export default function EtherealAcousticsClient() {
     if (!newSynth) return;
 
     const id = `layer_${Date.now()}`;
-    const newShape = createShape(id);
-
-    if (newShape) {
-      setLayers((prevLayers) => [
-        ...prevLayers,
-        { id, shape: newShape, synth: newSynth },
-      ]);
-    }
+    const newLayer: Layer = {
+      id,
+      title: 'Synth Pad',
+      volume: 0,
+      node: newSynth,
+    };
+    setLayers((prevLayers) => [...prevLayers, newLayer]);
   };
 
   const addFreesoundLayer = async () => {
@@ -93,52 +73,78 @@ export default function EtherealAcousticsClient() {
     if (!newPlayer) return;
 
     const id = `layer_${Date.now()}`;
-    const newShape = createShape(id);
+    const newLayer: Layer = {
+      id,
+      title: 'Freesound Loop',
+      volume: 0,
+      node: newPlayer,
+    };
 
-    if (newShape) {
-      setLayers((prevLayers) => [
-        ...prevLayers,
-        { id, shape: newShape, player: newPlayer },
-      ]);
-    }
+    setLayers((prevLayers) => [...prevLayers, newLayer]);
   };
 
-  const handleShapeClick = (id: string) => {
+  const handleRemoveLayer = (id: string) => {
     if (!audioEngineRef.current) return;
+    const layerToRemove = layers.find((l) => l.id === id);
+    if (!layerToRemove) return;
 
-    const layerToStop = layers.find((layer) => layer.id === id);
-
-    if (layerToStop?.synth) {
-      audioEngineRef.current.stopSynth(layerToStop.synth);
-    }
-
-    if (layerToStop?.player) {
-      audioEngineRef.current.stopFreesoundLoop(layerToStop.player);
+    if (layerToRemove.node instanceof Player) {
+      audioEngineRef.current.stopFreesoundLoop(layerToRemove.node);
+    } else {
+      audioEngineRef.current.stopSynth(layerToRemove.node as PolySynth);
     }
 
     setLayers((prevLayers) => prevLayers.filter((layer) => layer.id !== id));
   };
+  
+  const handleVolumeChange = (id: string, volume: number) => {
+    if (!audioEngineRef.current) return;
+    const layer = layers.find((l) => l.id === id);
+    if (!layer) return;
+
+    audioEngineRef.current.setVolume(layer.node, volume);
+    setLayers((prevLayers) =>
+      prevLayers.map((l) => (l.id === id ? { ...l, volume } : l))
+    );
+  };
 
   return (
     <div className="relative w-full h-screen">
-      <FogVisualizer
-        layers={layers}
-        onShapeClick={handleShapeClick}
-        onReady={setCanvasSize}
-      />
       <AudioEngine ref={audioEngineRef} />
       <header className="absolute top-0 left-0 p-4 md:p-8 z-10">
         <h1 className="text-l font-bold tracking-tight text-foreground sm:text-4xl">
           Ethereal Acoustics
         </h1>
-        <p className="mt-2 text-lg leading-8 text-muted-foreground">
-          Design your soundscape.
+        <p className="mt-2 text-md leading-8 text-muted-foreground">
+          Design your soundscape by adding layers.
         </p>
       </header>
+
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl px-4">
+        <div className="flex flex-wrap items-center justify-center gap-4">
+          {layers.map((layer) => (
+            <LayerCard
+              key={layer.id}
+              id={layer.id}
+              title={layer.title}
+              volume={layer.volume}
+              onRemove={handleRemoveLayer}
+              onVolumeChange={handleVolumeChange}
+            />
+          ))}
+          {layers.length === 0 && (
+             <div className="text-center text-muted-foreground">
+               <p>Your canvas is empty.</p>
+               <p>Click the plus button to add a sound layer.</p>
+             </div>
+          )}
+        </div>
+      </div>
+      
       <SoundscapeController
         onAddSynthLayer={addSynthLayer}
         onAddFreesoundLayer={addFreesoundLayer}
-        isReady={!!canvasSize}
+        isReady={true}
       />
     </div>
   );

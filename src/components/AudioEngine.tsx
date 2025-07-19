@@ -9,6 +9,7 @@ export type AudioEngineHandle = {
   stopSynth: (synth: Tone.PolySynth) => void;
   startFreesoundLoop: (url: string) => Promise<Tone.Player | null>;
   stopFreesoundLoop: (player: Tone.Player) => void;
+  setVolume: (node: Tone.Player | Tone.PolySynth, volume: number) => void;
 };
 
 const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
@@ -50,6 +51,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
             sustain: 0.8,
             release: Math.random() * 3 + 2,
           },
+          volume: 0, // Start at 0 volume
         }).connect(reverb);
 
         const notes = [
@@ -65,9 +67,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
     },
     stopSynth: (synth) => {
       synth.triggerRelease();
-      synth.onsilence = () => {
-        synth.dispose();
-      };
       setTimeout(
         () => {
           if (!synth.disposed) {
@@ -83,6 +82,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         url: url,
         loop: true,
         fadeOut: 1,
+        volume: 0, // Start at 0 volume
       }).toDestination();
 
       await Tone.loaded();
@@ -115,6 +115,11 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
     stopFreesoundLoop: (player) => {
       player.stop();
       player.dispose();
+    },
+    setVolume: (node, volume) => {
+      if (node && !node.disposed) {
+        node.volume.value = volume;
+      }
     },
   }));
 
