@@ -163,18 +163,22 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
 
+      let playerStartTime = 0;
       const player = new Tone.Player({
         url: url,
         loop: true,
         fadeOut: 1,
         volume: -12,
         playbackRate: 1,
+        onstart: () => {
+          playerStartTime = Tone.Transport.seconds;
+        },
       });
 
       player.connect(filter);
       player.connect(sendGain);
       
-      await player.buffer.load(url);
+      await Tone.loaded();
       
       const duration = player.buffer.duration;
 
@@ -197,17 +201,13 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       
       const progressEventId = Tone.Transport.scheduleRepeat(() => {
         if (player.state === 'started') {
-          // The time since the player was started
-          const timeSinceStart = Tone.Transport.seconds - (player as any)._startGain.context.currentTime;
-          // The duration of the loop segment
           const loopDuration = player.loopEnd - player.loopStart;
           if (loopDuration > 0) {
-            // The current position within the loop
-            const currentPositionInLoop = timeSinceStart % loopDuration;
-             onProgressUpdate(currentPositionInLoop, loopDuration);
+            const currentPosition = (Tone.Transport.seconds - playerStartTime) % loopDuration;
+            onProgressUpdate(currentPosition, loopDuration);
           }
         }
-      }, 0.1);
+      }, 0.05);
 
 
       (player as any).lfo = lfo;

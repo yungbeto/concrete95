@@ -216,11 +216,11 @@ export default function EtherealAcousticsClient() {
       soundUrls[Math.floor(Math.random() * soundUrls.length)];
 
     const onProgressUpdate = (currentTime: number, totalDuration: number) => {
-      setLayers(prev => prev.map(l =>
-        l.id === id
-          ? { ...l, playbackPosition: currentTime, duration: totalDuration }
-          : l
-      ));
+        setLayers(prev => prev.map(l =>
+            l.id === id
+            ? { ...l, playbackPosition: currentTime, duration: totalDuration }
+            : l
+        ));
     };
 
     const newPlayer =
