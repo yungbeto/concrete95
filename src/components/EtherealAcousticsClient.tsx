@@ -31,16 +31,17 @@ const generateRandomName = () => {
 };
 
 function DigitalClock() {
-  const [time, setTime] = useState(new Date());
+  const [time, setTime] = useState<Date | null>(null);
 
   useEffect(() => {
+    setTime(new Date());
     const timerId = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timerId);
   }, []);
 
   return (
     <div className="font-lcd text-lg text-neutral-800">
-      {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      {time ? time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '00:00'}
     </div>
   );
 }
