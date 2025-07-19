@@ -14,7 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Volume2, X, Send, Zap, Waves, Music } from 'lucide-react';
+import { Volume2, X, Wand2, Zap, Waves, Music } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface LayerCardProps {
@@ -107,7 +107,7 @@ export default function LayerCard({
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="retro" size="icon" title="Volume" onMouseDown={(e) => e.stopPropagation()}>
-              <Volume2 />
+              <Volume2 className="text-black" />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-48">
@@ -126,7 +126,7 @@ export default function LayerCard({
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="retro" size="icon" title="FX Send" onMouseDown={(e) => e.stopPropagation()}>
-              <Send />
+              <Wand2 className="text-black" />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-48">
