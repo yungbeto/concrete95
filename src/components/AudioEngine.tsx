@@ -5,11 +5,11 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import * as Tone from 'tone';
 
 export type AudioEngineHandle = {
-  startSynthLoop: () => Tone.Sequence | null;
+  startSynthLoop: (onProgressUpdate: (time: number, duration: number) => void) => Tone.Sequence | null;
   stopSynthLoop: (synth: Tone.Sequence) => void;
   startFreesoundLoop: (url: string, onProgressUpdate: (time: number, duration: number) => void) => Promise<Tone.Player | null>;
   stopFreesoundLoop: (player: Tone.Player) => void;
-  startMelodicLoop: () => Tone.Sequence | null;
+  startMelodicLoop: (onProgressUpdate: (time: number, duration: number) => void) => Tone.Sequence | null;
   stopMelodicLoop: (sequence: Tone.Sequence) => void;
   setVolume: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, volume: number) => void;
   setSendAmount: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, amount: number) => void;
@@ -56,7 +56,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         Tone.Transport.stop();
         Tone.Transport.cancel();
     },
-    startSynthLoop: () => {
+    startSynthLoop: (onProgressUpdate) => {
       if (!masterLimiter.current || !fxBus.current) return null;
       Tone.start();
 
@@ -123,9 +123,19 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       
       sequence.loop = true;
 
+      const duration = Tone.Transport.toSeconds(sequence.loopEnd.toString() + 'm');
+      
+      const progressEventId = Tone.Transport.scheduleRepeat(() => {
+        if (sequence.state === 'started') {
+            const currentPosition = sequence.progress * duration;
+            onProgressUpdate(currentPosition, duration);
+        }
+      }, 0.05);
+
       (sequence as any).synth = synth;
       (sequence as any).lfo = lfoFilter;
       (sequence as any).sendGain = sendGain;
+      (sequence as any).progressEventId = progressEventId;
       
       return sequence;
     },
@@ -133,7 +143,11 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const synth = (sequence as any).synth;
       const lfo = (sequence as any).lfo;
       const sendGain = (sequence as any).sendGain;
+      const progressEventId = (sequence as any).progressEventId;
 
+      if (progressEventId) {
+        Tone.Transport.clear(progressEventId);
+      }
       if (lfo && !lfo.disposed) {
         lfo.stop().dispose();
       }
@@ -235,7 +249,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       }
       player.dispose();
     },
-    startMelodicLoop: () => {
+    startMelodicLoop: (onProgressUpdate) => {
       if (!masterLimiter.current || !fxBus.current) return null;
       Tone.start();
 
@@ -300,9 +314,19 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       sequence.loop = true;
       
+      const duration = Tone.Transport.toSeconds(sequence.loopEnd.toString() + 'm');
+      
+      const progressEventId = Tone.Transport.scheduleRepeat(() => {
+        if (sequence.state === 'started') {
+            const currentPosition = sequence.progress * duration;
+            onProgressUpdate(currentPosition, duration);
+        }
+      }, 0.05);
+
       (sequence as any).synth = synth;
       (sequence as any).lfo = lfo;
       (sequence as any).sendGain = sendGain;
+      (sequence as any).progressEventId = progressEventId;
 
       return sequence;
     },
@@ -310,7 +334,11 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const synth = (sequence as any).synth;
       const lfo = (sequence as any).lfo;
       const sendGain = (sequence as any).sendGain;
-
+      const progressEventId = (sequence as any).progressEventId;
+      
+      if (progressEventId) {
+        Tone.Transport.clear(progressEventId);
+      }
       if (lfo && !lfo.disposed) {
         lfo.stop().dispose();
       }

@@ -176,11 +176,19 @@ export default function EtherealAcousticsClient() {
     return false;
   };
 
+  const handleProgressUpdate = (id: string, currentTime: number, totalDuration: number) => {
+    setLayers(prev => prev.map(l =>
+        l.id === id
+        ? { ...l, playbackPosition: currentTime, duration: totalDuration }
+        : l
+    ));
+  };
+
   const addSynthLayer = () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('synth', { volume: -12 });
     
-    const newSynthLoop = audioEngineRef.current.startSynthLoop();
+    const newSynthLoop = audioEngineRef.current.startSynthLoop((time, duration) => handleProgressUpdate(id, time, duration));
     if (!newSynthLoop) {
       handleRemoveLayer(id);
       return;
@@ -215,16 +223,9 @@ export default function EtherealAcousticsClient() {
     const randomSoundUrl =
       soundUrls[Math.floor(Math.random() * soundUrls.length)];
 
-    const onProgressUpdate = (currentTime: number, totalDuration: number) => {
-        setLayers(prev => prev.map(l =>
-            l.id === id
-            ? { ...l, playbackPosition: currentTime, duration: totalDuration }
-            : l
-        ));
-    };
 
     const newPlayer =
-      await audioEngineRef.current.startFreesoundLoop(randomSoundUrl, onProgressUpdate);
+      await audioEngineRef.current.startFreesoundLoop(randomSoundUrl, (time, duration) => handleProgressUpdate(id, time, duration));
     
     if (!newPlayer) {
       handleRemoveLayer(id);
@@ -244,7 +245,7 @@ export default function EtherealAcousticsClient() {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('melodic', { volume: -15 });
 
-    const newSequence = audioEngineRef.current.startMelodicLoop();
+    const newSequence = audioEngineRef.current.startMelodicLoop((time, duration) => handleProgressUpdate(id, time, duration));
     if (!newSequence) {
       handleRemoveLayer(id);
       return;

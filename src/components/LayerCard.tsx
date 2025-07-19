@@ -39,18 +39,12 @@ function SoundRecorderDisplay({
     isLoading = false,
     playbackPosition = 0,
     duration = 0,
-    type,
- }: { 
-    isLoading?: boolean;
-    playbackPosition?: number;
-    duration?: number;
-    type: LayerCardProps['type'];
  }) {
     const formatTime = (seconds: number) => {
         return seconds.toFixed(2) + ' sec.';
     }
 
-    const isInteractive = type === 'freesound' && duration > 0 && !isLoading;
+    const isInteractive = duration > 0 && !isLoading;
     const sliderValue = isInteractive ? (playbackPosition / duration) * 100 : 0;
 
   return (
@@ -99,7 +93,7 @@ export default function LayerCard({
     zIndex: zIndex,
   };
   const isLoading = status === 'loading';
-  const isTransportDisabled = isLoading || type !== 'freesound';
+  const isTransportDisabled = isLoading;
 
   return (
     <div 
@@ -149,7 +143,6 @@ export default function LayerCard({
         isLoading={isLoading} 
         playbackPosition={playbackPosition} 
         duration={duration}
-        type={type} 
       />
       
       {/* Separator */}
