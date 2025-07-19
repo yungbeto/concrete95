@@ -17,6 +17,8 @@ interface LayerCardProps {
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
+  playbackPosition?: number;
+  duration?: number;
   onRemove: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
   onSendChange: (id: string, send: number) => void;
@@ -33,23 +35,40 @@ const layerIcons = {
 };
 
 
-function SoundRecorderDisplay({ isLoading = false }: { isLoading?: boolean }) {
+function SoundRecorderDisplay({ 
+    isLoading = false,
+    playbackPosition = 0,
+    duration = 0,
+    type,
+ }: { 
+    isLoading?: boolean;
+    playbackPosition?: number;
+    duration?: number;
+    type: LayerCardProps['type'];
+ }) {
+    const formatTime = (seconds: number) => {
+        return seconds.toFixed(2) + ' sec.';
+    }
+
+    const isInteractive = type === 'freesound' && duration > 0 && !isLoading;
+    const sliderValue = isInteractive ? (playbackPosition / duration) * 100 : 0;
+
   return (
     <div className="flex flex-col gap-2 p-2" onMouseDown={(e) => e.stopPropagation()}>
       <div className="flex items-stretch justify-between gap-2 text-black text-xs">
         <div className="border border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white p-4 text-center">
           <p>Position:</p>
-          {isLoading ? <Skeleton className="h-4 w-12 mt-1" /> : <p>0.00 sec.</p>}
+          {isLoading ? <Skeleton className="h-4 w-12 mt-1" /> : <p>{formatTime(playbackPosition)}</p>}
         </div>
         <div className="flex-grow h-auto bg-black border-2 border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white flex items-center justify-center p-1">
           <div className="w-full h-[2px] bg-green-500" />
         </div>
         <div className="border border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white p-4 text-center">
           <p>Length:</p>
-          {isLoading ? <Skeleton className="h-4 w-12 mt-1" /> : <p>0.00 sec.</p>}
+          {isLoading ? <Skeleton className="h-4 w-12 mt-1" /> : <p>{formatTime(duration)}</p>}
         </div>
       </div>
-      <Slider defaultValue={[0]} max={100} step={1} disabled />
+      <Slider value={[sliderValue]} max={100} step={1} disabled={!isInteractive} />
     </div>
   );
 }
@@ -64,6 +83,8 @@ export default function LayerCard({
   position,
   zIndex,
   playbackRate,
+  playbackPosition,
+  duration,
   onRemove,
   onVolumeChange,
   onSendChange,
@@ -124,7 +145,12 @@ export default function LayerCard({
 
 
       {/* Sound Recorder Display */}
-      <SoundRecorderDisplay isLoading={isLoading} />
+      <SoundRecorderDisplay 
+        isLoading={isLoading} 
+        playbackPosition={playbackPosition} 
+        duration={duration}
+        type={type} 
+      />
       
       {/* Separator */}
       <div className="h-[2px] w-full bg-silver border-t-neutral-500 border-b-white" />

@@ -13,7 +13,7 @@ const Slider = React.forwardRef<
   <SliderPrimitive.Root
     ref={ref}
     className={cn(
-      "mt-4 relative flex w-full touch-none select-none items-center",
+      "mt-4 mb-4 relative flex w-full touch-none select-none items-center",
       className
     )}
     {...props}

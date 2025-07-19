@@ -7,7 +7,7 @@ import * as Tone from 'tone';
 export type AudioEngineHandle = {
   startSynthLoop: () => Tone.Sequence | null;
   stopSynthLoop: (synth: Tone.Sequence) => void;
-  startFreesoundLoop: (url: string, onProgress: (progress: number) => void) => Promise<Tone.Player | null>;
+  startFreesoundLoop: (url: string, onProgressUpdate: (time: number, duration: number) => void) => Promise<Tone.Player | null>;
   stopFreesoundLoop: (player: Tone.Player) => void;
   startMelodicLoop: () => Tone.Sequence | null;
   stopMelodicLoop: (sequence: Tone.Sequence) => void;
@@ -158,7 +158,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       }
       sequence.dispose();
     },
-    startFreesoundLoop: async (url, onProgress) => {
+    startFreesoundLoop: async (url, onProgressUpdate) => {
       if (!masterLimiter.current || !fxBus.current) return null;
       await Tone.start();
 
@@ -183,9 +183,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       player.connect(filter);
       player.connect(sendGain);
       
-      // Attach progress and load handlers
-      player.buffer.onprogress = onProgress;
-      
       await player.buffer.load(url);
       
       const duration = player.buffer.duration;
@@ -207,15 +204,29 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         player.loopEnd = startTime + loopDuration;
       }
       
+      const progressEventId = Tone.Transport.scheduleRepeat(() => {
+        if (player.state === 'started') {
+          const loopDuration = player.loopEnd - player.loopStart;
+          const currentPositionInLoop = (Tone.Transport.seconds - player.startTime) % loopDuration;
+          onProgressUpdate(currentPositionInLoop, loopDuration);
+        }
+      }, 0.1);
+
+
       (player as any).lfo = lfo;
       (player as any).sendGain = sendGain;
+      (player as any).progressEventId = progressEventId;
 
       return player;
     },
     stopFreesoundLoop: (player) => {
       const lfo = (player as any).lfo;
       const sendGain = (player as any).sendGain;
+      const progressEventId = (player as any).progressEventId;
 
+      if (progressEventId) {
+        Tone.Transport.clear(progressEventId);
+      }
       if (lfo && !lfo.disposed) {
         lfo.stop().dispose();
       }

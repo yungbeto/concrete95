@@ -27,6 +27,8 @@ type Layer = {
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
+  playbackPosition?: number;
+  duration?: number;
 };
 
 type WindowState = {
@@ -154,6 +156,8 @@ export default function EtherealAcousticsClient() {
         y: Math.random() * (window.innerHeight / 4)
       },
       zIndex: nextZIndex.current++,
+      playbackPosition: 0,
+      duration: 0,
       ...baseProperties,
     };
     setLayers((prevLayers) => [...prevLayers, newLayerStub]);
@@ -211,12 +215,16 @@ export default function EtherealAcousticsClient() {
     const randomSoundUrl =
       soundUrls[Math.floor(Math.random() * soundUrls.length)];
 
-    const onProgress = (progress: number) => {
-       // We're not displaying a progress bar anymore
+    const onProgressUpdate = (currentTime: number, totalDuration: number) => {
+      setLayers(prev => prev.map(l =>
+        l.id === id
+          ? { ...l, playbackPosition: currentTime, duration: totalDuration }
+          : l
+      ));
     };
 
     const newPlayer =
-      await audioEngineRef.current.startFreesoundLoop(randomSoundUrl, onProgress);
+      await audioEngineRef.current.startFreesoundLoop(randomSoundUrl, onProgressUpdate);
     
     if (!newPlayer) {
       handleRemoveLayer(id);
@@ -430,6 +438,8 @@ export default function EtherealAcousticsClient() {
               position={layer.position}
               zIndex={layer.zIndex}
               playbackRate={layer.playbackRate}
+              playbackPosition={layer.playbackPosition}
+              duration={layer.duration}
               onRemove={handleRemoveLayer}
               onVolumeChange={handleVolumeChange}
               onSendChange={handleSendChange}

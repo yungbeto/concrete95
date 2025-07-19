@@ -38,7 +38,7 @@ export default function LayerMenuBar({
     <div className="bg-silver text-black p-0 h-auto">
         <Menubar className="bg-transparent border-none p-0 h-auto" onMouseDown={handleMenuClick}>
           <MenubarMenu>
-            <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto focus:bg-blue-800 focus:text-white data-[state=open]:bg-blue-800 data-[state=open]:text-white">Effects</MenubarTrigger>
+            <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto ">Effects</MenubarTrigger>
             <MenubarContent>
               <MenubarItem onSelect={(e) => e.preventDefault()}>
                 <div className="w-48 text-black">
@@ -57,7 +57,7 @@ export default function LayerMenuBar({
             </MenubarContent>
           </MenubarMenu>
           <MenubarMenu>
-             <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto focus:bg-blue-800 focus:text-white data-[state=open]:bg-blue-800 data-[state=open]:text-white">Volume</MenubarTrigger>
+             <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto ">Volume</MenubarTrigger>
             <MenubarContent>
               <MenubarItem onSelect={(e) => e.preventDefault()}>
                 <div className="w-48 text-black">
@@ -77,7 +77,7 @@ export default function LayerMenuBar({
           </MenubarMenu>
           {type === 'freesound' && (
             <MenubarMenu>
-                <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto focus:bg-blue-800 focus:text-white data-[state=open]:bg-blue-800 data-[state=open]:text-white">Speed</MenubarTrigger>
+                <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto ">Speed</MenubarTrigger>
                 <MenubarContent>
                     <MenubarItem onSelect={(e) => e.preventDefault()}>
                     <div className="w-48 text-black">
