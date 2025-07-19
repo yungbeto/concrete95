@@ -16,8 +16,14 @@ export type AudioEngineHandle = {
 
 const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
   useEffect(() => {
+    // Apply a limiter to the master output to prevent clipping, only on the client
+    const limiter = new Tone.Limiter(-6).toDestination();
+    Tone.Destination.chain(limiter);
+
     return () => {
       // Cleanup global effects if any
+      Tone.Destination.disconnect();
+      limiter.dispose();
     };
   }, []);
 
@@ -35,10 +41,16 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)];
 
       const reverb = new Tone.Reverb({
-        decay: Math.random() * 5 + 4, // Longer decay for pads
-        wet: Math.random() * 0.4 + 0.3,
-        preDelay: Math.random() * 0.2,
+        decay: Math.random() * 6 + 4, // Longer decay
+        wet: Math.random() * 0.5 + 0.4, // More wet
+        preDelay: Math.random() * 0.3,
       }).toDestination();
+      
+      const delay = new Tone.FeedbackDelay({
+        delayTime: ['2n', '1m'][Math.floor(Math.random() * 2)],
+        feedback: Math.random() * 0.5 + 0.2,
+        wet: Math.random() * 0.4 + 0.2,
+      }).connect(reverb);
 
       const synth = new Tone.PolySynth(Tone.Synth, {
         oscillator: {
@@ -47,13 +59,13 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
           spread: Math.random() * 40 + 20,
         },
         envelope: {
-          attack: Math.random() * 4 + 2, // Slower attack
+          attack: Math.random() * 5 + 3, // Slower attack
           decay: 0.1,
           sustain: 0.9,
-          release: Math.random() * 5 + 4, // Slower release
+          release: Math.random() * 6 + 5, // Slower release
         },
         volume: 0, // Start at 0 volume
-      }).connect(reverb);
+      }).connect(delay);
       
       const scale = ['C3', 'E3', 'G3', 'A3', 'C4', 'E4', 'G4', 'A4'];
       const notesAndChords = [
@@ -73,10 +85,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       const sequence = new Tone.Sequence(
         (time, note) => {
-          synth.triggerAttackRelease(note, '2m', time);
+          synth.triggerAttackRelease(note, '4m', time);
         },
         sequenceEvents,
-        '1m' // Each event happens every whole measure
+        '2m' // Each event happens every two measures
       );
       
       sequence.loop = true;
@@ -90,7 +102,13 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
     stopSynthLoop: (sequence) => {
       const synth = (sequence as any).synth;
       if (synth && !synth.disposed) {
-        synth.dispose();
+        synth.releaseAll();
+        // Disconnect and dispose of the synth and its effects after the release has had time to fade out
+        setTimeout(() => {
+          if (!synth.disposed) {
+            synth.dispose();
+          }
+        }, 3000); // Wait 3 seconds for release to complete
       }
       sequence.stop();
       sequence.dispose();
@@ -186,7 +204,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
     stopMelodicLoop: (sequence) => {
       const synth = (sequence as any).synth;
       if (synth && !synth.disposed) {
-        synth.dispose();
+        synth.releaseAll();
+         setTimeout(() => {
+          if (!synth.disposed) {
+            synth.dispose();
+          }
+        }, 1000);
       }
       sequence.stop();
       sequence.dispose();
