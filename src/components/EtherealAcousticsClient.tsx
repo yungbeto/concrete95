@@ -23,6 +23,7 @@ type Layer = {
   status: 'loading' | 'loaded';
   position: { x: number; y: number };
   zIndex: number;
+  playbackRate?: number;
 };
 
 type DragState = {
@@ -142,7 +143,7 @@ export default function EtherealAcousticsClient() {
 
   const addFreesoundLayer = async () => {
     if (!audioEngineRef.current) return;
-    const id = addLayer('freesound', { volume: -12 });
+    const id = addLayer('freesound', { volume: -12, playbackRate: 1 });
     
     const queries = ['ambient', 'drone', 'texture', 'pad', 'atmosphere'];
     const randomQuery = queries[Math.floor(Math.random() * queries.length)];
@@ -289,6 +290,18 @@ export default function EtherealAcousticsClient() {
     );
   };
 
+  const handlePlaybackRateChange = (id: string, rate: number) => {
+    if (!audioEngineRef.current) return;
+    const layer = layers.find((l) => l.id === id);
+    if (!layer || !layer.node || layer.type !== 'freesound') return;
+
+    audioEngineRef.current.setPlaybackRate(layer.node as Tone.Player, rate);
+
+    setLayers((prevLayers) =>
+      prevLayers.map((l) => (l.id === id ? { ...l, playbackRate: rate } : l))
+    );
+  };
+
 
   return (
     <div className="relative w-full h-screen flex flex-col overflow-hidden">
@@ -307,9 +320,11 @@ export default function EtherealAcousticsClient() {
               type={layer.type}
               position={layer.position}
               zIndex={layer.zIndex}
+              playbackRate={layer.playbackRate}
               onRemove={handleRemoveLayer}
               onVolumeChange={handleVolumeChange}
               onSendChange={handleSendChange}
+              onPlaybackRateChange={handlePlaybackRateChange}
               onMouseDown={(e) => handleDragStart(layer.id, e)}
             />
           ))}

@@ -14,7 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Volume2, X, Wand2, Zap, Waves, Music } from 'lucide-react';
+import { Volume2, X, Wand2, Zap, Waves, Music, FastForward } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface LayerCardProps {
@@ -26,9 +26,11 @@ interface LayerCardProps {
   type: 'synth' | 'freesound' | 'melodic';
   position: { x: number; y: number };
   zIndex: number;
+  playbackRate?: number;
   onRemove: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
   onSendChange: (id: string, send: number) => void;
+  onPlaybackRateChange: (id: string, rate: number) => void;
   onMouseDown: (e: React.MouseEvent) => void;
 }
 
@@ -47,9 +49,11 @@ export default function LayerCard({
   type,
   position,
   zIndex,
+  playbackRate,
   onRemove,
   onVolumeChange,
   onSendChange,
+  onPlaybackRateChange,
   onMouseDown,
 }: LayerCardProps) {
   const cardStyle = {
@@ -142,6 +146,27 @@ export default function LayerCard({
             />
           </PopoverContent>
         </Popover>
+        {type === 'freesound' && playbackRate !== undefined && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="retro" size="icon" title="Speed" onMouseDown={(e) => e.stopPropagation()}>
+                <FastForward className="text-black" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-48">
+              <p className="text-xs text-muted-foreground mb-2">
+                Speed: {playbackRate.toFixed(2)}x
+              </p>
+              <Slider
+                defaultValue={[playbackRate]}
+                max={2}
+                min={0.5}
+                step={0.01}
+                onValueChange={(value) => onPlaybackRateChange(id, value[0])}
+              />
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
     </div>
   );

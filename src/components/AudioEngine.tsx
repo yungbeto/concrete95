@@ -13,6 +13,7 @@ export type AudioEngineHandle = {
   stopMelodicLoop: (sequence: Tone.Sequence) => void;
   setVolume: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, volume: number) => void;
   setSendAmount: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, amount: number) => void;
+  setPlaybackRate: (node: Tone.Player, rate: number) => void;
   playNode: (node: Tone.Player | Tone.Sequence) => void;
   disposeAll: () => void;
 };
@@ -174,6 +175,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         loop: true,
         fadeOut: 1,
         volume: -12,
+        playbackRate: 1,
       });
 
       player.connect(filter);
@@ -330,6 +332,11 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
           const gainValue = amount > -40 ? Tone.dbToGain(amount) : 0;
           sendGain.gain.value = gainValue;
         }
+      }
+    },
+    setPlaybackRate: (node, rate) => {
+      if (node instanceof Tone.Player && !node.disposed) {
+        node.playbackRate.value = rate;
       }
     }
   }));
