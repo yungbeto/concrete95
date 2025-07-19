@@ -1,7 +1,7 @@
 
 'use client';
 
-import { forwardRef, useEffect, useImperativeHandle } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import * as Tone from 'tone';
 
 export type AudioEngineHandle = {
@@ -15,20 +15,24 @@ export type AudioEngineHandle = {
 };
 
 const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
-  useEffect(() => {
-    // Apply a limiter to the master output to prevent clipping, only on the client
-    const limiter = new Tone.Limiter(-6).toDestination();
-    Tone.Destination.chain(limiter);
+  const masterLimiter = useRef<Tone.Limiter | null>(null);
 
+  useEffect(() => {
+    // This effect runs once on the client, setting up the master output
+    if (!masterLimiter.current) {
+        masterLimiter.current = new Tone.Limiter(-6).toDestination();
+    }
+    
     return () => {
       // Cleanup global effects if any
-      Tone.Destination.disconnect();
-      limiter.dispose();
+      masterLimiter.current?.dispose();
+      masterLimiter.current = null;
     };
   }, []);
 
   useImperativeHandle(ref, () => ({
     startSynthLoop: () => {
+      if (!masterLimiter.current) return null;
       Tone.start();
 
       const oscillatorTypes: Tone.FatOscillatorType[] = [
@@ -44,13 +48,13 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         decay: Math.random() * 6 + 4, // Longer decay
         wet: Math.random() * 0.5 + 0.4, // More wet
         preDelay: Math.random() * 0.3,
-      }).toDestination();
+      });
       
       const delay = new Tone.FeedbackDelay({
         delayTime: ['2n', '1m'][Math.floor(Math.random() * 2)],
         feedback: Math.random() * 0.5 + 0.2,
         wet: Math.random() * 0.4 + 0.2,
-      }).connect(reverb);
+      }).chain(reverb, masterLimiter.current);
 
       const synth = new Tone.PolySynth(Tone.Synth, {
         oscillator: {
@@ -64,7 +68,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
           sustain: 0.9,
           release: Math.random() * 6 + 5, // Slower release
         },
-        volume: 0, // Start at 0 volume
+        volume: -12, // Start at an audible volume
       }).connect(delay);
       
       const scale = ['C3', 'E3', 'G3', 'A3', 'C4', 'E4', 'G4', 'A4'];
@@ -114,13 +118,14 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       sequence.dispose();
     },
     startFreesoundLoop: async (url) => {
+      if (!masterLimiter.current) return null;
       await Tone.start();
       const player = new Tone.Player({
         url: url,
         loop: true,
         fadeOut: 1,
-        volume: 0, // Start at 0 volume
-      }).toDestination();
+        volume: -12, // Start at an audible volume
+      }).connect(masterLimiter.current);
 
       await Tone.loaded();
       const duration = player.buffer.duration;
@@ -151,25 +156,26 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       player.dispose();
     },
     startMelodicLoop: () => {
+      if (!masterLimiter.current) return null;
       Tone.start();
 
       const reverb = new Tone.Reverb({
         decay: Math.random() * 4 + 1, // 1 to 5 seconds
         wet: Math.random() * 0.4 + 0.1, // 0.1 to 0.5
-      }).toDestination();
+      });
 
       const delay = new Tone.FeedbackDelay({
         delayTime: ['8n', '4n', '16n'][Math.floor(Math.random() * 3)],
         feedback: Math.random() * 0.6 + 0.1, // 0.1 to 0.7
         wet: Math.random() * 0.5 + 0.1, // 0.1 to 0.6
-      }).connect(reverb);
+      }).chain(reverb, masterLimiter.current);
       
       const synth = new Tone.PluckSynth({
         attackNoise: 0.5,
         dampening: 4000,
         resonance: 0.8,
         release: 1,
-        volume: 0,
+        volume: -15, // Start at an audible volume
       }).connect(delay);
       
       const scale = ['C4', 'D4', 'E4', 'G4', 'A4', 'C5', 'D5', 'E5'];
@@ -204,7 +210,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
     stopMelodicLoop: (sequence) => {
       const synth = (sequence as any).synth;
       if (synth && !synth.disposed) {
-        synth.releaseAll();
+        // PluckSynth doesn't have releaseAll, so just trigger release.
+        synth.triggerRelease();
          setTimeout(() => {
           if (!synth.disposed) {
             synth.dispose();

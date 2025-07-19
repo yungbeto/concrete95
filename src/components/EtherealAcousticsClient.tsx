@@ -34,7 +34,7 @@ export default function EtherealAcousticsClient() {
     const newLayer: Layer = {
       id,
       title: 'Synth Pad',
-      volume: 0,
+      volume: -12,
       node: newSynthLoop,
       type: 'synth',
     };
@@ -78,7 +78,7 @@ export default function EtherealAcousticsClient() {
     const newLayer: Layer = {
       id,
       title: 'Freesound Loop',
-      volume: 0,
+      volume: -12,
       node: newPlayer,
       type: 'freesound',
     };
@@ -96,7 +96,7 @@ export default function EtherealAcousticsClient() {
     const newLayer: Layer = {
       id,
       title: 'Melodic Loop',
-      volume: 0,
+      volume: -15,
       node: newSequence,
       type: 'melodic',
     };
