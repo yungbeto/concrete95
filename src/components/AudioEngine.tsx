@@ -179,7 +179,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       }).connect(delay);
       
       const scale = ['C4', 'D4', 'E4', 'G4', 'A4', 'C5', 'D5', 'E5'];
-      const noteDurations = ['8n', '16n', '4n', '32n'];
+      const noteDurations = ['8n', '4n', '2n', '1m'];
 
       const sequence = new Tone.Sequence(
         (time, note) => {
