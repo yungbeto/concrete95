@@ -16,11 +16,11 @@ export async function GET(request: Request) {
     return NextResponse.json({error: 'Query parameter is required.'}, {status: 400});
   }
 
-  // We are searching for sounds that are licensed under the Creative Commons 0 license, have a duration between 1 and 10 seconds,
-  // and are of the highest quality. We are also sorting the results by the number of downloads.
+  // We are searching for sounds that are licensed under the Creative Commons 0 license, have a duration between 1 and 15 seconds,
+  // and are of the highest quality. We are also sorting the results by creation date to get more variety.
   const freesoundUrl = `https://freesound.org/apiv2/search/text/?query=${encodeURIComponent(
     query
-  )}&token=${apiKey}&filter=duration:[1%20TO%2015]%20license:"Creative%20Commons%200"&fields=id,name,previews,license,username,duration&sort=downloads_desc&page_size=5`;
+  )}&token=${apiKey}&filter=duration:[1%20TO%2015]%20license:"Creative%20Commons%200"&fields=id,name,previews,license,username,duration&sort=created_desc&page_size=50`;
 
   try {
     const response = await fetch(freesoundUrl);
