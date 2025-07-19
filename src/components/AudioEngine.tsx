@@ -151,7 +151,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
       if (synth && !synth.disposed) {
-        synth.releaseAll();
+        if (synth instanceof Tone.PolySynth) synth.releaseAll();
         synth.dispose();
       }
       if (sequence && !sequence.disposed) {
@@ -244,19 +244,16 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
 
-      const synthTypes = [Tone.PluckSynth, Tone.FMSynth, Tone.AMSynth, Tone.DuoSynth, Tone.MonoSynth];
-      const RandomSynth = synthTypes[Math.floor(Math.random() * synthTypes.length)];
-      
-      const synth = new RandomSynth({ volume: -15 });
-
-      if (synth instanceof Tone.PluckSynth) {
-        synth.set({
-          attackNoise: 0.5,
-          dampening: 4000,
-          resonance: Math.random() * 0.2 + 0.7,
-          release: 1,
-        });
-      }
+      const synth = new Tone.PolySynth(Tone.Synth, {
+          volume: -15,
+          oscillator: { type: 'sine' },
+          envelope: {
+              attack: 0.01,
+              decay: 0.1,
+              sustain: 0.5,
+              release: 1,
+          },
+      });
       
       const waveform = new Tone.Waveform(1024);
       synth.connect(delay);
@@ -359,7 +356,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         } else if (node instanceof Tone.Sequence) {
           if (node.state === 'started') {
              const synth = (node as any).synth;
-             if (synth && !synth.disposed && synth instanceof Tone.PolySynth) synth.releaseAll();
+             if (synth && !synth.disposed && synth instanceof Tone.PolySynth) {
+                synth.releaseAll();
+             }
              node.stop();
           }
         }
@@ -371,3 +370,5 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
 AudioEngine.displayName = 'AudioEngine';
 export default AudioEngine;
+
+    
