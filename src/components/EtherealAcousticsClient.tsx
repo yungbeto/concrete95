@@ -27,8 +27,6 @@ type Layer = {
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
-  playbackPosition?: number;
-  duration?: number;
 };
 
 type WindowState = {
@@ -156,8 +154,6 @@ export default function EtherealAcousticsClient() {
         y: Math.random() * (window.innerHeight / 4)
       },
       zIndex: nextZIndex.current++,
-      playbackPosition: 0,
-      duration: 0,
       ...baseProperties,
     };
     setLayers((prevLayers) => [...prevLayers, newLayerStub]);
@@ -176,19 +172,29 @@ export default function EtherealAcousticsClient() {
     return false;
   };
 
-  const handleProgressUpdate = (id: string, currentTime: number, totalDuration: number) => {
-    setLayers(prev => prev.map(l =>
-        l.id === id
-        ? { ...l, playbackPosition: currentTime, duration: totalDuration }
-        : l
-    ));
+  const handleRemoveLayer = (id: string) => {
+    if (!audioEngineRef.current) return;
+    const layerToRemove = layers.find((l) => l.id === id);
+    if (!layerToRemove) return;
+
+    if (layerToRemove.node) {
+      if (layerToRemove.type === 'freesound') {
+        audioEngineRef.current.stopFreesoundLoop(layerToRemove.node as Tone.Player);
+      } else if (layerToRemove.type === 'melodic') {
+        audioEngineRef.current.stopMelodicLoop(layerToRemove.node as Tone.Sequence);
+      } else if (layerToRemove.type === 'synth') {
+        audioEngineRef.current.stopSynthLoop(layerToRemove.node as Tone.Sequence);
+      }
+    }
+
+    setLayers((prevLayers) => prevLayers.filter((layer) => layer.id !== id));
   };
 
   const addSynthLayer = () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('synth', { volume: -12 });
     
-    const newSynthLoop = audioEngineRef.current.startSynthLoop((time, duration) => handleProgressUpdate(id, time, duration));
+    const newSynthLoop = audioEngineRef.current.startSynthLoop();
     if (!newSynthLoop) {
       handleRemoveLayer(id);
       return;
@@ -225,7 +231,7 @@ export default function EtherealAcousticsClient() {
 
 
     const newPlayer =
-      await audioEngineRef.current.startFreesoundLoop(randomSoundUrl, (time, duration) => handleProgressUpdate(id, time, duration));
+      await audioEngineRef.current.startFreesoundLoop(randomSoundUrl);
     
     if (!newPlayer) {
       handleRemoveLayer(id);
@@ -245,7 +251,7 @@ export default function EtherealAcousticsClient() {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('melodic', { volume: -15 });
 
-    const newSequence = audioEngineRef.current.startMelodicLoop((time, duration) => handleProgressUpdate(id, time, duration));
+    const newSequence = audioEngineRef.current.startMelodicLoop();
     if (!newSequence) {
       handleRemoveLayer(id);
       return;
@@ -315,24 +321,6 @@ export default function EtherealAcousticsClient() {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [dragState, handleMouseMove, handleMouseUp]);
-
-  const handleRemoveLayer = (id: string) => {
-    if (!audioEngineRef.current) return;
-    const layerToRemove = layers.find((l) => l.id === id);
-    if (!layerToRemove) return;
-
-    if (layerToRemove.node) {
-      if (layerToRemove.type === 'freesound') {
-        audioEngineRef.current.stopFreesoundLoop(layerToRemove.node as Tone.Player);
-      } else if (layerToRemove.type === 'melodic') {
-        audioEngineRef.current.stopMelodicLoop(layerToRemove.node as Tone.Sequence);
-      } else if (layerToRemove.type === 'synth') {
-        audioEngineRef.current.stopSynthLoop(layerToRemove.node as Tone.Sequence);
-      }
-    }
-
-    setLayers((prevLayers) => prevLayers.filter((layer) => layer.id !== id));
-  };
 
   const handleRemoveAllLayers = () => {
     if (!audioEngineRef.current) return;
@@ -439,8 +427,6 @@ export default function EtherealAcousticsClient() {
               position={layer.position}
               zIndex={layer.zIndex}
               playbackRate={layer.playbackRate}
-              playbackPosition={layer.playbackPosition}
-              duration={layer.duration}
               onRemove={handleRemoveLayer}
               onVolumeChange={handleVolumeChange}
               onSendChange={handleSendChange}
@@ -509,5 +495,3 @@ export default function EtherealAcousticsClient() {
     </div>
   );
 }
-
-    

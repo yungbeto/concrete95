@@ -2,9 +2,8 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Play, StopCircle, X, Zap, Waves, Music } from 'lucide-react';
+import { Play, Square, X, Zap, Waves, Music } from 'lucide-react';
 import LayerMenuBar from './LayerMenuBar';
 
 interface LayerCardProps {
@@ -17,8 +16,6 @@ interface LayerCardProps {
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
-  playbackPosition?: number;
-  duration?: number;
   onRemove: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
   onSendChange: (id: string, send: number) => void;
@@ -35,34 +32,14 @@ const layerIcons = {
 };
 
 
-function SoundRecorderDisplay({ 
-    isLoading = false,
-    playbackPosition = 0,
-    duration = 0,
- }) {
-    const formatTime = (seconds: number) => {
-        return seconds.toFixed(2) + ' sec.';
-    }
-
-    const isInteractive = duration > 0 && !isLoading;
-    const sliderValue = isInteractive ? (playbackPosition / duration) * 100 : 0;
-
+function SoundRecorderDisplay() {
   return (
     <div className="flex flex-col gap-2 p-2" onMouseDown={(e) => e.stopPropagation()}>
       <div className="flex items-stretch justify-between gap-2 text-black text-xs">
-        <div className="w-24 border border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white p-4 text-center">
-          <p>Position:</p>
-          {isLoading ? <Skeleton className="h-4 w-12 mt-1 mx-auto" /> : <p>{formatTime(playbackPosition)}</p>}
-        </div>
         <div className="flex-grow h-auto bg-black border-2 border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white flex items-center justify-center p-1">
           <div className="w-full h-[2px] bg-green-500" />
         </div>
-        <div className="w-24 border border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white p-4 text-center">
-          <p>Length:</p>
-          {isLoading ? <Skeleton className="h-4 w-12 mt-1 mx-auto" /> : <p>{formatTime(duration)}</p>}
-        </div>
       </div>
-      <Slider value={[sliderValue]} max={100} step={1} disabled={!isInteractive} />
     </div>
   );
 }
@@ -77,8 +54,6 @@ export default function LayerCard({
   position,
   zIndex,
   playbackRate,
-  playbackPosition,
-  duration,
   onRemove,
   onVolumeChange,
   onSendChange,
@@ -139,26 +114,20 @@ export default function LayerCard({
 
 
       {/* Sound Recorder Display */}
-      <SoundRecorderDisplay 
-        isLoading={isLoading} 
-        playbackPosition={playbackPosition} 
-        duration={duration}
-      />
+      <SoundRecorderDisplay />
       
       {/* Separator */}
       <div className="h-[2px] w-full bg-silver border-t-neutral-500 border-b-white" />
 
       {/* Control Buttons */}
-       <div className="p-2 flex items-center justify-center space-x-2" onMouseDown={(e) => e.stopPropagation()}>
-         <Button variant="retro" size="icon" title="Play" onClick={() => onPlay(id)} disabled={isTransportDisabled}>
+       <div className="p-2 w-full flex items-center justify-center space-x-2" onMouseDown={(e) => e.stopPropagation()}>
+         <Button className="w-full" variant="retro" size="icon" title="Play" onClick={() => onPlay(id)} disabled={isTransportDisabled}>
            <Play className="text-black" />
          </Button>
-         <Button variant="retro" size="icon" title="Stop" onClick={() => onStop(id)} disabled={isTransportDisabled}>
-           <StopCircle className="text-black" />
+         <Button className="w-full" variant="retro" size="icon" title="Stop" onClick={() => onStop(id)} disabled={isTransportDisabled}>
+           <Square className="text-black" />
          </Button>
        </div>
     </div>
   );
 }
-
-    
