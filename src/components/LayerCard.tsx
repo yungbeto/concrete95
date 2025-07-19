@@ -4,7 +4,7 @@
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Play, StopCircle, SkipBack, SkipForward } from 'lucide-react';
+import { Play, StopCircle, SkipBack, SkipForward, X, Zap, Waves, Music } from 'lucide-react';
 import LayerMenuBar from './LayerMenuBar';
 
 interface LayerCardProps {
@@ -26,6 +26,13 @@ interface LayerCardProps {
   onStop: (id: string) => void;
   onSeek: (id: string, direction: 'forward' | 'backward') => void;
 }
+
+const layerIcons = {
+  synth: <Zap className="w-4 h-4" />,
+  freesound: <Waves className="w-4 h-4" />,
+  melodic: <Music className="w-4 h-4" />,
+};
+
 
 function SoundRecorderDisplay({ isLoading = false }: { isLoading?: boolean }) {
   return (
@@ -79,19 +86,44 @@ export default function LayerCard({
     <div 
       className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute select-none"
       style={cardStyle}
-      onMouseDown={onMouseDown}
     >
-      <LayerMenuBar
-        title={isLoading ? 'Loading...' : title}
-        type={type}
-        volume={volume}
-        send={send}
-        playbackRate={playbackRate}
-        onVolumeChange={(value) => onVolumeChange(id, value)}
-        onSendChange={(value) => onSendChange(id, value)}
-        onPlaybackRateChange={(value) => onPlaybackRateChange(id, value)}
-        onClose={() => onRemove(id)}
-      />
+        {/* Title Bar */}
+        <div 
+            className="bg-blue-800 text-white flex items-center justify-between p-1 cursor-move"
+            onMouseDown={onMouseDown}
+        >
+            <div className="flex items-center gap-1">
+                {layerIcons[type]}
+                <span className="font-bold text-sm">{isLoading ? 'Loading...' : title}</span>
+            </div>
+            <Button
+              variant="retro"
+              size="icon"
+              className="w-5 h-5"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove(id);
+              }}
+              aria-label="Close"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <X className="w-3 h-3 text-black" />
+            </Button>
+        </div>
+
+        {/* Menu Bar */}
+        <div onMouseDown={(e) => e.stopPropagation()}>
+            <LayerMenuBar
+                type={type}
+                volume={volume}
+                send={send}
+                playbackRate={playbackRate}
+                onVolumeChange={(value) => onVolumeChange(id, value)}
+                onSendChange={(value) => onSendChange(id, value)}
+                onPlaybackRateChange={(value) => onPlaybackRateChange(id, value)}
+            />
+        </div>
+
 
       {/* Sound Recorder Display */}
       <SoundRecorderDisplay isLoading={isLoading} />

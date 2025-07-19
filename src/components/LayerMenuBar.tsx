@@ -9,12 +9,9 @@ import {
   MenubarSeparator,
   MenubarTrigger,
 } from "@/components/ui/menubar";
-import { Button } from './ui/button';
 import { Slider } from './ui/slider';
-import { X, Zap, Waves, Music } from 'lucide-react';
 
 interface LayerMenuBarProps {
-  title: string;
   type: 'synth' | 'freesound' | 'melodic';
   volume: number;
   send: number;
@@ -22,17 +19,9 @@ interface LayerMenuBarProps {
   onVolumeChange: (volume: number) => void;
   onSendChange: (send: number) => void;
   onPlaybackRateChange: (rate: number) => void;
-  onClose: () => void;
 }
 
-const layerIcons = {
-  synth: <Zap className="w-4 h-4" />,
-  freesound: <Waves className="w-4 h-4" />,
-  melodic: <Music className="w-4 h-4" />,
-};
-
 export default function LayerMenuBar({
-  title,
   type,
   volume,
   send,
@@ -40,7 +29,6 @@ export default function LayerMenuBar({
   onVolumeChange,
   onSendChange,
   onPlaybackRateChange,
-  onClose,
 }: LayerMenuBarProps) {
 
   const handleMenuClick = (e: React.MouseEvent) => {
@@ -48,12 +36,10 @@ export default function LayerMenuBar({
   };
   
   return (
-    <div className="bg-blue-800 text-white flex items-center justify-between p-1 cursor-move">
-      <div className="flex items-center gap-1">
-        {layerIcons[type]}
+    <div className="bg-silver text-black p-0 h-auto">
         <Menubar className="bg-transparent border-none p-0 h-auto" onMouseDown={handleMenuClick}>
           <MenubarMenu>
-            <MenubarTrigger className="text-white px-2 py-0 text-sm h-auto focus:bg-blue-900 data-[state=open]:bg-blue-900">Effects</MenubarTrigger>
+            <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto focus:bg-blue-800 focus:text-white data-[state=open]:bg-blue-800 data-[state=open]:text-white">Effects</MenubarTrigger>
             <MenubarContent>
               <MenubarItem onSelect={(e) => e.preventDefault()}>
                 <div className="w-48 text-black">
@@ -72,7 +58,7 @@ export default function LayerMenuBar({
             </MenubarContent>
           </MenubarMenu>
           <MenubarMenu>
-             <MenubarTrigger className="text-white px-2 py-0 text-sm h-auto focus:bg-blue-900 data-[state=open]:bg-blue-900">Options</MenubarTrigger>
+             <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto focus:bg-blue-800 focus:text-white data-[state=open]:bg-blue-800 data-[state=open]:text-white">Options</MenubarTrigger>
             <MenubarContent>
               <MenubarItem onSelect={(e) => e.preventDefault()}>
                 <div className="w-48 text-black">
@@ -110,24 +96,6 @@ export default function LayerMenuBar({
             </MenubarContent>
           </MenubarMenu>
         </Menubar>
-
-      </div>
-       <div className="flex items-center gap-2">
-          <span className="font-bold text-sm">{title}</span>
-            <Button
-              variant="retro"
-              size="icon"
-              className="w-5 h-5"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClose();
-              }}
-              aria-label="Close"
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <X className="w-3 h-3 text-black" />
-            </Button>
-       </div>
     </div>
   );
 }
