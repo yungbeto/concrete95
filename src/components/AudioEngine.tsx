@@ -303,6 +303,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
       if (synth && !synth.disposed) {
+        if (synth instanceof Tone.PolySynth) {
+          synth.releaseAll();
+        }
         synth.dispose();
       }
       if (sequence && !sequence.disposed) {
