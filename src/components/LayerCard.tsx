@@ -2,7 +2,6 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Play, Square, X, Zap, Waves, Music } from 'lucide-react';
 import LayerMenuBar from './LayerMenuBar';
 import { type AudioEngineHandle } from './AudioEngine';
@@ -190,10 +189,10 @@ export default function LayerCard({
       {/* Control Buttons */}
        <div className="p-2 w-full flex items-center justify-center space-x-2" onMouseDown={(e) => e.stopPropagation()}>
          <Button className="w-full" variant="retro" size="icon" title="Play" onClick={() => onPlay(id)} disabled={isTransportDisabled}>
-           <Play className="text-black" />
+           <Play className="text-black" fill="black" />
          </Button>
          <Button className="w-full" variant="retro" size="icon" title="Stop" onClick={() => onStop(id)} disabled={isTransportDisabled}>
-           <Square className="text-black" />
+           <Square className="text-black" fill="black" />
          </Button>
        </div>
     </div>
