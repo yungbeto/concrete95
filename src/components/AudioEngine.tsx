@@ -14,6 +14,7 @@ export type AudioEngineHandle = {
   setVolume: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, volume: number) => void;
   setSendAmount: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, amount: number) => void;
   playNode: (node: Tone.Player | Tone.Sequence) => void;
+  disposeAll: () => void;
 };
 
 const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
@@ -50,6 +51,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
   }, []);
 
   useImperativeHandle(ref, () => ({
+    disposeAll: () => {
+        Tone.Transport.stop();
+        Tone.Transport.cancel();
+    },
     playNode: (node) => {
       if (node instanceof Tone.Player) {
         node.start();
@@ -144,11 +149,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       }
       if (synth && !synth.disposed) {
         synth.releaseAll();
-        setTimeout(() => {
-          if (!synth.disposed) {
-            synth.dispose();
-          }
-        }, 3000);
+        // Removed timeout to ensure faster disposal
+        synth.dispose();
       }
       sequence.stop();
       sequence.dispose();
@@ -299,11 +301,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       }
       if (synth && !synth.disposed) {
         synth.triggerRelease();
-         setTimeout(() => {
-          if (!synth.disposed) {
-            synth.dispose();
-          }
-        }, 1000);
+        // Removed timeout to ensure faster disposal
+        synth.dispose();
       }
       sequence.stop();
       sequence.dispose();

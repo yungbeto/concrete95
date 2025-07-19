@@ -62,6 +62,27 @@ export default function EtherealAcousticsClient() {
   const [dragState, setDragState] = useState<DragState>(null);
   const nextZIndex = useRef(1);
 
+  // Cleanup effect to dispose of all audio nodes on component unmount
+  useEffect(() => {
+    return () => {
+      if (audioEngineRef.current) {
+        layers.forEach(layer => {
+            if (layer.node) {
+              if (layer.type === 'freesound') {
+                audioEngineRef.current?.stopFreesoundLoop(layer.node as Tone.Player);
+              } else if (layer.type === 'melodic') {
+                audioEngineRef.current?.stopMelodicLoop(layer.node as Tone.Sequence);
+              } else if (layer.type === 'synth') {
+                audioEngineRef.current?.stopSynthLoop(layer.node as Tone.Sequence);
+              }
+            }
+        });
+        audioEngineRef.current.disposeAll();
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layers]); // Dependency on layers ensures we have the latest list
+
   const bringToFront = (id: string) => {
     setLayers(prevLayers => {
       const maxZIndex = Math.max(...prevLayers.map(l => l.zIndex), 0);
