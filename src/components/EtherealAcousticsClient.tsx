@@ -3,11 +3,7 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import * as Tone from 'tone';
-import {
-  uniqueNamesGenerator,
-  adjectives,
-  nouns,
-} from 'unique-names-generator';
+import sillyname from 'sillyname';
 import AudioEngine, {
   type AudioEngineHandle,
 } from '@/components/AudioEngine';
@@ -41,11 +37,8 @@ type DragState = {
 const MAX_LAYERS = 8;
 
 const generateRandomName = () => {
-  return uniqueNamesGenerator({
-    dictionaries: [adjectives, nouns],
-    separator: ' ',
-    style: 'capital',
-  });
+    const name = sillyname();
+    return name.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 };
 
 function DigitalClock() {
