@@ -58,7 +58,7 @@ export default function SoundscapeController({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-64 p-1 mb-2 ml-1 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 !rounded-none" side="top" align="start">
-          <div className="grid gap-1">
+          <div className="grid gap-1 text-black">
               <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white" onClick={handleAddFreesoundLayer}>
                 <Waves className="mr-2 h-4 w-4" />
                 Freesound Loop
