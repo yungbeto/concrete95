@@ -3,6 +3,11 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import * as Tone from 'tone';
+import {
+  uniqueNamesGenerator,
+  adjectives,
+  nouns,
+} from 'unique-names-generator';
 import AudioEngine, {
   type AudioEngineHandle,
 } from '@/components/AudioEngine';
@@ -35,13 +40,12 @@ type DragState = {
 
 const MAX_LAYERS = 8;
 
-const adjectives = ['Wandering', 'Cosmic', 'Gentle', 'Fading', 'Shimmering', 'Echoing', 'Distant', 'Lucid', 'Dreamy', 'Ethereal'];
-const nouns = ['Pad', 'Drone', 'Melody', 'Echo', 'Texture', 'Chord', 'Arp', 'Fragment', 'Wash', 'Wave'];
-
 const generateRandomName = () => {
-  const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const noun = nouns[Math.floor(Math.random() * nouns.length)];
-  return `${adjective} ${noun}`;
+  return uniqueNamesGenerator({
+    dictionaries: [adjectives, nouns],
+    separator: ' ',
+    style: 'capital',
+  });
 };
 
 function DigitalClock() {
