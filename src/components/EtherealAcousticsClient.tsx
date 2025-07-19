@@ -128,7 +128,7 @@ export default function EtherealAcousticsClient() {
       />
       <AudioEngine ref={audioEngineRef} />
       <header className="absolute top-0 left-0 p-4 md:p-8 z-10">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-4xl">
+        <h1 className="text-l font-bold tracking-tight text-foreground sm:text-4xl">
           Ethereal Acoustics
         </h1>
         <p className="mt-2 text-lg leading-8 text-muted-foreground">
