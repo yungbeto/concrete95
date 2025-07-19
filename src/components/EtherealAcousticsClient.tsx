@@ -64,9 +64,10 @@ export default function EtherealAcousticsClient() {
 
   // Cleanup effect to dispose of all audio nodes on component unmount
   useEffect(() => {
+    const currentLayers = layers;
     return () => {
       if (audioEngineRef.current) {
-        layers.forEach(layer => {
+        currentLayers.forEach(layer => {
             if (layer.node) {
               if (layer.type === 'freesound') {
                 audioEngineRef.current?.stopFreesoundLoop(layer.node as Tone.Player);
@@ -81,7 +82,7 @@ export default function EtherealAcousticsClient() {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layers]); // Dependency on layers ensures we have the latest list
+  }, []); // An empty dependency array ensures this runs only on unmount.
 
   const bringToFront = (id: string) => {
     setLayers(prevLayers => {
