@@ -30,9 +30,9 @@ interface LayerCardProps {
 }
 
 const layerIcons = {
-  synth: <Zap className="w-4 h-4 mr-2" />,
-  freesound: <Waves className="w-4 h-4 mr-2" />,
-  melodic: <Music className="w-4 h-4 mr-2" />,
+  synth: <Zap className="w-4 h-4" />,
+  freesound: <Waves className="w-4 h-4" />,
+  melodic: <Music className="w-4 h-4" />,
 };
 
 export default function LayerCard({
@@ -46,58 +46,51 @@ export default function LayerCard({
   onVolumeChange,
   onSendChange,
 }: LayerCardProps) {
-
   if (status === 'loading') {
     return (
-        <Card className="w-64 bg-card/80 backdrop-blur-sm shadow-lg">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <div className="flex items-center">
-                    {layerIcons[type]}
-                    <Skeleton className="h-5 w-24" />
-                </div>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-6 h-6"
-                    onClick={() => onRemove(id)}
-                >
-                    <X className="w-4 h-4" />
-                </Button>
-            </CardHeader>
-            <CardContent className="flex items-center space-x-4">
-                <Skeleton className="h-10 w-10 rounded-md" />
-                <Skeleton className="h-10 w-10 rounded-md" />
-            </CardContent>
-        </Card>
-    )
+      <div className="w-64 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-1 font-sans">
+        <div className="bg-neutral-500 h-[26px] flex items-center px-1">
+           <Skeleton className="h-5 w-full bg-neutral-400" />
+        </div>
+        <div className="p-4 flex items-center justify-center space-x-4">
+          <Skeleton className="h-10 w-10 bg-neutral-400" />
+          <Skeleton className="h-10 w-10 bg-neutral-400" />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <Card className="w-64 bg-card/80 backdrop-blur-sm shadow-lg">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium flex items-center">
-            {layerIcons[type]}
-            {title}
-        </CardTitle>
+    <div className="w-64 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-1 font-sans">
+      {/* Title Bar */}
+      <div className="bg-blue-800 text-white flex items-center justify-between p-1">
+        <div className="flex items-center gap-2">
+          {layerIcons[type]}
+          <span className="font-bold text-sm select-none">{title}</span>
+        </div>
         <Button
-          variant="ghost"
+          variant="retro"
           size="icon"
-          className="w-6 h-6"
+          className="w-5 h-5"
           onClick={() => onRemove(id)}
-          disabled={status === 'loading'}
+          aria-label="Close"
         >
-          <X className="w-4 h-4" />
+          <X className="w-3 h-3 text-black" />
         </Button>
-      </CardHeader>
-      <CardContent className="flex items-center space-x-4">
+      </div>
+
+      {/* Content */}
+      <div className="p-4 flex items-center justify-center space-x-4">
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="icon" title="Volume" disabled={status === 'loading'}>
+            <Button variant="retro" size="icon" title="Volume">
               <Volume2 />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-48">
-             <p className="text-xs text-muted-foreground mb-2">Volume: {volume > -40 ? `${volume.toFixed(0)} dB` : 'Muted'}</p>
+            <p className="text-xs text-muted-foreground mb-2">
+              Volume: {volume > -40 ? `${volume.toFixed(0)} dB` : 'Muted'}
+            </p>
             <Slider
               defaultValue={[volume]}
               max={10}
@@ -107,24 +100,26 @@ export default function LayerCard({
             />
           </PopoverContent>
         </Popover>
-         <Popover>
+        <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="icon" title="FX Send" disabled={status === 'loading'}>
+            <Button variant="retro" size="icon" title="FX Send">
               <Send />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-48">
-             <p className="text-xs text-muted-foreground mb-2">Send: {send > -40 ? `${send.toFixed(0)} dB` : 'Muted'}</p>
+            <p className="text-xs text-muted-foreground mb-2">
+              Send: {send > -40 ? `${send.toFixed(0)} dB` : 'Muted'}
+            </p>
             <Slider
               defaultValue={[send]}
               max={10}
               min={-40}
               step={1}
-              onValueeChange={(value) => onSendChange(id, value[0])}
+              onValueChange={(value) => onSendChange(id, value[0])}
             />
           </PopoverContent>
         </Popover>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
