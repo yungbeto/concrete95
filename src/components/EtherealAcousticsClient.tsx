@@ -5,10 +5,9 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import * as Tone from 'tone';
 import {
   uniqueNamesGenerator,
+  adjectives,
+  nouns,
 } from 'unique-names-generator';
-import { adjectives } from 'unique-names-generator/lib/dictionaries/adjectives';
-import { nouns } from 'unique-names-generator/lib/dictionaries/nouns';
-
 import AudioEngine, {
   type AudioEngineHandle,
 } from '@/components/AudioEngine';
@@ -397,5 +396,3 @@ export default function EtherealAcousticsClient() {
     </div>
   );
 }
-
-    
