@@ -11,7 +11,7 @@ export type AudioEngineHandle = {
   stopFreesoundLoop: (player: Tone.Player) => void;
   startMelodicLoop: () => Tone.Sequence | null;
   stopMelodicLoop: (sequence: Tone.Sequence) => void;
-  setVolume: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth, volume: number) => void;
+  setVolume: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, volume: number) => void;
 };
 
 const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
@@ -76,8 +76,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       }).connect(delay);
       
       // Correctly connect the LFO to the detune of all voices
-      synth.set({ detune: 0 }); // Initialize detune
-      lfo.connect(synth.detune);
+      synth.voices.forEach(voice => {
+        lfo.connect(voice.detune);
+      });
 
 
       const scale = ['C3', 'E3', 'G3', 'A3', 'C4', 'E4', 'G4', 'A4'];
@@ -265,7 +266,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
              synth.volume.value = volume;
           }
         } else {
-            node.volume.value = volume;
+            (node as Tone.Player | Tone.PolySynth | Tone.PluckSynth).volume.value = volume;
         }
       }
     },
