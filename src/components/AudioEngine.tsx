@@ -58,18 +58,18 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         feedback: Math.random() * 0.5 + 0.2,
         wet: Math.random() * 0.4 + 0.2,
       }).chain(reverb, masterLimiter.current);
+      
+      const filter = new Tone.Filter(Math.random() * 1500 + 500, 'lowpass').connect(delay);
 
       const lfo = new Tone.LFO({
         frequency: Math.random() * 0.1 + 0.05, // very slow
-        min: -15,
-        max: 15,
-      }).start();
+        min: 200,
+        max: 2500,
+      }).connect(filter.frequency).start();
 
       const synth = new Tone.PolySynth(Tone.Synth, {
         oscillator: {
           type: randomOscillatorType,
-          count: 3,
-          spread: Math.random() * 40 + 20,
         },
         envelope: {
           attack: Math.random() * 5 + 3,
@@ -78,11 +78,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
           release: Math.random() * 6 + 5,
         },
         volume: -12,
-      }).connect(delay);
+      }).connect(filter);
       
-      // Connect the LFO to the detune property of the PolySynth
-      lfo.connect(synth.detune);
-
       const scale = ['C3', 'E3', 'G3', 'A3', 'C4', 'E4', 'G4', 'A4'];
       const notesAndChords = [
         scale[Math.floor(Math.random() * scale.length)],
@@ -100,7 +97,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       const sequence = new Tone.Sequence(
         (time, note) => {
-          synth.triggerAttackRelease(note, '4m', time);
+           if (note) {
+            synth.triggerAttackRelease(note, '4m', time);
+          }
         },
         sequenceEvents,
         '2m'
