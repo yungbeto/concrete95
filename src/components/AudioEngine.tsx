@@ -21,26 +21,25 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
   const masterLimiter = useRef<Tone.Limiter | null>(null);
   const fxBus = useRef<{ delay: Tone.FeedbackDelay, reverb: Tone.Reverb } | null>(null);
 
+  // Initialize the audio context and main bus immediately
+  if (typeof window !== 'undefined' && !masterLimiter.current) {
+    masterLimiter.current = new Tone.Limiter(-6).toDestination();
+    const delay = new Tone.FeedbackDelay({
+      delayTime: '4n',
+      feedback: 0.6,
+      wet: 0.8,
+    });
+    const reverb = new Tone.Reverb({
+      decay: 10,
+      preDelay: 0.05,
+      wet: 0.9,
+    });
+    delay.chain(reverb, masterLimiter.current);
+    fxBus.current = { delay, reverb };
+  }
+
   useEffect(() => {
-    // Initialize the master limiter and FX bus only on the client side
-    if (typeof window !== 'undefined' && !masterLimiter.current) {
-        masterLimiter.current = new Tone.Limiter(-6).toDestination();
-    }
-    if (!fxBus.current) {
-        const delay = new Tone.FeedbackDelay({
-            delayTime: '4n',
-            feedback: 0.6,
-            wet: 0.8,
-        });
-        const reverb = new Tone.Reverb({
-            decay: 10,
-            preDelay: 0.05,
-            wet: 0.9,
-        });
-        delay.chain(reverb, masterLimiter.current);
-        fxBus.current = { delay, reverb };
-    }
-    
+    // This effect now only handles disposal on unmount
     return () => {
       masterLimiter.current?.dispose();
       masterLimiter.current = null;
@@ -149,7 +148,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       }
       if (synth && !synth.disposed) {
         synth.releaseAll();
-        // Removed timeout to ensure faster disposal
         synth.dispose();
       }
       if (Tone.Transport.state === 'started') {
@@ -305,7 +303,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       }
       if (synth && !synth.disposed) {
         synth.triggerRelease();
-        // Removed timeout to ensure faster disposal
         synth.dispose();
       }
       if (Tone.Transport.state === 'started') {
