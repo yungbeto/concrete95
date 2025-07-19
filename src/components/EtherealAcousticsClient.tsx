@@ -16,8 +16,9 @@ type Layer = {
   title: string;
   volume: number;
   send: number;
-  node: Tone.Player | Tone.Sequence;
+  node: Tone.Player | Tone.Sequence | null;
   type: 'freesound' | 'synth' | 'melodic';
+  status: 'loading' | 'loaded';
 };
 
 export default function EtherealAcousticsClient() {
@@ -28,83 +29,111 @@ export default function EtherealAcousticsClient() {
   const addSynthLayer = () => {
     if (!audioEngineRef.current) return;
 
-    const newSynthLoop = audioEngineRef.current.startSynthLoop();
-    if (!newSynthLoop) return;
-
     const id = `layer_${Date.now()}_${Math.random()}`;
-    const newLayer: Layer = {
+    const newLayerStub: Layer = {
       id,
       title: 'Synth Pad',
       volume: -12,
-      send: -40, // Initial send is muted
-      node: newSynthLoop,
+      send: -40,
+      node: null,
       type: 'synth',
+      status: 'loading',
     };
-    setLayers((prevLayers) => [...prevLayers, newLayer]);
+    setLayers((prevLayers) => [...prevLayers, newLayerStub]);
+
+    const newSynthLoop = audioEngineRef.current.startSynthLoop();
+    if (!newSynthLoop) {
+      handleRemoveLayer(id);
+      return;
+    }
+    
+    audioEngineRef.current.playNode(newSynthLoop);
+
+    setLayers((prevLayers) =>
+      prevLayers.map((l) =>
+        l.id === id ? { ...l, node: newSynthLoop, status: 'loaded' } : l
+      )
+    );
   };
 
   const addFreesoundLayer = async () => {
     if (!audioEngineRef.current) return;
 
+    const id = `layer_${Date.now()}_${Math.random()}`;
+    const newLayerStub: Layer = {
+      id,
+      title: 'Freesound Loop',
+      volume: -12,
+      send: -40,
+      node: null,
+      type: 'freesound',
+      status: 'loading',
+    };
+    setLayers((prevLayers) => [...prevLayers, newLayerStub]);
+    
     const queries = ['ambient', 'drone', 'texture', 'pad', 'atmosphere'];
     const randomQuery = queries[Math.floor(Math.random() * queries.length)];
 
     const soundUrls = await searchFreesound(randomQuery);
 
-    if ('error' in soundUrls) {
+    if ('error' in soundUrls || soundUrls.length === 0) {
       toast({
         variant: 'destructive',
         title: 'Freesound Error',
-        description: soundUrls.error,
+        description: 'error' in soundUrls ? soundUrls.error : `No sounds found for query: "${randomQuery}"`,
       });
+      handleRemoveLayer(id);
       return;
     }
-
-    if (soundUrls.length === 0) {
-      toast({
-        variant: 'destructive',
-        title: 'Freesound Error',
-        description: `No sounds found for query: "${randomQuery}"`,
-      });
-      return;
-    }
-
+    
     const randomSoundUrl =
       soundUrls[Math.floor(Math.random() * soundUrls.length)];
 
     const newPlayer =
       await audioEngineRef.current.startFreesoundLoop(randomSoundUrl);
-    if (!newPlayer) return;
+    
+    if (!newPlayer) {
+      handleRemoveLayer(id);
+      return;
+    }
 
-    const id = `layer_${Date.now()}_${Math.random()}`;
-    const newLayer: Layer = {
-      id,
-      title: 'Freesound Loop',
-      volume: -12,
-      send: -40, // Initial send is muted
-      node: newPlayer,
-      type: 'freesound',
-    };
-
-    setLayers((prevLayers) => [...prevLayers, newLayer]);
+    audioEngineRef.current.playNode(newPlayer);
+    
+    setLayers((prevLayers) =>
+      prevLayers.map((l) =>
+        l.id === id ? { ...l, node: newPlayer, status: 'loaded' } : l
+      )
+    );
   };
 
     const addMelodicLayer = () => {
     if (!audioEngineRef.current) return;
-
-    const newSequence = audioEngineRef.current.startMelodicLoop();
-    if (!newSequence) return;
-
+    
     const id = `layer_${Date.now()}_${Math.random()}`;
-    const newLayer: Layer = {
+    const newLayerStub: Layer = {
       id,
       title: 'Melodic Loop',
       volume: -15,
-      send: -40, // Initial send is muted
-      node: newSequence,
+      send: -40,
+      node: null,
       type: 'melodic',
+      status: 'loading',
     };
-    setLayers((prevLayers) => [...prevLayers, newLayer]);
+    setLayers((prevLayers) => [...prevLayers, newLayerStub]);
+
+    const newSequence = audioEngineRef.current.startMelodicLoop();
+    if (!newSequence) {
+      handleRemoveLayer(id);
+      return;
+    }
+
+    audioEngineRef.current.playNode(newSequence);
+
+    setLayers((prevLayers) =>
+      prevLayers.map((l) =>
+        l.id === id ? { ...l, node: newSequence, status: 'loaded' } : l
+      )
+    );
   };
 
   const handleRemoveLayer = (id: string) => {
@@ -112,12 +141,14 @@ export default function EtherealAcousticsClient() {
     const layerToRemove = layers.find((l) => l.id === id);
     if (!layerToRemove) return;
 
-    if (layerToRemove.type === 'freesound') {
-      audioEngineRef.current.stopFreesoundLoop(layerToRemove.node as Tone.Player);
-    } else if (layerToRemove.type === 'melodic') {
-      audioEngineRef.current.stopMelodicLoop(layerToRemove.node as Tone.Sequence);
-    } else if (layerToRemove.type === 'synth') {
-      audioEngineRef.current.stopSynthLoop(layerToRemove.node as Tone.Sequence);
+    if (layerToRemove.node) {
+      if (layerToRemove.type === 'freesound') {
+        audioEngineRef.current.stopFreesoundLoop(layerToRemove.node as Tone.Player);
+      } else if (layerToRemove.type === 'melodic') {
+        audioEngineRef.current.stopMelodicLoop(layerToRemove.node as Tone.Sequence);
+      } else if (layerToRemove.type === 'synth') {
+        audioEngineRef.current.stopSynthLoop(layerToRemove.node as Tone.Sequence);
+      }
     }
 
     setLayers((prevLayers) => prevLayers.filter((layer) => layer.id !== id));
@@ -126,7 +157,7 @@ export default function EtherealAcousticsClient() {
   const handleVolumeChange = (id: string, volume: number) => {
     if (!audioEngineRef.current) return;
     const layer = layers.find((l) => l.id === id);
-    if (!layer) return;
+    if (!layer || !layer.node) return;
 
     audioEngineRef.current.setVolume(layer.node, volume);
 
@@ -138,7 +169,7 @@ export default function EtherealAcousticsClient() {
   const handleSendChange = (id: string, send: number) => {
     if (!audioEngineRef.current) return;
     const layer = layers.find((l) => l.id === id);
-    if (!layer) return;
+    if (!layer || !layer.node) return;
 
     audioEngineRef.current.setSendAmount(layer.node, send);
 
@@ -169,6 +200,7 @@ export default function EtherealAcousticsClient() {
               title={layer.title}
               volume={layer.volume}
               send={layer.send}
+              status={layer.status}
               onRemove={handleRemoveLayer}
               onVolumeChange={handleVolumeChange}
               onSendChange={handleSendChange}

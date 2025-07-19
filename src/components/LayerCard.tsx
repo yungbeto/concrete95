@@ -15,12 +15,14 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Volume2, X, Send } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface LayerCardProps {
   id: string;
   title: string;
   volume: number;
   send: number;
+  status: 'loading' | 'loaded';
   onRemove: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
   onSendChange: (id: string, send: number) => void;
@@ -31,10 +33,34 @@ export default function LayerCard({
   title,
   volume,
   send,
+  status,
   onRemove,
   onVolumeChange,
   onSendChange,
 }: LayerCardProps) {
+
+  if (status === 'loading') {
+    return (
+        <Card className="w-64 bg-card/80 backdrop-blur-sm shadow-lg">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <Skeleton className="h-5 w-24" />
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-6 h-6"
+                    onClick={() => onRemove(id)}
+                >
+                    <X className="w-4 h-4" />
+                </Button>
+            </CardHeader>
+            <CardContent className="flex items-center space-x-4">
+                <Skeleton className="h-10 w-10 rounded-md" />
+                <Skeleton className="h-10 w-10 rounded-md" />
+            </CardContent>
+        </Card>
+    )
+  }
+
   return (
     <Card className="w-64 bg-card/80 backdrop-blur-sm shadow-lg">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -44,6 +70,7 @@ export default function LayerCard({
           size="icon"
           className="w-6 h-6"
           onClick={() => onRemove(id)}
+          disabled={status === 'loading'}
         >
           <X className="w-4 h-4" />
         </Button>
@@ -51,7 +78,7 @@ export default function LayerCard({
       <CardContent className="flex items-center space-x-4">
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="icon" title="Volume">
+            <Button variant="outline" size="icon" title="Volume" disabled={status === 'loading'}>
               <Volume2 />
             </Button>
           </PopoverTrigger>
@@ -68,7 +95,7 @@ export default function LayerCard({
         </Popover>
          <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="icon" title="FX Send">
+            <Button variant="outline" size="icon" title="FX Send" disabled={status === 'loading'}>
               <Send />
             </Button>
           </PopoverTrigger>

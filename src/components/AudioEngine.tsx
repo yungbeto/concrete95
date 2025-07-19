@@ -13,6 +13,7 @@ export type AudioEngineHandle = {
   stopMelodicLoop: (sequence: Tone.Sequence) => void;
   setVolume: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, volume: number) => void;
   setSendAmount: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, amount: number) => void;
+  playNode: (node: Tone.Player | Tone.Sequence) => void;
 };
 
 const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
@@ -21,7 +22,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
   useEffect(() => {
     // Initialize the master limiter and FX bus only on the client side
-    if (!masterLimiter.current) {
+    if (typeof window !== 'undefined' && !masterLimiter.current) {
         masterLimiter.current = new Tone.Limiter(-6).toDestination();
     }
     if (!fxBus.current) {
@@ -49,6 +50,14 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
   }, []);
 
   useImperativeHandle(ref, () => ({
+    playNode: (node) => {
+      if (node instanceof Tone.Player) {
+        node.start();
+      } else if (node instanceof Tone.Sequence) {
+        node.start(0);
+        Tone.Transport.start();
+      }
+    },
     startSynthLoop: () => {
       if (!masterLimiter.current || !fxBus.current) return null;
       Tone.start();
@@ -64,22 +73,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const randomOscillatorType =
         oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)];
 
-      const reverb = new Tone.Reverb({
-        decay: Math.random() * 6 + 4,
-        wet: Math.random() * 0.5 + 0.4,
-        preDelay: Math.random() * 0.3,
-      });
-      
-      const delay = new Tone.FeedbackDelay({
-        delayTime: ['2n', '1m'][Math.floor(Math.random() * 2)],
-        feedback: Math.random() * 0.5 + 0.2,
-        wet: Math.random() * 0.4 + 0.2,
-      }).chain(reverb, masterLimiter.current);
-      
-      const filter = new Tone.Filter(Math.random() * 1500 + 500, 'lowpass').connect(delay);
+      const filter = new Tone.Filter(Math.random() * 1500 + 500, 'lowpass').connect(masterLimiter.current);
 
-      const lfo = new Tone.LFO({
-        frequency: Math.random() * 0.1 + 0.05, // very slow
+      const lfoFilter = new Tone.LFO({
+        frequency: Math.random() * 0.1 + 0.05,
         min: 200,
         max: 2500,
       }).connect(filter.frequency).start();
@@ -127,11 +124,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       );
       
       sequence.loop = true;
-      sequence.start(0);
-      Tone.Transport.start();
 
       (sequence as any).synth = synth;
-      (sequence as any).lfo = lfo;
+      (sequence as any).lfo = lfoFilter;
       (sequence as any).sendGain = sendGain;
       
       return sequence;
@@ -201,8 +196,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         player.loopStart = startTime;
         player.loopEnd = startTime + loopDuration;
       }
-
-      player.start();
+      
       (player as any).lfo = lfo;
       (player as any).sendGain = sendGain;
 
@@ -285,9 +279,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       );
 
       sequence.loop = true;
-      sequence.start(0);
-      Tone.Transport.start();
-
+      
       (sequence as any).synth = synth;
       (sequence as any).lfo = lfo;
       (sequence as any).sendGain = sendGain;
