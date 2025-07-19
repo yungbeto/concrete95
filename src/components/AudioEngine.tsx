@@ -152,7 +152,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         // Removed timeout to ensure faster disposal
         synth.dispose();
       }
-      sequence.stop();
+      if (Tone.Transport.state === 'started') {
+        sequence.stop();
+      }
       sequence.dispose();
     },
     startFreesoundLoop: async (url) => {
@@ -214,7 +216,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (sendGain && !sendGain.disposed) {
         sendGain.dispose();
       }
-      player.stop();
+      if (Tone.Transport.state === 'started') {
+        player.stop();
+      }
       player.dispose();
     },
     startMelodicLoop: () => {
@@ -304,7 +308,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         // Removed timeout to ensure faster disposal
         synth.dispose();
       }
-      sequence.stop();
+      if (Tone.Transport.state === 'started') {
+        sequence.stop();
+      }
       sequence.dispose();
     },
     setVolume: (node, volume) => {
