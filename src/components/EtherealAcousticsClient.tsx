@@ -13,6 +13,8 @@ import { useToast } from '@/hooks/use-toast';
 import LayerCard from '@/components/LayerCard';
 import { Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import DesktopIcon from './DesktopIcon';
+import InfoWindow from './InfoWindow';
 
 type Layer = {
   id: string;
@@ -28,8 +30,18 @@ type Layer = {
   progress?: number;
 };
 
+type WindowState = {
+  id: string;
+  title: string;
+  content: React.ReactNode;
+  isOpen: boolean;
+  position: { x: number; y: number };
+  zIndex: number;
+};
+
 type DragState = {
-  layerId: string;
+  id: string;
+  type: 'layer' | 'window';
   offsetX: number;
   offsetY: number;
 } | null;
@@ -67,6 +79,30 @@ export default function EtherealAcousticsClient() {
   const nextZIndex = useRef(1);
   const [isAlertDismissed, setIsAlertDismissed] = useState(false);
 
+  const [windows, setWindows] = useState<WindowState[]>([
+    {
+      id: 'about',
+      title: 'About Ethereal Acoustics',
+      content: (
+        <div className="text-black space-y-2 text-sm">
+          <p>
+            Welcome to Ethereal Acoustics, your personal AI-driven soundscape
+            generator.
+          </p>
+          <p>
+            Create rich, evolving audio environments by layering synth pads,
+            melodic loops, and unique sounds from Freesound.org. Drag and drop
+            layers, tweak their properties, and let the AI surprise you.
+          </p>
+          <p>Built with Next.js, Tone.js, and Genkit.</p>
+        </div>
+      ),
+      isOpen: false,
+      position: { x: 250, y: 150 },
+      zIndex: 100, // Ensure windows can appear above layers
+    },
+  ]);
+
   // Cleanup effect to dispose of all audio nodes on component unmount
   useEffect(() => {
     const currentAudioEngine = audioEngineRef.current;
@@ -90,13 +126,15 @@ export default function EtherealAcousticsClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // An empty dependency array ensures this runs only on unmount.
 
-  const bringToFront = (id: string) => {
-    setLayers(prevLayers => {
-      const maxZIndex = Math.max(...prevLayers.map(l => l.zIndex), 0);
-      return prevLayers.map(l => 
-        l.id === id ? { ...l, zIndex: maxZIndex + 1 } : l
-      );
-    });
+  const bringToFront = (id: string, type: 'layer' | 'window') => {
+    const allItems = [...layers, ...windows];
+    const maxZIndex = Math.max(...allItems.map(item => item.zIndex), 0);
+  
+    if (type === 'layer') {
+      setLayers(prev => prev.map(l => l.id === id ? { ...l, zIndex: maxZIndex + 1 } : l));
+    } else {
+      setWindows(prev => prev.map(w => w.id === id ? { ...w, zIndex: maxZIndex + 1 } : w));
+    }
   };
 
   const addLayer = (
@@ -216,34 +254,41 @@ export default function EtherealAcousticsClient() {
     );
   };
   
-  const handleDragStart = (id: string, e: React.MouseEvent) => {
-    bringToFront(id);
-    const layer = layers.find(l => l.id === id);
-    if (!layer) return;
+  const handleDragStart = (id: string, type: 'layer' | 'window', e: React.MouseEvent) => {
+    bringToFront(id, type);
+    const item = type === 'layer' ? layers.find(l => l.id === id) : windows.find(w => w.id === id);
+    if (!item) return;
 
     setDragState({
-      layerId: id,
-      offsetX: e.clientX - layer.position.x,
-      offsetY: e.clientY - layer.position.y,
+      id: id,
+      type,
+      offsetX: e.clientX - item.position.x,
+      offsetY: e.clientY - item.position.y,
     });
   };
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!dragState) return;
-
-    setLayers(prevLayers =>
-      prevLayers.map(l =>
-        l.id === dragState.layerId
+  
+    const moveItem = (items: any[]) => {
+      return items.map(item =>
+        item.id === dragState.id
           ? {
-              ...l,
+              ...item,
               position: {
                 x: e.clientX - dragState.offsetX,
                 y: e.clientY - dragState.offsetY,
               },
             }
-          : l
-      )
-    );
+          : item
+      );
+    };
+  
+    if (dragState.type === 'layer') {
+      setLayers(moveItem);
+    } else {
+      setWindows(moveItem);
+    }
   }, [dragState]);
 
   const handleMouseUp = useCallback(() => {
@@ -281,6 +326,17 @@ export default function EtherealAcousticsClient() {
     }
 
     setLayers((prevLayers) => prevLayers.filter((layer) => layer.id !== id));
+  };
+
+  const openWindow = (id: string) => {
+    bringToFront(id, 'window');
+    setWindows(prev =>
+      prev.map(w => (w.id === id ? { ...w, isOpen: true } : w))
+    );
+  };
+
+  const closeWindow = (id: string) => {
+    setWindows(prev => prev.map(w => (w.id === id ? { ...w, isOpen: false } : w)));
   };
   
   const handleVolumeChange = (id: string, volume: number) => {
@@ -325,6 +381,13 @@ export default function EtherealAcousticsClient() {
       <AudioEngine ref={audioEngineRef} />
 
       <main className="flex-grow blueprint-grid relative">
+        <div className="absolute top-0 left-0 w-full h-full p-4">
+          <DesktopIcon
+            icon={Info}
+            label="About This App"
+            onDoubleClick={() => openWindow('about')}
+          />
+        </div>
         <div className="absolute top-0 left-0 w-full h-full">
           {layers.map((layer) => (
             <LayerCard
@@ -343,9 +406,23 @@ export default function EtherealAcousticsClient() {
               onVolumeChange={handleVolumeChange}
               onSendChange={handleSendChange}
               onPlaybackRateChange={handlePlaybackRateChange}
-              onMouseDown={(e) => handleDragStart(layer.id, e)}
+              onMouseDown={(e) => handleDragStart(layer.id, 'layer', e)}
             />
           ))}
+          {windows.map(win =>
+            win.isOpen ? (
+              <InfoWindow
+                key={win.id}
+                title={win.title}
+                position={win.position}
+                zIndex={win.zIndex}
+                onClose={() => closeWindow(win.id)}
+                onMouseDown={(e) => handleDragStart(win.id, 'window', e)}
+              >
+                {win.content}
+              </InfoWindow>
+            ) : null
+          )}
           {layers.length === 0 && !isAlertDismissed && (
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
               <div className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans">
