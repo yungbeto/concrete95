@@ -8,13 +8,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Plus, Waves, Zap, Music } from 'lucide-react';
+import { Music, Square, Waves, Zap } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 
 interface SoundscapeControllerProps {
   onAddSynthLayer: () => void;
   onAddFreesoundLayer: () => void;
   onAddMelodicLayer: () => void;
+  onStopAll: () => void;
   canAddLayer: boolean;
+  hasLayers: boolean;
 }
 
 const StartIcon = () => (
@@ -31,7 +34,9 @@ export default function SoundscapeController({
   onAddSynthLayer,
   onAddFreesoundLayer,
   onAddMelodicLayer,
+  onStopAll,
   canAddLayer,
+  hasLayers,
 }: SoundscapeControllerProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -50,12 +55,17 @@ export default function SoundscapeController({
     setIsOpen(false);
   };
 
+  const handleStopAll = () => {
+    onStopAll();
+    setIsOpen(false);
+  }
+
 
   return (
     <div className="z-10">
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
-          <Button variant="start" size="sm" disabled={!canAddLayer}>
+          <Button variant="start" size="sm">
             <StartIcon />
             <span className="font-bold">Start</span>
           </Button>
@@ -68,18 +78,23 @@ export default function SoundscapeController({
             >
               <span className="tracking-widest rotate-180">Concrete 95</span>
             </div>
-            <div className="grid gap-1 text-black p-1 w-56">
-                <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white" onClick={handleAddFreesoundLayer}>
+            <div className="flex flex-col gap-1 text-black p-1 w-56">
+                <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white disabled:hover:bg-transparent disabled:text-neutral-500" onClick={handleAddFreesoundLayer} disabled={!canAddLayer}>
                   <Waves className="mr-2 h-4 w-4" />
                   Freesound Loop
                 </Button>
-                <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white" onClick={handleAddSynthLayer}>
+                <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white disabled:hover:bg-transparent disabled:text-neutral-500" onClick={handleAddSynthLayer} disabled={!canAddLayer}>
                   <Zap className="mr-2 h-4 w-4" />
                   Synth Pad
                 </Button>
-                 <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white" onClick={handleAddMelodicLayer}>
+                 <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white disabled:hover:bg-transparent disabled:text-neutral-500" onClick={handleAddMelodicLayer} disabled={!canAddLayer}>
                   <Music className="mr-2 h-4 w-4" />
                   Melodic Loop
+                </Button>
+                <Separator className="bg-neutral-500 my-1" />
+                <Button variant="ghost" className="justify-start gap-2 px-2 !rounded-none hover:bg-blue-800 hover:text-white disabled:hover:bg-transparent disabled:text-neutral-500" onClick={handleStopAll} disabled={!hasLayers}>
+                    <Square className="mr-2 h-4 w-4" />
+                    Stop All
                 </Button>
               </div>
             </div>

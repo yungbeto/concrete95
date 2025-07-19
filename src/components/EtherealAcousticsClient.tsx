@@ -326,6 +326,22 @@ export default function EtherealAcousticsClient() {
     setLayers((prevLayers) => prevLayers.filter((layer) => layer.id !== id));
   };
 
+  const handleRemoveAllLayers = () => {
+    if (!audioEngineRef.current) return;
+    layers.forEach(layer => {
+      if (layer.node) {
+        if (layer.type === 'freesound') {
+          audioEngineRef.current!.stopFreesoundLoop(layer.node as Tone.Player);
+        } else if (layer.type === 'melodic') {
+          audioEngineRef.current!.stopMelodicLoop(layer.node as Tone.Sequence);
+        } else if (layer.type === 'synth') {
+          audioEngineRef.current!.stopSynthLoop(layer.node as Tone.Sequence);
+        }
+      }
+    });
+    setLayers([]);
+  };
+
   const openWindow = (id: string) => {
     bringToFront(id, 'window');
     setWindows(prev =>
@@ -454,7 +470,9 @@ export default function EtherealAcousticsClient() {
             onAddSynthLayer={addSynthLayer}
             onAddFreesoundLayer={addFreesoundLayer}
             onAddMelodicLayer={addMelodicLayer}
+            onStopAll={handleRemoveAllLayers}
             canAddLayer={layers.length < MAX_LAYERS}
+            hasLayers={layers.length > 0}
           />
           <div className="flex-grow" />
           <div className="bg-silver border-2 border-r-white border-b-white border-l-neutral-500 border-t-neutral-500 px-2 py-0.5">
