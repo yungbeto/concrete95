@@ -54,6 +54,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         wet: Math.random() * 0.4 + 0.2,
       }).chain(reverb, masterLimiter.current);
 
+      const lfo = new Tone.LFO({
+        frequency: Math.random() * 0.1 + 0.05, // very slow
+        min: -15,
+        max: 15,
+      }).start();
+
       const synth = new Tone.PolySynth(Tone.Synth, {
         oscillator: {
           type: randomOscillatorType,
@@ -69,11 +75,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         volume: -12,
       }).connect(delay);
       
-      const lfo = new Tone.LFO({
-        frequency: Math.random() * 0.1 + 0.05, // very slow
-        min: -15,
-        max: 15,
-      }).connect(synth.detune).start();
+      // Correctly connect the LFO to the detune of all voices
+      synth.set({ detune: 0 }); // Initialize detune
+      lfo.connect(synth.detune);
+
 
       const scale = ['C3', 'E3', 'G3', 'A3', 'C4', 'E4', 'G4', 'A4'];
       const notesAndChords = [
