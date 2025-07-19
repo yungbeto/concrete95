@@ -4,7 +4,7 @@
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Play, StopCircle, SkipBack, SkipForward, X, Zap, Waves, Music } from 'lucide-react';
+import { Play, StopCircle, X, Zap, Waves, Music } from 'lucide-react';
 import LayerMenuBar from './LayerMenuBar';
 
 interface LayerCardProps {
@@ -24,7 +24,6 @@ interface LayerCardProps {
   onMouseDown: (e: React.MouseEvent) => void;
   onPlay: (id: string) => void;
   onStop: (id: string) => void;
-  onSeek: (id: string, direction: 'forward' | 'backward') => void;
 }
 
 const layerIcons = {
@@ -72,7 +71,6 @@ export default function LayerCard({
   onMouseDown,
   onPlay,
   onStop,
-  onSeek,
 }: LayerCardProps) {
   const cardStyle = {
     left: `${position.x}px`,
@@ -133,17 +131,11 @@ export default function LayerCard({
 
       {/* Control Buttons */}
        <div className="p-2 flex items-center justify-center space-x-2" onMouseDown={(e) => e.stopPropagation()}>
-         <Button variant="retro" size="icon" title="Skip Back" onClick={() => onSeek(id, 'backward')} disabled={isTransportDisabled}>
-           <SkipBack className="text-black" />
-         </Button>
          <Button variant="retro" size="icon" title="Play" onClick={() => onPlay(id)} disabled={isTransportDisabled}>
            <Play className="text-black" />
          </Button>
          <Button variant="retro" size="icon" title="Stop" onClick={() => onStop(id)} disabled={isTransportDisabled}>
            <StopCircle className="text-black" />
-         </Button>
-         <Button variant="retro" size="icon" title="Skip Forward" onClick={() => onSeek(id, 'forward')} disabled={isTransportDisabled}>
-           <SkipForward className="text-black" />
          </Button>
        </div>
     </div>

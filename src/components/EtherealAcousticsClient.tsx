@@ -212,9 +212,7 @@ export default function EtherealAcousticsClient() {
       soundUrls[Math.floor(Math.random() * soundUrls.length)];
 
     const onProgress = (progress: number) => {
-       setLayers((prev) =>
-        prev.map((l) => (l.id === id ? { ...l, progress } : l))
-      );
+       // We're not displaying a progress bar anymore
     };
 
     const newPlayer =
@@ -406,14 +404,6 @@ export default function EtherealAcousticsClient() {
     }
   };
 
-  const handleSeek = (id: string, direction: 'forward' | 'backward') => {
-    if (!audioEngineRef.current) return;
-    const layer = layers.find((l) => l.id === id);
-    if (layer?.node && layer.type === 'freesound') {
-      audioEngineRef.current.seek(layer.node as Tone.Player, direction);
-    }
-  };
-
 
   return (
     <div className="relative w-full h-screen flex flex-col overflow-hidden">
@@ -446,7 +436,6 @@ export default function EtherealAcousticsClient() {
               onPlaybackRateChange={handlePlaybackRateChange}
               onPlay={handlePlay}
               onStop={handleStop}
-              onSeek={handleSeek}
               onMouseDown={(e) => handleDragStart(layer.id, 'layer', e)}
             />
           ))}

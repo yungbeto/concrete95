@@ -18,7 +18,6 @@ export type AudioEngineHandle = {
   disposeAll: () => void;
   play: (node: Tone.Player | Tone.Sequence) => void;
   stop: (node: Tone.Player | Tone.Sequence) => void;
-  seek: (node: Tone.Player, direction: 'forward' | 'backward') => void;
 };
 
 const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
@@ -367,25 +366,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         }
       }
     },
-    seek: (node, direction) => {
-      if (node instanceof Tone.Player && !node.disposed && node.loaded) {
-        const loopDuration = node.loopEnd - node.loopStart;
-        const seekAmount = loopDuration * 0.1; // Seek 10% of the loop duration
-        const currentOffset = (Tone.Transport.seconds - node.startTime) % loopDuration;
-        
-        let newPosition;
-        if (direction === 'forward') {
-          newPosition = currentOffset + seekAmount;
-        } else {
-          newPosition = currentOffset - seekAmount;
-        }
-
-        // Clamp the new position within the loop boundaries
-        newPosition = Math.max(0, Math.min(newPosition, loopDuration));
-
-        node.seek(newPosition, Tone.Transport.now());
-      }
-    }
   }));
 
   return null;
