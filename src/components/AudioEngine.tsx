@@ -54,11 +54,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       Tone.start();
 
       const oscillatorTypes: Tone.ToneOscillatorType[] = [
-        'fatsawtooth',
         'fatsquare',
         'fattriangle',
         'fatsine',
-        'sawtooth',
         'square',
         'triangle',
         'sine',
