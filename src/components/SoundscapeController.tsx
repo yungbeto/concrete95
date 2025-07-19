@@ -17,9 +17,12 @@ interface SoundscapeControllerProps {
   isReady: boolean;
 }
 
-const WindowsIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path fillRule="evenodd" clipRule="evenodd" d="M0 15L45 10V48H0V15ZM0 52H45V90L0 85V52ZM50 8.5L98 0V48H50V8.5ZM50 52H98V100L50 91.5V52Z" fill="black"/>
+const StartIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M2 2H9V9H2V2Z" fill="black"/>
+    <path d="M11 2H18V9H11V2Z" fill="black"/>
+    <path d="M2 11H9V18H2V11Z" fill="black"/>
+    <path d="M11 11H18V18H11V11Z" fill="black"/>
   </svg>
 );
 
@@ -53,7 +56,7 @@ export default function SoundscapeController({
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
           <Button variant="start" size="sm" disabled={!isReady}>
-            <WindowsIcon />
+            <StartIcon />
             <span className="font-bold">Start</span>
           </Button>
         </PopoverTrigger>
