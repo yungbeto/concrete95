@@ -30,7 +30,7 @@ export default function EtherealAcousticsClient() {
     const newSynthLoop = audioEngineRef.current.startSynthLoop();
     if (!newSynthLoop) return;
 
-    const id = `layer_${Date.now()}`;
+    const id = `layer_${Date.now()}_${Math.random()}`;
     const newLayer: Layer = {
       id,
       title: 'Synth Pad',
@@ -74,7 +74,7 @@ export default function EtherealAcousticsClient() {
       await audioEngineRef.current.startFreesoundLoop(randomSoundUrl);
     if (!newPlayer) return;
 
-    const id = `layer_${Date.now()}`;
+    const id = `layer_${Date.now()}_${Math.random()}`;
     const newLayer: Layer = {
       id,
       title: 'Freesound Loop',
@@ -92,7 +92,7 @@ export default function EtherealAcousticsClient() {
     const newSequence = audioEngineRef.current.startMelodicLoop();
     if (!newSequence) return;
 
-    const id = `layer_${Date.now()}`;
+    const id = `layer_${Date.now()}_${Math.random()}`;
     const newLayer: Layer = {
       id,
       title: 'Melodic Loop',
