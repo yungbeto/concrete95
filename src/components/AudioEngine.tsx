@@ -123,9 +123,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       
       sequence.loop = true;
 
-      const duration = Tone.Transport.toSeconds(sequence.loopEnd.toString() + 'm');
+      const duration = Tone.Transport.toSeconds(sequence.loopEnd);
       
-      const progressEventId = Tone.Transport.scheduleRepeat(() => {
+      const progressEventId = Tone.Transport.scheduleRepeat((time) => {
         if (sequence.state === 'started') {
             const currentPosition = sequence.progress * duration;
             onProgressUpdate(currentPosition, duration);
@@ -213,7 +213,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         player.loopEnd = startTime + loopDuration;
       }
       
-      const progressEventId = Tone.Transport.scheduleRepeat(() => {
+      const progressEventId = Tone.Transport.scheduleRepeat((time) => {
         if (player.state === 'started') {
           const loopDuration = player.loopEnd - player.loopStart;
           if (loopDuration > 0) {
@@ -314,9 +314,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       sequence.loop = true;
       
-      const duration = Tone.Transport.toSeconds(sequence.loopEnd.toString() + 'm');
+      const duration = Tone.Transport.toSeconds(sequence.loopEnd);
       
-      const progressEventId = Tone.Transport.scheduleRepeat(() => {
+      const progressEventId = Tone.Transport.scheduleRepeat((time) => {
         if (sequence.state === 'started') {
             const currentPosition = sequence.progress * duration;
             onProgressUpdate(currentPosition, duration);
