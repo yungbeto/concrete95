@@ -6,7 +6,6 @@ import {
   MenubarContent,
   MenubarItem,
   MenubarMenu,
-  MenubarSeparator,
   MenubarTrigger,
 } from "@/components/ui/menubar";
 import { Slider } from './ui/slider';
@@ -58,7 +57,7 @@ export default function LayerMenuBar({
             </MenubarContent>
           </MenubarMenu>
           <MenubarMenu>
-             <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto focus:bg-blue-800 focus:text-white data-[state=open]:bg-blue-800 data-[state=open]:text-white">Options</MenubarTrigger>
+             <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto focus:bg-blue-800 focus:text-white data-[state=open]:bg-blue-800 data-[state=open]:text-white">Volume</MenubarTrigger>
             <MenubarContent>
               <MenubarItem onSelect={(e) => e.preventDefault()}>
                 <div className="w-48 text-black">
@@ -74,27 +73,29 @@ export default function LayerMenuBar({
                   />
                 </div>
               </MenubarItem>
-              {type === 'freesound' && (
-                <>
-                <MenubarSeparator />
-                <MenubarItem onSelect={(e) => e.preventDefault()}>
-                   <div className="w-48 text-black">
-                      <p className="text-xs text-black mb-2">
-                        Speed: {playbackRate?.toFixed(2) ?? '1.00'}x
-                      </p>
-                      <Slider
-                        defaultValue={[playbackRate ?? 1]}
-                        max={2}
-                        min={0.5}
-                        step={0.01}
-                        onValueChange={(value) => onPlaybackRateChange(value[0])}
-                      />
-                    </div>
-                </MenubarItem>
-                </>
-              )}
             </MenubarContent>
           </MenubarMenu>
+          {type === 'freesound' && (
+            <MenubarMenu>
+                <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto focus:bg-blue-800 focus:text-white data-[state=open]:bg-blue-800 data-[state=open]:text-white">Speed</MenubarTrigger>
+                <MenubarContent>
+                    <MenubarItem onSelect={(e) => e.preventDefault()}>
+                    <div className="w-48 text-black">
+                        <p className="text-xs text-black mb-2">
+                            Speed: {playbackRate?.toFixed(2) ?? '1.00'}x
+                        </p>
+                        <Slider
+                            defaultValue={[playbackRate ?? 1]}
+                            max={2}
+                            min={0.5}
+                            step={0.01}
+                            onValueChange={(value) => onPlaybackRateChange(value[0])}
+                        />
+                        </div>
+                    </MenubarItem>
+                </MenubarContent>
+            </MenubarMenu>
+          )}
         </Menubar>
     </div>
   );
