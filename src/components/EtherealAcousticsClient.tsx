@@ -32,6 +32,8 @@ type DragState = {
   offsetY: number;
 } | null;
 
+const MAX_LAYERS = 8;
+
 const adjectives = ['Wandering', 'Cosmic', 'Gentle', 'Fading', 'Shimmering', 'Echoing', 'Distant', 'Lucid', 'Dreamy', 'Ethereal'];
 const nouns = ['Pad', 'Drone', 'Melody', 'Echo', 'Texture', 'Chord', 'Arp', 'Fragment', 'Wash', 'Wave'];
 
@@ -46,8 +48,8 @@ function DigitalClock() {
 
   useEffect(() => {
     // This will only run on the client, after initial hydration
-    setTime(new Date());
     const timerId = setInterval(() => setTime(new Date()), 1000);
+    setTime(new Date());
     return () => clearInterval(timerId);
   }, []); // Empty dependency array ensures this runs once on mount
 
@@ -122,8 +124,20 @@ export default function EtherealAcousticsClient() {
     return id;
   };
 
+  const checkLayerLimit = () => {
+    if (layers.length >= MAX_LAYERS) {
+      toast({
+        variant: 'destructive',
+        title: 'Layer Limit Reached',
+        description: `You can only have a maximum of ${MAX_LAYERS} layers.`,
+      });
+      return true;
+    }
+    return false;
+  };
+
   const addSynthLayer = () => {
-    if (!audioEngineRef.current) return;
+    if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('synth', { volume: -12 });
     
     const newSynthLoop = audioEngineRef.current.startSynthLoop();
@@ -142,7 +156,7 @@ export default function EtherealAcousticsClient() {
   };
 
   const addFreesoundLayer = async () => {
-    if (!audioEngineRef.current) return;
+    if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('freesound', { volume: -12, playbackRate: 1 });
     
     const queries = ['ambient', 'drone', 'texture', 'pad', 'atmosphere'];
@@ -181,7 +195,7 @@ export default function EtherealAcousticsClient() {
   };
 
   const addMelodicLayer = () => {
-    if (!audioEngineRef.current) return;
+    if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('melodic', { volume: -15 });
 
     const newSequence = audioEngineRef.current.startMelodicLoop();
@@ -361,7 +375,7 @@ export default function EtherealAcousticsClient() {
             onAddSynthLayer={addSynthLayer}
             onAddFreesoundLayer={addFreesoundLayer}
             onAddMelodicLayer={addMelodicLayer}
-            isReady={true}
+            canAddLayer={layers.length < MAX_LAYERS}
           />
           <div className="flex-grow" />
           <div className="bg-silver border-2 border-r-white border-b-white border-l-neutral-500 border-t-neutral-500 px-2 py-0.5">

@@ -14,7 +14,7 @@ interface SoundscapeControllerProps {
   onAddSynthLayer: () => void;
   onAddFreesoundLayer: () => void;
   onAddMelodicLayer: () => void;
-  isReady: boolean;
+  canAddLayer: boolean;
 }
 
 const StartIcon = () => (
@@ -31,7 +31,7 @@ export default function SoundscapeController({
   onAddSynthLayer,
   onAddFreesoundLayer,
   onAddMelodicLayer,
-  isReady,
+  canAddLayer,
 }: SoundscapeControllerProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -55,7 +55,7 @@ export default function SoundscapeController({
     <div className="z-10">
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
-          <Button variant="start" size="sm" disabled={!isReady}>
+          <Button variant="start" size="sm" disabled={!canAddLayer}>
             <StartIcon />
             <span className="font-bold">Start</span>
           </Button>
