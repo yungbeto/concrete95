@@ -3,7 +3,6 @@
 
 import { useRef, useState } from 'react';
 import { Player, Sequence } from 'tone';
-import type { PolySynth } from 'tone';
 import AudioEngine, {
   type AudioEngineHandle,
 } from '@/components/AudioEngine';
@@ -16,7 +15,8 @@ type Layer = {
   id: string;
   title: string;
   volume: number;
-  node: PolySynth | Player | Sequence;
+  node: Player | Sequence; // PolySynth is no longer directly stored
+  type: 'freesound' | 'synth' | 'melodic';
 };
 
 export default function EtherealAcousticsClient() {
@@ -27,15 +27,16 @@ export default function EtherealAcousticsClient() {
   const addSynthLayer = () => {
     if (!audioEngineRef.current) return;
 
-    const newSynth = audioEngineRef.current.startSynthPad();
-    if (!newSynth) return;
+    const newSynthLoop = audioEngineRef.current.startSynthLoop();
+    if (!newSynthLoop) return;
 
     const id = `layer_${Date.now()}`;
     const newLayer: Layer = {
       id,
       title: 'Synth Pad',
       volume: 0,
-      node: newSynth,
+      node: newSynthLoop,
+      type: 'synth',
     };
     setLayers((prevLayers) => [...prevLayers, newLayer]);
   };
@@ -79,6 +80,7 @@ export default function EtherealAcousticsClient() {
       title: 'Freesound Loop',
       volume: 0,
       node: newPlayer,
+      type: 'freesound',
     };
 
     setLayers((prevLayers) => [...prevLayers, newLayer]);
@@ -96,6 +98,7 @@ export default function EtherealAcousticsClient() {
       title: 'Melodic Loop',
       volume: 0,
       node: newSequence,
+      type: 'melodic',
     };
     setLayers((prevLayers) => [...prevLayers, newLayer]);
   };
@@ -105,13 +108,12 @@ export default function EtherealAcousticsClient() {
     const layerToRemove = layers.find((l) => l.id === id);
     if (!layerToRemove) return;
 
-    if (layerToRemove.node instanceof Player) {
-      audioEngineRef.current.stopFreesoundLoop(layerToRemove.node);
-    } else if (layerToRemove.node instanceof Sequence) {
-      audioEngineRef.current.stopMelodicLoop(layerToRemove.node);
-    }
-    else {
-      audioEngineRef.current.stopSynth(layerToRemove.node as PolySynth);
+    if (layerToRemove.type === 'freesound') {
+      audioEngineRef.current.stopFreesoundLoop(layerToRemove.node as Player);
+    } else if (layerToRemove.type === 'melodic') {
+      audioEngineRef.current.stopMelodicLoop(layerToRemove.node as Sequence);
+    } else if (layerToRemove.type === 'synth') {
+      audioEngineRef.current.stopSynthLoop(layerToRemove.node as Sequence);
     }
 
     setLayers((prevLayers) => prevLayers.filter((layer) => layer.id !== id));
@@ -122,12 +124,8 @@ export default function EtherealAcousticsClient() {
     const layer = layers.find((l) => l.id === id);
     if (!layer) return;
 
-    const synth = (layer.node as any).synth;
-    if (synth) {
-       audioEngineRef.current.setVolume(synth, volume);
-    } else {
-       audioEngineRef.current.setVolume(layer.node, volume);
-    }
+    // The setVolume function in AudioEngine handles both Players and Sequences with associated synths
+    audioEngineRef.current.setVolume(layer.node, volume);
 
     setLayers((prevLayers) =>
       prevLayers.map((l) => (l.id === id ? { ...l, volume } : l))

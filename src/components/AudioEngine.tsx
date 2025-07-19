@@ -5,8 +5,8 @@ import { forwardRef, useEffect, useImperativeHandle } from 'react';
 import * as Tone from 'tone';
 
 export type AudioEngineHandle = {
-  startSynthPad: () => Tone.PolySynth | null;
-  stopSynth: (synth: Tone.PolySynth) => void;
+  startSynthLoop: () => Tone.Sequence | null;
+  stopSynthLoop: (synth: Tone.Sequence) => void;
   startFreesoundLoop: (url: string) => Promise<Tone.Player | null>;
   stopFreesoundLoop: (player: Tone.Player) => void;
   startMelodicLoop: () => Tone.Sequence | null;
@@ -22,61 +22,78 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
   }, []);
 
   useImperativeHandle(ref, () => ({
-    startSynthPad: () => {
-      const createRandomSynth = () => {
-        Tone.start();
+    startSynthLoop: () => {
+      Tone.start();
 
-        const oscillatorTypes: Tone.FatOscillatorType[] = [
-          'fatsawtooth',
-          'fatsquare',
-          'fattriangle',
-          'fatsine',
-        ];
-        const randomOscillatorType =
-          oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)];
+      const oscillatorTypes: Tone.FatOscillatorType[] = [
+        'fatsawtooth',
+        'fatsquare',
+        'fattriangle',
+        'fatsine',
+      ];
+      const randomOscillatorType =
+        oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)];
 
-        const reverb = new Tone.Reverb({
-          decay: Math.random() * 5 + 2,
-          wet: Math.random() * 0.3 + 0.2,
-          preDelay: Math.random() * 0.2,
-        }).toDestination();
+      const reverb = new Tone.Reverb({
+        decay: Math.random() * 5 + 4, // Longer decay for pads
+        wet: Math.random() * 0.4 + 0.3,
+        preDelay: Math.random() * 0.2,
+      }).toDestination();
 
-        const synth = new Tone.PolySynth(Tone.Synth, {
-          oscillator: {
-            type: randomOscillatorType,
-            count: 3,
-            spread: Math.random() * 40 + 20,
-          },
-          envelope: {
-            attack: Math.random() * 2 + 0.5,
-            decay: 0.1,
-            sustain: 0.8,
-            release: Math.random() * 3 + 2,
-          },
-          volume: 0, // Start at 0 volume
-        }).connect(reverb);
-
-        const notes = [
-          'C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'D4', 'E4', 'G4', 'A4', 'C5',
-        ];
-        const randomNote = notes[Math.floor(Math.random() * notes.length)];
-
-        synth.triggerAttack(randomNote);
-
-        return synth;
-      };
-      return createRandomSynth();
-    },
-    stopSynth: (synth) => {
-      synth.triggerRelease();
-      setTimeout(
-        () => {
-          if (!synth.disposed) {
-            synth.dispose();
-          }
+      const synth = new Tone.PolySynth(Tone.Synth, {
+        oscillator: {
+          type: randomOscillatorType,
+          count: 3,
+          spread: Math.random() * 40 + 20,
         },
-        (synth.get().envelope.release as number) * 1000 + 1000
+        envelope: {
+          attack: Math.random() * 4 + 2, // Slower attack
+          decay: 0.1,
+          sustain: 0.9,
+          release: Math.random() * 5 + 4, // Slower release
+        },
+        volume: 0, // Start at 0 volume
+      }).connect(reverb);
+      
+      const scale = ['C3', 'E3', 'G3', 'A3', 'C4', 'E4', 'G4', 'A4'];
+      const notesAndChords = [
+        scale[Math.floor(Math.random() * scale.length)],
+        [scale[0], scale[2], scale[4]], // C Major chord
+        scale[Math.floor(Math.random() * scale.length)],
+        null, // Rest
+        [scale[1], scale[3], scale[5]], // A minor chord (relative minor)
+        scale[Math.floor(Math.random() * scale.length)],
+        null, // Rest
+      ];
+
+      // Shuffle and pick 2-4 events
+      const sequenceEvents = notesAndChords
+        .sort(() => 0.5 - Math.random())
+        .slice(0, Math.floor(Math.random() * 3) + 2);
+
+      const sequence = new Tone.Sequence(
+        (time, note) => {
+          synth.triggerAttackRelease(note, '2m', time);
+        },
+        sequenceEvents,
+        '1m' // Each event happens every whole measure
       );
+      
+      sequence.loop = true;
+      sequence.start(0);
+      Tone.Transport.start();
+
+      (sequence as any).synth = synth; // Associate synth for cleanup and volume
+      
+      return sequence;
+    },
+    stopSynthLoop: (sequence) => {
+      const synth = (sequence as any).synth;
+      if (synth && !synth.disposed) {
+        synth.dispose();
+      }
+      sequence.stop();
+      sequence.dispose();
     },
     startFreesoundLoop: async (url) => {
       await Tone.start();
@@ -94,15 +111,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const maxLoopDuration = 3.5;
 
       if (duration > minLoopDuration) {
-        // Ensure our max loop duration isn't longer than the clip itself
         const effectiveMaxLoopDuration = Math.min(duration, maxLoopDuration);
 
-        // Calculate a random loop duration within the valid range
         const loopDuration =
           Math.random() * (effectiveMaxLoopDuration - minLoopDuration) +
           minLoopDuration;
 
-        // Calculate a random start time, ensuring the loop fits
         const maxStartTime = duration - loopDuration;
         const startTime = Math.random() * maxStartTime;
 
@@ -165,7 +179,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       sequence.start(0);
       Tone.Transport.start();
 
-      // We associate the synth with the sequence for volume control
       (sequence as any).synth = synth;
 
       return sequence;
