@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Play, Square, X, Zap, Waves, Music } from 'lucide-react';
 import LayerMenuBar from './LayerMenuBar';
+import { type AudioEngineHandle } from './AudioEngine';
+import * as Tone from 'tone';
+import { useRef, useEffect } from 'react';
 
 interface LayerCardProps {
   id: string;
@@ -16,6 +19,8 @@ interface LayerCardProps {
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
+  audioEngineRef: React.RefObject<AudioEngineHandle>;
+  node: Tone.Player | Tone.Sequence | null;
   onRemove: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
   onSendChange: (id: string, send: number) => void;
@@ -32,12 +37,75 @@ const layerIcons = {
 };
 
 
-function SoundRecorderDisplay() {
+function SoundRecorderDisplay({
+    audioEngineRef,
+    node,
+}: {
+    audioEngineRef: React.RefObject<AudioEngineHandle>;
+    node: Tone.Player | Tone.Sequence | null;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+
+    const draw = () => {
+      if (!audioEngineRef.current || !node) {
+        animationFrameId = requestAnimationFrame(draw);
+        return;
+      }
+      
+      const waveformData = audioEngineRef.current.getWaveform(node);
+      if (!waveformData) {
+        animationFrameId = requestAnimationFrame(draw);
+        return;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.beginPath();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#39FF14'; // A bright green color
+
+      const sliceWidth = canvas.width * 1.0 / waveformData.length;
+      let x = 0;
+
+      for (let i = 0; i < waveformData.length; i++) {
+        const v = waveformData[i] / 1.4; // The 1.4 is a scaling factor
+        const y = (v * canvas.height / 2) + (canvas.height / 2);
+
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+
+        x += sliceWidth;
+      }
+
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+
+      animationFrameId = requestAnimationFrame(draw);
+    };
+
+    draw();
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [node, audioEngineRef]);
+
+
   return (
     <div className="flex flex-col gap-2 p-2" onMouseDown={(e) => e.stopPropagation()}>
       <div className="flex items-stretch justify-between gap-2 text-black text-xs">
-        <div className="flex-grow h-auto bg-black border-2 border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white flex items-center justify-center p-1">
-          <div className="w-full h-[2px] bg-green-500" />
+        <div className="flex-grow h-[40px] bg-black border-2 border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white p-1">
+          <canvas ref={canvasRef} className="w-full h-full" />
         </div>
       </div>
     </div>
@@ -54,6 +122,8 @@ export default function LayerCard({
   position,
   zIndex,
   playbackRate,
+  audioEngineRef,
+  node,
   onRemove,
   onVolumeChange,
   onSendChange,
@@ -112,9 +182,7 @@ export default function LayerCard({
             />
         </div>
 
-
-      {/* Sound Recorder Display */}
-      <SoundRecorderDisplay />
+      <SoundRecorderDisplay audioEngineRef={audioEngineRef} node={node} />
       
       {/* Separator */}
       <div className="h-[2px] w-full bg-silver border-t-neutral-500 border-b-white" />

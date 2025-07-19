@@ -427,6 +427,8 @@ export default function EtherealAcousticsClient() {
               position={layer.position}
               zIndex={layer.zIndex}
               playbackRate={layer.playbackRate}
+              audioEngineRef={audioEngineRef}
+              node={layer.node}
               onRemove={handleRemoveLayer}
               onVolumeChange={handleVolumeChange}
               onSendChange={handleSendChange}
