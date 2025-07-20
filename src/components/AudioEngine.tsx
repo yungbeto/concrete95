@@ -277,7 +277,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const synthTypes = ['fm', 'pluck', 'default'];
       const randomSynthType = synthTypes[Math.floor(Math.random() * synthTypes.length)];
 
-      let synth;
+      let synth: Tone.PolySynth | Tone.PluckSynth;
       switch (randomSynthType) {
         case 'fm':
           synth = new Tone.PolySynth(Tone.FMSynth, {
@@ -288,7 +288,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
           });
           break;
         case 'pluck':
-            synth = new Tone.PolySynth(Tone.PluckSynth, {
+            synth = new Tone.PluckSynth({
                 attackNoise: 0.8,
                 resonance: 0.9,
                 release: 1.5,
@@ -353,7 +353,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
       if (synth && !synth.disposed) {
-        if (synth instanceof Tone.PolySynth) {
+        if (synth instanceof Tone.PolySynth || synth instanceof Tone.PluckSynth) {
           synth.releaseAll();
         }
         synth.dispose();
