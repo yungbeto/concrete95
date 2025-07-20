@@ -92,7 +92,7 @@ export default function EtherealAcousticsClient() {
   const { toast } = useToast();
   const [dragState, setDragState] = useState<DragState>(null);
   const [isAlertDismissed, setIsAlertDismissed] = useState(false);
-  const [globalScale, setGlobalScale] = useState<ScaleName>('random');
+  const [globalScale, setGlobalScale] = useState<ScaleName>('major');
 
 
   const [windows, setWindows] = useState<WindowState[]>([
