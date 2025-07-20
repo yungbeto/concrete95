@@ -262,37 +262,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       Tone.start();
 
       // --- SYNTH AND FX SETUP ---
-      const synthTypes = ['FMSynth', 'AMSynth', 'DuoSynth', 'MonoSynth', 'PluckSynth'];
+      const synthTypes = ['MonoSynth', 'PluckSynth'];
       const randomSynthName = synthTypes[Math.floor(Math.random() * synthTypes.length)];
       
       let synth: any;
 
-      // Safely create a synth instance
       switch (randomSynthName) {
-        case 'FMSynth':
-          synth = new Tone.PolySynth(Tone.FMSynth, {
-            harmonicity: 1.5,
-            modulationIndex: 8,
-            envelope: { attack: 0.01, release: 1 },
-            modulationEnvelope: { attack: 0.05, release: 0.5 },
-          });
-          break;
-        case 'AMSynth':
-          synth = new Tone.PolySynth(Tone.AMSynth, {
-            harmonicity: 1.5,
-            envelope: { attack: 0.01, release: 1 },
-            modulationEnvelope: { attack: 0.05, release: 0.5 },
-          });
-          break;
-        case 'DuoSynth':
-          synth = new Tone.PolySynth(Tone.DuoSynth, {
-            vibratoAmount: 0.2,
-            vibratoRate: 2,
-            harmonicity: 1,
-            voice0: { envelope: { attack: 0.01, release: 1 } },
-            voice1: { envelope: { attack: 0.05, release: 1 } },
-          });
-          break;
         case 'MonoSynth':
            synth = new Tone.PolySynth(Tone.MonoSynth, {
              oscillator: { type: 'sawtooth' },
@@ -312,7 +287,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       
       synth.volume.value = -18;
       
-      // FX Chain: Delay -> Reverb -> Filter -> Limiter
       const delay = new Tone.FeedbackDelay({
         delayTime: ['8n', '4n.', '16n'][Math.floor(Math.random() * 3)],
         feedback: Math.random() * 0.4 + 0.2,
@@ -326,9 +300,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       const filter = new Tone.Filter(Math.random() * 2000 + 500, 'lowpass');
 
-      // Modulation: LFO controls the filter frequency
       const lfo = new Tone.LFO({
-        frequency: Math.random() * 0.2 + 0.05, // Slow rate
+        frequency: Math.random() * 0.2 + 0.05,
         min: 400,
         max: 2500
       }).connect(filter.frequency).start();
@@ -340,44 +313,26 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       // --- MELODY AND RHYTHM GENERATION ---
       const currentScale = sessionScale.current;
-      const noteDurations = ['4n', '8n', '16n'];
       
       const sequenceLength = Math.floor(Math.random() * 8) + 8; // 8-15 events
       const sequenceEvents = Array.from({ length: sequenceLength }, () => {
-        // 35% chance of being a rest
         if (Math.random() < 0.35) {
             return null;
         }
-        // Otherwise, pick a random note from the scale
-        return {
-          note: currentScale[Math.floor(Math.random() * currentScale.length)],
-          duration: noteDurations[Math.floor(Math.random() * noteDurations.length)]
-        };
+        return currentScale[Math.floor(Math.random() * currentScale.length)];
       });
 
-      let currentTime = 0;
-      const scheduledEvents = sequenceEvents.map(event => {
-        const time = currentTime;
-        if (event) {
-          // Tone.Time converts musical notation like '4n' to seconds
-          currentTime += Tone.Time(event.duration).toSeconds();
-          return { time, note: event.note, duration: event.duration };
-        } else {
-          // If it's a rest, just advance the time by a 16th note
-          currentTime += Tone.Time('16n').toSeconds();
-          return null;
-        }
-      }).filter(Boolean); // Remove nulls
-
-      const sequence = new Tone.Part(
-        (time, value) => {
-          synth.triggerAttackRelease(value.note, value.duration, time);
+      const sequence = new Tone.Sequence(
+        (time, note) => {
+          if (note) {
+            synth.triggerAttackRelease(note, '16n', time);
+          }
         },
-        scheduledEvents as any
+        sequenceEvents,
+        ['8n', '4n', '16n'][Math.floor(Math.random()*3)]
       );
 
       sequence.loop = true;
-      // Set a random tempo for the transport if it's not already running
       if (Tone.Transport.state !== 'started') {
         const tempo = Math.floor(Math.random() * (110 - 80 + 1)) + 80;
         Tone.Transport.bpm.value = tempo;
@@ -410,7 +365,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         if (effects.filter && !effects.filter.disposed) effects.filter.dispose();
       }
       if (synth && !synth.disposed) {
-        // PluckSynth is not a PolySynth, handle it separately
         if (synth instanceof Tone.PolySynth || synth instanceof Tone.PluckSynth) {
           synth.releaseAll();
         }
