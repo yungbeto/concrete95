@@ -120,18 +120,7 @@ export default function EtherealAcousticsClient() {
           <div className="text-black space-y-4 text-sm">
             <h3 className="font-bold">Global Scale</h3>
             <p className="text-xs">Set the musical scale for all new synth and melodic layers.</p>
-            <Select value={globalScale} onValueChange={(value) => setGlobalScale(value as ScaleName)}>
-                <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select a scale" />
-                </SelectTrigger>
-                <SelectContent>
-                    {scaleNames.map(name => (
-                        <SelectItem key={name} value={name}>
-                            {name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
+            {/* The content will be updated dynamically so onValueChange is handled there */}
           </div>
         ),
         isOpen: false,
@@ -306,29 +295,7 @@ export default function EtherealAcousticsClient() {
     if (type === 'layer') {
         item = layers.find(l => l.id === id);
     } else {
-        const win = windows.find(w => w.id === id);
-        if (win?.id === 'settings') {
-            const newContent = (
-              <div className="text-black space-y-4 text-sm">
-                <h3 className="font-bold">Global Scale</h3>
-                <p className="text-xs">Set the musical scale for all new synth and melodic layers.</p>
-                <Select value={globalScale} onValueChange={(value) => setGlobalScale(value as ScaleName)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select a scale" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {scaleNames.map(name => (
-                      <SelectItem key={name} value={name}>
-                        {name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            );
-            setWindows(prev => prev.map(w => w.id === 'settings' ? { ...w, content: newContent } : w));
-        }
-        item = win;
+        item = windows.find(w => w.id === id);
     }
 
     if (!item) return;
@@ -383,6 +350,30 @@ export default function EtherealAcousticsClient() {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [dragState, handleMouseMove, handleMouseUp]);
+
+  useEffect(() => {
+    // Dynamically update the settings window content when globalScale changes
+    // to ensure the Select component inside is always wired to the latest state updater.
+    const newSettingsContent = (
+      <div className="text-black space-y-4 text-sm">
+        <h3 className="font-bold">Global Scale</h3>
+        <p className="text-xs">Set the musical scale for all new synth and melodic layers.</p>
+        <Select value={globalScale} onValueChange={(value) => setGlobalScale(value as ScaleName)}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select a scale" />
+          </SelectTrigger>
+          <SelectContent>
+            {scaleNames.map(name => (
+              <SelectItem key={name} value={name}>
+                {name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+    setWindows(prev => prev.map(w => w.id === 'settings' ? { ...w, content: newSettingsContent } : w));
+  }, [globalScale]);
 
   const handleRemoveAllLayers = () => {
     if (!audioEngineRef.current) return;
@@ -565,4 +556,3 @@ export default function EtherealAcousticsClient() {
       </footer>
     </div>
   );
-}
