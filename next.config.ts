@@ -22,6 +22,12 @@ const nextConfig: NextConfig = {
         hostname: 'i.imgur.com',
         port: '',
         pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'd2w9rnfcy7mm78.cloudfront.net',
+        port: '',
+        pathname: '/**',
       }
     ],
   },
