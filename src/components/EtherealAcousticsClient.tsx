@@ -15,13 +15,14 @@ import SoundscapeController from '@/components/SoundscapeController';
 import { searchFreesound, type FreesoundSound } from '@/actions/freesound';
 import { useToast } from '@/hooks/use-toast';
 import LayerCard from '@/components/LayerCard';
-import { Info, Music, Settings, Waves, Zap, type LucideIcon } from 'lucide-react';
+import { Info, Music, Settings, Waves, Zap, type LucideIcon, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DesktopIcon from './DesktopIcon';
 import InfoWindow from './InfoWindow';
 import TaskbarItem from './TaskbarItem';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 type LayerInfo = FreesoundLayerInfo | SynthLayerInfo;
 
@@ -118,9 +119,7 @@ export default function EtherealAcousticsClient() {
         title: 'Global Settings',
         content: (
           <div className="text-black space-y-4 text-sm">
-            <h3 className="font-bold">Global Scale</h3>
-            <p className="text-xs">Set the musical scale for all new synth and melodic layers.</p>
-            {/* The content will be updated dynamically so onValueChange is handled there */}
+             {/* This content is dynamically generated */}
           </div>
         ),
         isOpen: false,
@@ -222,7 +221,7 @@ export default function EtherealAcousticsClient() {
 
   const addSynthLayer = () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
-    const id = addLayer('synth', { volume: -12 });
+    const id = addLayer('synth', { volume: -18 });
 
     const newSynthData = audioEngineRef.current.startSynthLoop(globalScale);
     if (!newSynthData) {
@@ -274,7 +273,7 @@ export default function EtherealAcousticsClient() {
 
   const addMelodicLayer = () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
-    const id = addLayer('melodic', { volume: -15 });
+    const id = addLayer('melodic', { volume: -18 });
 
     const newMelodicData = audioEngineRef.current.startMelodicLoop(globalScale);
     if (!newMelodicData) {
@@ -352,12 +351,12 @@ export default function EtherealAcousticsClient() {
   }, [dragState, handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
-    // Dynamically update the settings window content when globalScale changes
-    // to ensure the Select component inside is always wired to the latest state updater.
     const newSettingsContent = (
       <div className="text-black space-y-4 text-sm">
-        <h3 className="font-bold">Global Scale</h3>
-        <p className="text-xs">Set the musical scale for all new synth and melodic layers.</p>
+        <div>
+          <h3 className="font-bold">Global Scale</h3>
+          <p className="text-xs">Set the musical scale for all new synth and melodic layers.</p>
+        </div>
         <Select value={globalScale} onValueChange={(value) => setGlobalScale(value as ScaleName)}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select a scale" />
@@ -370,10 +369,19 @@ export default function EtherealAcousticsClient() {
             ))}
           </SelectContent>
         </Select>
+        {layers.length > 0 && (
+            <Alert variant="destructive" className="bg-yellow-100 border-yellow-300 text-yellow-800">
+                <AlertTriangle className="h-4 w-4 text-yellow-800" />
+                <AlertTitle className="font-bold">Active Layers Detected</AlertTitle>
+                <AlertDescription className="text-xs">
+                    Changing the scale only affects new layers. For a consistent soundscape, please Stop All layers and start fresh.
+                </AlertDescription>
+            </Alert>
+        )}
       </div>
     );
     setWindows(prev => prev.map(w => w.id === 'settings' ? { ...w, content: newSettingsContent } : w));
-  }, [globalScale]);
+  }, [globalScale, layers.length]);
 
   const handleRemoveAllLayers = () => {
     if (!audioEngineRef.current) return;
@@ -556,3 +564,4 @@ export default function EtherealAcousticsClient() {
       </footer>
     </div>
   );
+}
