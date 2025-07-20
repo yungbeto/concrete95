@@ -392,7 +392,7 @@ export default function EtherealAcousticsClient() {
       <main className="flex-grow blueprint-grid relative">
         <div className="absolute top-4 left-4">
             <DesktopIcon
-                icon={Info}
+                imageUrl="https://i.imgur.com/n1zJ3Fh.png"
                 label="About This App"
                 onClick={() => openWindow('about')}
             />
@@ -471,7 +471,7 @@ export default function EtherealAcousticsClient() {
             canAddLayer={layers.length < MAX_LAYERS}
             hasLayers={layers.length > 0}
           />
-          <div className="flex-grow flex items-center gap-1 mx-1 overflow-hidden">
+          <div className="flex-grow flex items-center gap-1 mx-1 overflow-hidden h-full">
             {windows.filter(w => w.isOpen).map(win => (
                 <TaskbarItem 
                     key={win.id}
