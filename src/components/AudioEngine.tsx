@@ -309,8 +309,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       // Assign resources for cleanup
       (sequence as any).synth = synth;
-      (sequence as any).lfo = null; // No LFO in this stable version
-      (sequence as any).effects = {}; // No individual effects
       (sequence as any).sendGain = sendGain;
       (sequence as any).waveform = waveform;
 
@@ -318,22 +316,14 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
     },
     stopMelodicLoop: (sequence) => {
       const synth = (sequence as any).synth;
-      const lfo = (sequence as any).lfo;
       const sendGain = (sequence as any).sendGain;
       const waveform = (sequence as any).waveform;
-      const effects = (sequence as any).effects;
       
-      if (lfo && !lfo.disposed) lfo.stop().dispose();
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
-      if (effects) {
-        if (effects.delay && !effects.delay.disposed) effects.delay.dispose();
-        if (effects.reverb && !effects.reverb.disposed) effects.reverb.dispose();
-        if (effects.filter && !effects.filter.disposed) effects.filter.dispose();
-      }
+
       if (synth && !synth.disposed) {
-        // Handle PolySynth and PluckSynth correctly
-        if (synth instanceof Tone.PolySynth || synth instanceof Tone.PluckSynth) {
+        if (synth instanceof Tone.PolySynth) {
           synth.releaseAll();
         }
         synth.dispose();
