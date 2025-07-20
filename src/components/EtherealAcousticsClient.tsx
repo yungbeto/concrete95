@@ -392,7 +392,7 @@ export default function EtherealAcousticsClient() {
       <main className="flex-grow blueprint-grid relative">
         <div className="absolute top-4 left-4 z-10">
             <DesktopIcon
-                imageUrl="https://i.imgur.com/n1zJ3Fh.png"
+                imageUrl="https://i.imgur.com/3Y2p4h4.png"
                 label="About This App"
                 onClick={() => openWindow('about')}
             />
