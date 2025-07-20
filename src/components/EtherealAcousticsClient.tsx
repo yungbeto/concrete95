@@ -390,13 +390,14 @@ export default function EtherealAcousticsClient() {
       <AudioEngine ref={audioEngineRef} />
 
       <main className="flex-grow blueprint-grid relative">
-        <div className="absolute top-0 left-0 w-full h-full p-4">
-          <DesktopIcon
-            icon={Info}
-            label="About This App"
-            onClick={() => openWindow('about')}
-          />
+        <div className="absolute top-4 left-4">
+            <DesktopIcon
+                icon={Info}
+                label="About This App"
+                onClick={() => openWindow('about')}
+            />
         </div>
+        
         <div className="absolute top-0 left-0 w-full h-full">
           {layers.map((layer) => (
             <LayerCard
