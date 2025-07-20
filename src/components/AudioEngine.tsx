@@ -261,64 +261,136 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (!masterLimiter.current || !fxBus.current) return null;
       Tone.start();
 
+      // --- SYNTH AND FX SETUP ---
+      const synthTypes = ['FMSynth', 'AMSynth', 'DuoSynth', 'MonoSynth', 'PluckSynth'];
+      const randomSynthName = synthTypes[Math.floor(Math.random() * synthTypes.length)];
+      
+      let synth: any;
+
+      // Safely create a synth instance
+      switch (randomSynthName) {
+        case 'FMSynth':
+          synth = new Tone.PolySynth(Tone.FMSynth, {
+            harmonicity: 1.5,
+            modulationIndex: 8,
+            envelope: { attack: 0.01, release: 1 },
+            modulationEnvelope: { attack: 0.05, release: 0.5 },
+          });
+          break;
+        case 'AMSynth':
+          synth = new Tone.PolySynth(Tone.AMSynth, {
+            harmonicity: 1.5,
+            envelope: { attack: 0.01, release: 1 },
+            modulationEnvelope: { attack: 0.05, release: 0.5 },
+          });
+          break;
+        case 'DuoSynth':
+          synth = new Tone.PolySynth(Tone.DuoSynth, {
+            vibratoAmount: 0.2,
+            vibratoRate: 2,
+            harmonicity: 1,
+            voice0: { envelope: { attack: 0.01, release: 1 } },
+            voice1: { envelope: { attack: 0.05, release: 1 } },
+          });
+          break;
+        case 'MonoSynth':
+           synth = new Tone.PolySynth(Tone.MonoSynth, {
+             oscillator: { type: 'sawtooth' },
+             envelope: { attack: 0.01, release: 0.8 },
+             filterEnvelope: { attack: 0.05, decay: 0.2, sustain: 0.5, release: 1, baseFrequency: 200, octaves: 4 }
+           });
+           break;
+        case 'PluckSynth':
+        default:
+           synth = new Tone.PluckSynth({
+            attackNoise: 0.8,
+            resonance: 0.9,
+            release: 1.5,
+           });
+           break;
+      }
+      
+      synth.volume.value = -18;
+      
+      // FX Chain: Delay -> Reverb -> Filter -> Limiter
+      const delay = new Tone.FeedbackDelay({
+        delayTime: ['8n', '4n.', '16n'][Math.floor(Math.random() * 3)],
+        feedback: Math.random() * 0.4 + 0.2,
+        wet: Math.random() * 0.4 + 0.2,
+      });
+
       const reverb = new Tone.Reverb({
         decay: Math.random() * 3 + 2,
         wet: Math.random() * 0.3 + 0.2,
       });
 
-      const delay = new Tone.FeedbackDelay({
-        delayTime: ['8n', '4n.', '16n'][Math.floor(Math.random() * 3)],
-        feedback: Math.random() * 0.4 + 0.2,
-        wet: Math.random() * 0.4 + 0.2,
-      }).chain(reverb, masterLimiter.current);
-      
+      const filter = new Tone.Filter(Math.random() * 2000 + 500, 'lowpass');
+
+      // Modulation: LFO controls the filter frequency
+      const lfo = new Tone.LFO({
+        frequency: Math.random() * 0.2 + 0.05, // Slow rate
+        min: 400,
+        max: 2500
+      }).connect(filter.frequency).start();
+
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
-
-      const synth = new Tone.PolySynth(Tone.FMSynth, {
-          harmonicity: 1.5,
-          modulationIndex: 8,
-          envelope: { attack: 0.01, release: 1 },
-          modulationEnvelope: { attack: 0.05, release: 0.5 },
-      });
-      synth.volume.value = -18;
-      
       const waveform = new Tone.Waveform(1024);
-      synth.connect(delay);
-      synth.connect(sendGain);
-      synth.connect(waveform);
       
-      const currentScale = sessionScale.current;
-      
-      const noteDurations = ['8n', '16n', '4n'];
-      const sequenceLength = Math.floor(Math.random() * 8) + 8;
-      const sequenceEvents = Array.from({ length: sequenceLength }, () => {
-        if (Math.random() < 0.35) {
-            return null; // Add rests for more musicality
-        }
-        return currentScale[Math.floor(Math.random() * currentScale.length)];
-      });
-      const sequenceInterval = noteDurations[Math.floor(Math.random() * noteDurations.length)];
+      synth.chain(delay, reverb, filter, sendGain, waveform, masterLimiter.current);
 
-      const sequence = new Tone.Sequence(
-        (time, note) => {
-          if (note) {
-            synth.triggerAttackRelease(note, '16n', time);
-          }
+      // --- MELODY AND RHYTHM GENERATION ---
+      const currentScale = sessionScale.current;
+      const noteDurations = ['4n', '8n', '16n'];
+      
+      const sequenceLength = Math.floor(Math.random() * 8) + 8; // 8-15 events
+      const sequenceEvents = Array.from({ length: sequenceLength }, () => {
+        // 35% chance of being a rest
+        if (Math.random() < 0.35) {
+            return null;
+        }
+        // Otherwise, pick a random note from the scale
+        return {
+          note: currentScale[Math.floor(Math.random() * currentScale.length)],
+          duration: noteDurations[Math.floor(Math.random() * noteDurations.length)]
+        };
+      });
+
+      let currentTime = 0;
+      const scheduledEvents = sequenceEvents.map(event => {
+        const time = currentTime;
+        if (event) {
+          // Tone.Time converts musical notation like '4n' to seconds
+          currentTime += Tone.Time(event.duration).toSeconds();
+          return { time, note: event.note, duration: event.duration };
+        } else {
+          // If it's a rest, just advance the time by a 16th note
+          currentTime += Tone.Time('16n').toSeconds();
+          return null;
+        }
+      }).filter(Boolean); // Remove nulls
+
+      const sequence = new Tone.Part(
+        (time, value) => {
+          synth.triggerAttackRelease(value.note, value.duration, time);
         },
-        sequenceEvents,
-        sequenceInterval
+        scheduledEvents as any
       );
 
       sequence.loop = true;
+      // Set a random tempo for the transport if it's not already running
+      if (Tone.Transport.state !== 'started') {
+        const tempo = Math.floor(Math.random() * (110 - 80 + 1)) + 80;
+        Tone.Transport.bpm.value = tempo;
+        Tone.Transport.start();
+      }
+      
       sequence.start(0);
 
       (sequence as any).synth = synth;
+      (sequence as any).lfo = lfo;
+      (sequence as any).effects = { delay, reverb, filter };
       (sequence as any).sendGain = sendGain;
       (sequence as any).waveform = waveform;
-
-      if (Tone.Transport.state !== 'started') {
-        Tone.Transport.start();
-      }
 
       return sequence;
     },
@@ -327,11 +399,18 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const lfo = (sequence as any).lfo;
       const sendGain = (sequence as any).sendGain;
       const waveform = (sequence as any).waveform;
+      const effects = (sequence as any).effects;
       
       if (lfo && !lfo.disposed) lfo.stop().dispose();
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
+      if (effects) {
+        if (effects.delay && !effects.delay.disposed) effects.delay.dispose();
+        if (effects.reverb && !effects.reverb.disposed) effects.reverb.dispose();
+        if (effects.filter && !effects.filter.disposed) effects.filter.dispose();
+      }
       if (synth && !synth.disposed) {
+        // PluckSynth is not a PolySynth, handle it separately
         if (synth instanceof Tone.PolySynth || synth instanceof Tone.PluckSynth) {
           synth.releaseAll();
         }
