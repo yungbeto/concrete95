@@ -456,12 +456,12 @@ export default function EtherealAcousticsClient() {
       <main className="flex-grow blueprint-grid relative">
         <div className="absolute top-4 left-4 z-10 flex gap-2">
             <DesktopIcon
-                imageUrl="https://d2w9rnfcy7mm78.cloudfront.net/38224701/original_cb679aaf35964f18383c8236e22de27f.png?1752976331?bc=0"
+                imageUrl="/concreteicon.png"
                 label="Readme.info"
                 onClick={() => openWindow('about')}
             />
              <DesktopIcon
-                icon={Settings}
+                imageUrl="/cog.png"
                 label="Settings.exe"
                 onClick={() => openWindow('settings')}
             />
@@ -514,7 +514,7 @@ export default function EtherealAcousticsClient() {
                     <div className="flex items-start gap-4 self-stretch">
                         <Info className="w-8 h-8 text-blue-600 flex-shrink-0" />
                         <div>
-                            <p>Your canvas is empty.</p>
+                            
                             <p>Click the "Start" button to add a sound layer.</p>
                         </div>
                     </div>
