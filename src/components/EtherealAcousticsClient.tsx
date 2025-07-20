@@ -11,10 +11,11 @@ import SoundscapeController from '@/components/SoundscapeController';
 import { searchFreesound } from '@/actions/freesound';
 import { useToast } from '@/hooks/use-toast';
 import LayerCard from '@/components/LayerCard';
-import { Info } from 'lucide-react';
+import { Info, Music, Waves, Zap, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DesktopIcon from './DesktopIcon';
 import InfoWindow from './InfoWindow';
+import TaskbarItem from './TaskbarItem';
 
 type Layer = {
   id: string;
@@ -56,11 +57,10 @@ function DigitalClock() {
   const [time, setTime] = useState<Date | null>(null);
 
   useEffect(() => {
-    // This will only run on the client, after initial hydration
     const timerId = setInterval(() => setTime(new Date()), 1000);
     setTime(new Date());
     return () => clearInterval(timerId);
-  }, []); // Empty dependency array ensures this runs once on mount
+  }, []);
 
   return (
     <div className="font-lcd text-lg text-neutral-800">
@@ -69,13 +69,17 @@ function DigitalClock() {
   );
 }
 
+const layerIcons: { [key in Layer['type']]: LucideIcon } = {
+  synth: Zap,
+  freesound: Waves,
+  melodic: Music,
+};
 
 export default function EtherealAcousticsClient() {
   const audioEngineRef = useRef<AudioEngineHandle>(null);
   const [layers, setLayers] = useState<Layer[]>([]);
   const { toast } = useToast();
   const [dragState, setDragState] = useState<DragState>(null);
-  const nextZIndex = useRef(1);
   const [isAlertDismissed, setIsAlertDismissed] = useState(false);
 
   const [windows, setWindows] = useState<WindowState[]>([
@@ -98,11 +102,15 @@ export default function EtherealAcousticsClient() {
       ),
       isOpen: false,
       position: { x: 250, y: 150 },
-      zIndex: 100, // Ensure windows can appear above layers
+      zIndex: 1,
     },
   ]);
 
-  // Cleanup effect to dispose of all audio nodes on component unmount
+  const allItems = [...layers, ...windows.filter(w => w.isOpen)];
+  const maxZIndex = Math.max(...allItems.map(item => item.zIndex), 0);
+  const activeItemId = allItems.find(item => item.zIndex === maxZIndex)?.id;
+
+
   useEffect(() => {
     const currentAudioEngine = audioEngineRef.current;
     const currentLayers = layers;
@@ -123,16 +131,15 @@ export default function EtherealAcousticsClient() {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // An empty dependency array ensures this runs only on unmount.
+  }, []);
 
   const bringToFront = (id: string, type: 'layer' | 'window') => {
-    const allItems = [...layers, ...windows];
-    const maxZIndex = Math.max(...allItems.map(item => item.zIndex), 0);
-  
+    const currentMaxZ = Math.max(...layers.map(l => l.zIndex), ...windows.map(w => w.zIndex), 0);
+
     if (type === 'layer') {
-      setLayers(prev => prev.map(l => l.id === id ? { ...l, zIndex: maxZIndex + 1 } : l));
+      setLayers(prev => prev.map(l => l.id === id ? { ...l, zIndex: currentMaxZ + 1 } : l));
     } else {
-      setWindows(prev => prev.map(w => w.id === id ? { ...w, zIndex: maxZIndex + 1 } : w));
+      setWindows(prev => prev.map(w => w.id === id ? { ...w, zIndex: currentMaxZ + 1 } : w));
     }
   };
 
@@ -149,11 +156,11 @@ export default function EtherealAcousticsClient() {
       node: null,
       type: type,
       status: 'loading',
-      position: { 
+      position: {
         x: Math.random() * (window.innerWidth / 2),
         y: Math.random() * (window.innerHeight / 4)
       },
-      zIndex: nextZIndex.current++,
+      zIndex: maxZIndex + 1,
       ...baseProperties,
     };
     setLayers((prevLayers) => [...prevLayers, newLayerStub]);
@@ -193,7 +200,7 @@ export default function EtherealAcousticsClient() {
   const addSynthLayer = () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('synth', { volume: -12 });
-    
+
     const newSynthLoop = audioEngineRef.current.startSynthLoop();
     if (!newSynthLoop) {
       handleRemoveLayer(id);
@@ -210,8 +217,7 @@ export default function EtherealAcousticsClient() {
   const addFreesoundLayer = async () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('freesound', { volume: -12, playbackRate: 1 });
-    
-    // An empty query will fetch the latest sounds from the proxy
+
     const soundUrls = await searchFreesound('');
 
     if ('error' in soundUrls || soundUrls.length === 0) {
@@ -223,19 +229,19 @@ export default function EtherealAcousticsClient() {
       handleRemoveLayer(id);
       return;
     }
-    
+
     const randomSoundUrl =
       soundUrls[Math.floor(Math.random() * soundUrls.length)];
 
 
     const newPlayer =
       await audioEngineRef.current.startFreesoundLoop(randomSoundUrl);
-    
+
     if (!newPlayer) {
       handleRemoveLayer(id);
       return;
     }
-    
+
     setLayers((prevLayers) =>
       prevLayers.map((l) =>
         l.id === id ? { ...l, node: newPlayer, status: 'loaded' } : l
@@ -259,7 +265,7 @@ export default function EtherealAcousticsClient() {
       )
     );
   };
-  
+
   const handleDragStart = (id: string, type: 'layer' | 'window', e: React.MouseEvent) => {
     bringToFront(id, type);
     const item = type === 'layer' ? layers.find(l => l.id === id) : windows.find(w => w.id === id);
@@ -275,7 +281,7 @@ export default function EtherealAcousticsClient() {
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!dragState) return;
-  
+
     const moveItem = (items: any[]) => {
       return items.map(item =>
         item.id === dragState.id
@@ -289,7 +295,7 @@ export default function EtherealAcousticsClient() {
           : item
       );
     };
-  
+
     if (dragState.type === 'layer') {
       setLayers(moveItem);
     } else {
@@ -342,7 +348,7 @@ export default function EtherealAcousticsClient() {
   const closeWindow = (id: string) => {
     setWindows(prev => prev.map(w => (w.id === id ? { ...w, isOpen: false } : w)));
   };
-  
+
   const handleVolumeChange = (id: string, volume: number) => {
     if (!audioEngineRef.current) return;
     const layer = layers.find((l) => l.id === id);
@@ -354,7 +360,7 @@ export default function EtherealAcousticsClient() {
       prevLayers.map((l) => (l.id === id ? { ...l, volume } : l))
     );
   };
-  
+
   const handleSendChange = (id: string, send: number) => {
     if (!audioEngineRef.current) return;
     const layer = layers.find((l) => l.id === id);
@@ -455,7 +461,7 @@ export default function EtherealAcousticsClient() {
         </div>
       </main>
       
-      <footer className="w-full h-10 bg-silver border-t-2 border-t-white flex items-center px-2 z-20">
+      <footer className="w-full h-10 bg-silver border-t-2 border-t-white flex items-center px-2 z-20 shrink-0">
          <SoundscapeController
             onAddSynthLayer={addSynthLayer}
             onAddFreesoundLayer={addFreesoundLayer}
@@ -464,7 +470,26 @@ export default function EtherealAcousticsClient() {
             canAddLayer={layers.length < MAX_LAYERS}
             hasLayers={layers.length > 0}
           />
-          <div className="flex-grow" />
+          <div className="flex-grow flex items-center gap-1 mx-2">
+            {windows.filter(w => w.isOpen).map(win => (
+                <TaskbarItem 
+                    key={win.id}
+                    icon={Info}
+                    label={win.title}
+                    isActive={activeItemId === win.id}
+                    onClick={() => bringToFront(win.id, 'window')}
+                />
+            ))}
+            {layers.map(layer => (
+                <TaskbarItem 
+                    key={layer.id}
+                    icon={layerIcons[layer.type]}
+                    label={layer.title}
+                    isActive={activeItemId === layer.id}
+                    onClick={() => bringToFront(layer.id, 'layer')}
+                />
+            ))}
+          </div>
           <div className="bg-silver border-2 border-r-white border-b-white border-l-neutral-500 border-t-neutral-500 px-2 py-0.5">
              <DigitalClock />
           </div>
