@@ -21,18 +21,43 @@ export type AudioEngineHandle = {
 const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
   const masterLimiter = useRef<Tone.Limiter | null>(null);
   const fxBus = useRef<{ delay: Tone.FeedbackDelay, reverb: Tone.Reverb } | null>(null);
+  const sessionScale = useRef<string[]>([]);
+
+  // Initialize a single scale for the entire session
+  if (typeof window !== 'undefined' && sessionScale.current.length === 0) {
+      const scales = {
+          minorPentatonic: ['C', 'Eb', 'F', 'G', 'Bb'],
+          majorPentatonic: ['C', 'D', 'E', 'G', 'A'],
+          dorian: ['C', 'D', 'Eb', 'F', 'G', 'A', 'Bb'],
+          mixolydian: ['C', 'D', 'E', 'F', 'G', 'A', 'Bb'],
+          egyptian: ['C', 'D', 'F', 'G', 'Bb'],
+      };
+      const scaleKeys = Object.keys(scales);
+      const rootNote = ['C', 'D', 'E', 'F', 'G', 'A', 'B'][Math.floor(Math.random() * 7)];
+      const selectedScaleName = scaleKeys[Math.floor(Math.random() * scaleKeys.length)] as keyof typeof scales;
+      const baseScale = scales[selectedScaleName];
+      
+      const octaves = ['2', '3', '4'];
+      const fullScale: string[] = [];
+      octaves.forEach(octave => {
+          baseScale.forEach(note => {
+              fullScale.push(Tone.Frequency(note + octave).transpose(Tone.Frequency(rootNote).toMidi() - Tone.Frequency('C3').toMidi()).toNote());
+          });
+      });
+      sessionScale.current = fullScale;
+  }
 
   if (typeof window !== 'undefined' && !masterLimiter.current) {
     masterLimiter.current = new Tone.Limiter(-6).toDestination();
     const delay = new Tone.FeedbackDelay({
       delayTime: '4n',
-      feedback: 0.6,
-      wet: 0.8,
+      feedback: 0.5,
+      wet: 0.5,
     });
     const reverb = new Tone.Reverb({
-      decay: 10,
-      preDelay: 0.05,
-      wet: 0.9,
+      decay: 8,
+      preDelay: 0.02,
+      wet: 0.7,
     });
     delay.chain(reverb, masterLimiter.current);
     fxBus.current = { delay, reverb };
@@ -67,22 +92,19 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       Tone.start();
 
       const oscillatorTypes: Tone.ToneOscillatorType[] = [
-        'fatsquare',
-        'fattriangle',
         'fatsine',
-        'square',
-        'triangle',
-        'sine',
+        'fattriangle',
+        'fatsawtooth',
       ];
       const randomOscillatorType =
         oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)];
 
-      const filter = new Tone.Filter(Math.random() * 1500 + 500, 'lowpass').connect(masterLimiter.current);
+      const filter = new Tone.Filter(Math.random() * 1000 + 400, 'lowpass').connect(masterLimiter.current);
 
       const lfoFilter = new Tone.LFO({
         frequency: Math.random() * 0.1 + 0.05,
         min: 200,
-        max: 2500,
+        max: 1500,
       }).connect(filter.frequency).start();
       
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
@@ -92,12 +114,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
           type: randomOscillatorType,
         },
         envelope: {
-          attack: Math.random() * 5 + 3,
-          decay: 0.1,
-          sustain: 0.9,
-          release: Math.random() * 6 + 5,
+          attack: Math.random() * 4 + 4, // Slower attack
+          decay: 0.2,
+          sustain: 0.8,
+          release: Math.random() * 5 + 5, // Slower release
         },
-        volume: -12,
+        volume: -18,
       });
 
       const waveform = new Tone.Waveform(1024);
@@ -105,29 +127,34 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       synth.connect(sendGain);
       synth.connect(waveform);
       
-      const scale = ['C2', 'E2', 'G2', 'A2', 'C3', 'E3', 'G3', 'A3', 'C4', 'E4', 'G4', 'A4'];
+      const scale = sessionScale.current;
+      const getChord = () => {
+          const rootIndex = Math.floor(Math.random() * (scale.length - 4));
+          return [scale[rootIndex], scale[rootIndex+2], scale[rootIndex+4]];
+      }
+
       const notesAndChords = [
-        scale[Math.floor(Math.random() * scale.length)],
-        [scale[0], scale[2], scale[4]],
-        scale[Math.floor(Math.random() * scale.length)],
+        getChord(),
         null,
-        [scale[1], scale[3], scale[5]],
-        scale[Math.floor(Math.random() * scale.length)],
+        getChord(),
+        getChord(),
+        null,
+        getChord(),
         null,
       ];
 
       const sequenceEvents = notesAndChords
         .sort(() => 0.5 - Math.random())
-        .slice(0, Math.floor(Math.random() * 3) + 2);
+        .slice(0, Math.floor(Math.random() * 2) + 2);
 
       const sequence = new Tone.Sequence(
         (time, note) => {
            if (note) {
-            synth.triggerAttackRelease(note, '4m', time);
+            synth.triggerAttackRelease(note, '8m', time);
           }
         },
         sequenceEvents,
-        '2m'
+        '4m' // Longer interval for pads
       );
       
       sequence.loop = true;
@@ -235,58 +262,43 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       Tone.start();
 
       const reverb = new Tone.Reverb({
-        decay: Math.random() * 4 + 1,
-        wet: Math.random() * 0.4 + 0.1,
+        decay: Math.random() * 3 + 2,
+        wet: Math.random() * 0.3 + 0.2,
       });
 
       const delay = new Tone.FeedbackDelay({
-        delayTime: ['8n', '4n', '16n', '8t', '16t'][Math.floor(Math.random() * 5)],
-        feedback: Math.random() * 0.6 + 0.1,
-        wet: Math.random() * 0.5 + 0.1,
+        delayTime: ['8n', '4n.', '16n'][Math.floor(Math.random() * 3)],
+        feedback: Math.random() * 0.4 + 0.2,
+        wet: Math.random() * 0.4 + 0.2,
       }).chain(reverb, masterLimiter.current);
       
-      const lfo = new Tone.LFO({
-        frequency: Math.random() * 0.1 + 0.02,
-        min: 0.1,
-        max: 0.6,
-      }).connect(delay.wet).start();
-
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
 
-      // Create a more diverse set of synths
-      const synthTypes = ['fm', 'am', 'mono', 'default'];
+      const synthTypes = ['fm', 'pluck', 'default'];
       const randomSynthType = synthTypes[Math.floor(Math.random() * synthTypes.length)];
 
       let synth;
       switch (randomSynthType) {
         case 'fm':
           synth = new Tone.PolySynth(Tone.FMSynth, {
-            harmonicity: Math.random() * 2 + 0.5,
-            modulationIndex: Math.random() * 10 + 2,
-            envelope: { attack: 0.01, release: 1.5 },
-            modulationEnvelope: { attack: 0.05, release: 1 },
+            harmonicity: 1.5,
+            modulationIndex: 8,
+            envelope: { attack: 0.01, release: 1 },
+            modulationEnvelope: { attack: 0.05, release: 0.8 },
           });
           break;
-        case 'am':
-          synth = new Tone.PolySynth(Tone.AMSynth, {
-            harmonicity: Math.random() * 2 + 0.5,
-            envelope: { attack: 0.01, release: 1.5 },
-            modulationEnvelope: { attack: 0.05, release: 1 },
-          });
-          break;
-        case 'mono':
-            synth = new Tone.PolySynth(Tone.MonoSynth, {
-                oscillator: { type: "sawtooth" },
-                filter: { Q: Math.random() * 2 + 1 },
-                envelope: { attack: 0.01, release: 1 },
-                filterEnvelope: { attack: 0.02, baseFrequency: 200, octaves: 3 }
+        case 'pluck':
+            synth = new Tone.PolySynth(Tone.PluckSynth, {
+                attackNoise: 0.8,
+                dampening: 3000,
+                resonance: 0.9,
+                release: 1.5,
             });
             break;
         default:
-          const oscillatorTypes: Tone.ToneOscillatorType[] = ['triangle', 'sine', 'sawtooth'];
           synth = new Tone.PolySynth(Tone.Synth, {
-            oscillator: { type: oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)] },
-            envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 1 },
+            oscillator: { type: 'sine' },
+            envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 1 },
           });
           break;
       }
@@ -297,27 +309,13 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       synth.connect(sendGain);
       synth.connect(waveform);
       
-      // More complex scale and pattern generation
-      const scales = {
-        minorPentatonic: ['C3', 'Eb3', 'F3', 'G3', 'Bb3', 'C4', 'Eb4', 'F4', 'G4', 'Bb4'],
-        majorPentatonic: ['C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'D4', 'E4', 'G4', 'A4'],
-        blues: ['C3', 'Eb3', 'F3', 'F#3', 'G3', 'Bb3', 'C4'],
-        chromatic: ['C3', 'C#3', 'D3', 'D#3', 'E3', 'F3', 'F#3', 'G3', 'G#3', 'A3', 'A#3', 'B3']
-      };
-      const scaleKeys = Object.keys(scales);
-      const currentScale = scales[scaleKeys[Math.floor(Math.random() * scaleKeys.length)] as keyof typeof scales];
+      const currentScale = sessionScale.current;
       
-      const noteDurations = ['4n', '8n', '16n', '2n', '1m'];
-      const sequenceLength = Math.floor(Math.random() * 8) + 4;
+      const noteDurations = ['8n', '16n', '4n'];
+      const sequenceLength = Math.floor(Math.random() * 8) + 8;
       const sequenceEvents = Array.from({ length: sequenceLength }, () => {
-        // Add a chance for a rest (null)
-        if (Math.random() < 0.3) {
-            return null;
-        }
-        // Add a chance for a chord
-        if (Math.random() < 0.1) {
-            const rootNoteIndex = Math.floor(Math.random() * (currentScale.length - 2));
-            return [currentScale[rootNoteIndex], currentScale[rootNoteIndex + 2]];
+        if (Math.random() < 0.35) {
+            return null; // Add rests for more musicality
         }
         return currentScale[Math.floor(Math.random() * currentScale.length)];
       });
@@ -326,7 +324,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const sequence = new Tone.Sequence(
         (time, note) => {
           if (note) {
-            synth.triggerAttackRelease(note, '8n', time);
+            const vel = Math.random() * 0.5 + 0.5; // velocity
+            synth.triggerAttackRelease(note, '16n', time, vel);
           }
         },
         sequenceEvents,
@@ -337,7 +336,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       sequence.start(0);
 
       (sequence as any).synth = synth;
-      (sequence as any).lfo = lfo;
       (sequence as any).sendGain = sendGain;
       (sequence as any).waveform = waveform;
 
