@@ -4,12 +4,31 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import * as Tone from 'tone';
 
+export type SynthLayerInfo = {
+  type: 'synth' | 'melodic';
+  description: string;
+};
+
+export type FreesoundLayerInfo = {
+  type: 'freesound';
+  id: number;
+  name: string;
+};
+
 export type AudioEngineHandle = {
-  startSynthLoop: () => Tone.Sequence | null;
+  startSynthLoop: () => {
+    sequence: Tone.Sequence;
+    info: SynthLayerInfo;
+  } | null;
   stopSynthLoop: (synth: Tone.Sequence) => void;
-  startFreesoundLoop: (url: string) => Promise<Tone.Player | null>;
+  startFreesoundLoop: (
+    sound: { id: number; name: string; previewUrl: string }
+  ) => Promise<{ player: Tone.Player; info: FreesoundLayerInfo } | null>;
   stopFreesoundLoop: (player: Tone.Player) => void;
-  startMelodicLoop: () => Tone.Sequence | null;
+  startMelodicLoop: () => {
+    sequence: Tone.Sequence;
+    info: SynthLayerInfo;
+  } | null;
   stopMelodicLoop: (sequence: Tone.Sequence) => void;
   setVolume: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, volume: number) => void;
   setSendAmount: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, amount: number) => void;
@@ -77,25 +96,29 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const randomOscillatorType =
         oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)];
 
-      const filter = new Tone.Filter(Math.random() * 1500 + 500, 'lowpass').connect(masterLimiter.current);
+      const filterFreq = Math.random() * 1500 + 500;
+      const filter = new Tone.Filter(filterFreq, 'lowpass').connect(masterLimiter.current);
 
-      const lfoFilter = new Tone.LFO({
-        frequency: Math.random() * 0.1 + 0.05,
+      const lfoFreq = Math.random() * 0.1 + 0.05;
+      const lfo = new Tone.LFO({
+        frequency: lfoFreq,
         min: 200,
         max: 2500,
       }).connect(filter.frequency).start();
       
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
 
+      const attack = Math.random() * 5 + 3;
+      const release = Math.random() * 6 + 5;
       const synth = new Tone.PolySynth(Tone.Synth, {
         oscillator: {
           type: randomOscillatorType,
         },
         envelope: {
-          attack: Math.random() * 5 + 3,
+          attack: attack,
           decay: 0.1,
           sustain: 0.9,
-          release: Math.random() * 6 + 5,
+          release: release,
         },
         volume: -12,
       });
@@ -134,7 +157,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       sequence.start(0);
 
       (sequence as any).synth = synth;
-      (sequence as any).lfo = lfoFilter;
+      (sequence as any).lfo = lfo;
       (sequence as any).sendGain = sendGain;
       (sequence as any).waveform = waveform;
       
@@ -142,7 +165,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         Tone.Transport.start();
       }
 
-      return sequence;
+      const info: SynthLayerInfo = {
+        type: 'synth',
+        description: `Synth Pad: ${randomOscillatorType} oscillator with an attack of ${attack.toFixed(2)}s and release of ${release.toFixed(2)}s. A low-pass filter at ${filterFreq.toFixed(0)}Hz is modulated by an LFO at ${lfoFreq.toFixed(2)}Hz.`
+      };
+
+      return { sequence, info };
     },
     stopSynthLoop: (sequence) => {
       const synth = (sequence as any).synth;
@@ -162,7 +190,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         sequence.dispose();
       }
     },
-    startFreesoundLoop: async (url) => {
+    startFreesoundLoop: async (sound) => {
       if (!masterLimiter.current || !fxBus.current) return null;
       await Tone.start();
 
@@ -177,7 +205,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
 
       const player = new Tone.Player({
-        url: url,
+        url: sound.previewUrl,
         loop: true,
         fadeOut: 1,
         volume: -12,
@@ -214,8 +242,14 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (Tone.Transport.state !== 'started') {
         Tone.Transport.start();
       }
+      
+      const info: FreesoundLayerInfo = {
+        type: 'freesound',
+        id: sound.id,
+        name: sound.name,
+      };
 
-      return player;
+      return { player, info };
     },
     stopFreesoundLoop: (player) => {
       const lfo = (player as any).lfo;
@@ -234,25 +268,30 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (!masterLimiter.current || !fxBus.current) return null;
       Tone.start();
 
+      const filterFreq = Math.random() * 4000 + 800;
       const filter = new Tone.Filter({
-        frequency: Math.random() * 1000 + 800,
+        frequency: filterFreq,
         type: 'lowpass',
         Q: Math.random() * 2 + 1,
       });
-
+      
+      const lfoFreq = Math.random() * 0.3 + 0.1;
       const lfo = new Tone.LFO({
-        frequency: Math.random() * 0.3 + 0.1,
+        frequency: lfoFreq,
         min: filter.frequency.value * 0.8,
         max: filter.frequency.value * 1.2,
       }).connect(filter.frequency).start();
-
+      
+      const reverbDecay = Math.random() * 4 + 1;
       const reverb = new Tone.Reverb({
-        decay: Math.random() * 4 + 1,
+        decay: reverbDecay,
         wet: Math.random() * 0.4 + 0.1,
       });
 
+      const delayTimeOptions = ['8n', '4n', '16n', '8t', '16t'];
+      const delayTime = delayTimeOptions[Math.floor(Math.random() * delayTimeOptions.length)];
       const delay = new Tone.FeedbackDelay({
-        delayTime: ['8n', '4n', '16n', '8t', '16t'][Math.floor(Math.random() * 5)],
+        delayTime: delayTime,
         feedback: Math.random() * 0.6 + 0.1,
         wet: Math.random() * 0.5 + 0.1,
       }).chain(filter, reverb, masterLimiter.current);
@@ -263,21 +302,27 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const randomSynthType = synthTypes[Math.floor(Math.random() * synthTypes.length)];
 
       let synth;
+      let synthDescription = '';
       switch (randomSynthType) {
         case 'fm':
+          const harmonicity = Math.random() * 2 + 0.5;
+          const modIndex = Math.random() * 10 + 2;
           synth = new Tone.PolySynth(Tone.FMSynth, {
-            harmonicity: Math.random() * 2 + 0.5,
-            modulationIndex: Math.random() * 10 + 2,
+            harmonicity: harmonicity,
+            modulationIndex: modIndex,
             envelope: { attack: 0.01, release: 1.5 },
             modulationEnvelope: { attack: 0.05, release: 1 },
           });
+          synthDescription = `FMSynth (h:${harmonicity.toFixed(1)}, i:${modIndex.toFixed(1)})`;
           break;
         case 'am':
+          const amHarmonicity = Math.random() * 2 + 0.5;
           synth = new Tone.PolySynth(Tone.AMSynth, {
-            harmonicity: Math.random() * 2 + 0.5,
+            harmonicity: amHarmonicity,
             envelope: { attack: 0.01, release: 1.5 },
             modulationEnvelope: { attack: 0.05, release: 1 },
           });
+          synthDescription = `AMSynth (h:${amHarmonicity.toFixed(1)})`;
           break;
         case 'mono':
             synth = new Tone.PolySynth(Tone.MonoSynth, {
@@ -286,6 +331,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
                 envelope: { attack: 0.01, release: 1 },
                 filterEnvelope: { attack: 0.02, baseFrequency: 200, octaves: 3 }
             });
+            synthDescription = `MonoSynth (sawtooth)`;
             break;
         case 'pluck':
             synth = new Tone.PluckSynth({
@@ -293,13 +339,16 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
                 dampening: Math.random() * 1000 + 3000,
                 resonance: Math.random() * 0.2 + 0.7,
             });
+            synthDescription = `PluckSynth`;
             break;
         default:
           const oscillatorTypes: Tone.ToneOscillatorType[] = ['triangle', 'sine', 'sawtooth'];
+          const oscType = oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)];
           synth = new Tone.PolySynth(Tone.Synth, {
-            oscillator: { type: oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)] },
+            oscillator: { type: oscType },
             envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 1 },
           });
+          synthDescription = `Synth (${oscType})`;
           break;
       }
       synth.volume.value = -18;
@@ -316,7 +365,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         chromatic: ['C3', 'C#3', 'D3', 'D#3', 'E3', 'F3', 'F#3', 'G3', 'G#3', 'A3', 'A#3', 'B3']
       };
       const scaleKeys = Object.keys(scales);
-      const currentScale = scales[scaleKeys[Math.floor(Math.random() * scaleKeys.length)] as keyof typeof scales];
+      const scaleName = scaleKeys[Math.floor(Math.random() * scaleKeys.length)] as keyof typeof scales;
+      const currentScale = scales[scaleName];
       
       const noteDurations = ['4n', '8n', '16n', '2n', '1m'];
       const sequenceLength = Math.floor(Math.random() * 8) + 4;
@@ -360,7 +410,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         Tone.Transport.start();
       }
 
-      return sequence;
+      const info: SynthLayerInfo = {
+        type: 'melodic',
+        description: `${synthDescription} playing ${scaleName} scale. Filter at ${filterFreq.toFixed(0)}Hz modulated by LFO at ${lfoFreq.toFixed(2)}Hz. Delay at ${delayTime}, Reverb decay ${reverbDecay.toFixed(1)}s.`
+      };
+
+      return { sequence, info };
     },
     stopMelodicLoop: (sequence) => {
       const synth = (sequence as any).synth;

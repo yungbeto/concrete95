@@ -3,9 +3,15 @@
 // The base URL for our app, used for the proxy
 const APP_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
 
+export type FreesoundSound = {
+  id: number;
+  name: string;
+  previewUrl: string;
+};
+
 export async function searchFreesound(
   query: string
-): Promise<string[] | {error: string}> {
+): Promise<FreesoundSound[] | {error: string}> {
   try {
     const response = await fetch(`${APP_BASE_URL}/api/freesound-proxy?query=${query}`, {
       cache: 'no-store', // Ensure we get fresh results

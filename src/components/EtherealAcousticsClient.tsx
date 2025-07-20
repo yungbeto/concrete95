@@ -6,9 +6,11 @@ import * as Tone from 'tone';
 import sillyname from 'sillyname';
 import AudioEngine, {
   type AudioEngineHandle,
+  type FreesoundLayerInfo,
+  type SynthLayerInfo,
 } from '@/components/AudioEngine';
 import SoundscapeController from '@/components/SoundscapeController';
-import { searchFreesound } from '@/actions/freesound';
+import { searchFreesound, type FreesoundSound } from '@/actions/freesound';
 import { useToast } from '@/hooks/use-toast';
 import LayerCard from '@/components/LayerCard';
 import { Info, Music, Waves, Zap, type LucideIcon } from 'lucide-react';
@@ -16,6 +18,8 @@ import { Button } from '@/components/ui/button';
 import DesktopIcon from './DesktopIcon';
 import InfoWindow from './InfoWindow';
 import TaskbarItem from './TaskbarItem';
+
+type LayerInfo = FreesoundLayerInfo | SynthLayerInfo;
 
 type Layer = {
   id: string;
@@ -28,6 +32,7 @@ type Layer = {
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
+  info?: LayerInfo;
 };
 
 type WindowState = {
@@ -199,15 +204,15 @@ export default function EtherealAcousticsClient() {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('synth', { volume: -12 });
 
-    const newSynthLoop = audioEngineRef.current.startSynthLoop();
-    if (!newSynthLoop) {
+    const newSynthData = audioEngineRef.current.startSynthLoop();
+    if (!newSynthData) {
       handleRemoveLayer(id);
       return;
     }
 
     setLayers((prevLayers) =>
       prevLayers.map((l) =>
-        l.id === id ? { ...l, node: newSynthLoop, status: 'playing' } : l
+        l.id === id ? { ...l, node: newSynthData.sequence, info: newSynthData.info, status: 'playing' } : l
       )
     );
   };
@@ -216,33 +221,33 @@ export default function EtherealAcousticsClient() {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('freesound', { volume: -12, playbackRate: 1 });
 
-    const soundUrls = await searchFreesound('');
+    const sounds = await searchFreesound('');
 
-    if ('error' in soundUrls || soundUrls.length === 0) {
+    if ('error' in sounds || sounds.length === 0) {
       toast({
         variant: 'destructive',
         title: 'Freesound Error',
-        description: 'error' in soundUrls ? soundUrls.error : `No sounds found.`,
+        description: 'error' in sounds ? sounds.error : `No sounds found.`,
       });
       handleRemoveLayer(id);
       return;
     }
 
-    const randomSoundUrl =
-      soundUrls[Math.floor(Math.random() * soundUrls.length)];
+    const randomSound =
+      sounds[Math.floor(Math.random() * sounds.length)];
 
 
-    const newPlayer =
-      await audioEngineRef.current.startFreesoundLoop(randomSoundUrl);
+    const newPlayerData =
+      await audioEngineRef.current.startFreesoundLoop(randomSound);
 
-    if (!newPlayer) {
+    if (!newPlayerData) {
       handleRemoveLayer(id);
       return;
     }
 
     setLayers((prevLayers) =>
       prevLayers.map((l) =>
-        l.id === id ? { ...l, node: newPlayer, status: 'playing' } : l
+        l.id === id ? { ...l, node: newPlayerData.player, info: newPlayerData.info, status: 'playing' } : l
       )
     );
   };
@@ -251,15 +256,15 @@ export default function EtherealAcousticsClient() {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('melodic', { volume: -15 });
 
-    const newSequence = audioEngineRef.current.startMelodicLoop();
-    if (!newSequence) {
+    const newMelodicData = audioEngineRef.current.startMelodicLoop();
+    if (!newMelodicData) {
       handleRemoveLayer(id);
       return;
     }
 
     setLayers((prevLayers) =>
       prevLayers.map((l) =>
-        l.id === id ? { ...l, node: newSequence, status: 'playing' } : l
+        l.id === id ? { ...l, node: newMelodicData.sequence, info: newMelodicData.info, status: 'playing' } : l
       )
     );
   };
@@ -411,6 +416,7 @@ export default function EtherealAcousticsClient() {
               playbackRate={layer.playbackRate}
               audioEngineRef={audioEngineRef}
               node={layer.node}
+              info={layer.info}
               onRemove={handleRemoveLayer}
               onVolumeChange={handleVolumeChange}
               onSendChange={handleSendChange}

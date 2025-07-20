@@ -4,22 +4,25 @@
 import { Button } from '@/components/ui/button';
 import { X, Zap, Waves, Music } from 'lucide-react';
 import LayerMenuBar from './LayerMenuBar';
-import { type AudioEngineHandle } from './AudioEngine';
+import { type AudioEngineHandle, type FreesoundLayerInfo, type SynthLayerInfo } from './AudioEngine';
 import * as Tone from 'tone';
 import { useRef, useEffect } from 'react';
+
+type LayerInfo = FreesoundLayerInfo | SynthLayerInfo;
 
 interface LayerCardProps {
   id: string;
   title: string;
   volume: number;
   send: number;
-  status: 'loading' | 'loaded';
+  status: 'loading' | 'playing' | 'stopped';
   type: 'synth' | 'freesound' | 'melodic';
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
   audioEngineRef: React.RefObject<AudioEngineHandle>;
   node: Tone.Player | Tone.Sequence | null;
+  info?: LayerInfo;
   onRemove: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
   onSendChange: (id: string, send: number) => void;
@@ -121,6 +124,7 @@ export default function LayerCard({
   playbackRate,
   audioEngineRef,
   node,
+  info,
   onRemove,
   onVolumeChange,
   onSendChange,
@@ -170,6 +174,7 @@ export default function LayerCard({
                 volume={volume}
                 send={send}
                 playbackRate={playbackRate}
+                info={info}
                 onVolumeChange={(value) => onVolumeChange(id, value)}
                 onSendChange={(value) => onSendChange(id, value)}
                 onPlaybackRateChange={(value) => onPlaybackRateChange(id, value)}

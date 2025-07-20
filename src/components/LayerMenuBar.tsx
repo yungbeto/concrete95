@@ -9,12 +9,16 @@ import {
   MenubarTrigger,
 } from "@/components/ui/menubar";
 import { Slider } from './ui/slider';
+import type { FreesoundLayerInfo, SynthLayerInfo } from './AudioEngine';
+
+type LayerInfo = FreesoundLayerInfo | SynthLayerInfo;
 
 interface LayerMenuBarProps {
   type: 'synth' | 'freesound' | 'melodic';
   volume: number;
   send: number;
   playbackRate?: number;
+  info?: LayerInfo;
   onVolumeChange: (volume: number) => void;
   onSendChange: (send: number) => void;
   onPlaybackRateChange: (rate: number) => void;
@@ -25,6 +29,7 @@ export default function LayerMenuBar({
   volume,
   send,
   playbackRate,
+  info,
   onVolumeChange,
   onSendChange,
   onPlaybackRateChange,
@@ -33,10 +38,44 @@ export default function LayerMenuBar({
   const handleMenuClick = (e: React.MouseEvent) => {
     e.stopPropagation();
   };
+
+  const renderInfo = () => {
+    if (!info) return <p className="text-xs italic">No info available.</p>;
+
+    if (info.type === 'freesound') {
+      return (
+        <a
+          href={`https://freesound.org/s/${info.id}/`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-blue-600 underline hover:text-blue-800"
+          onClick={(e) => e.stopPropagation()} // Prevent menu from closing
+        >
+          {info.name}
+        </a>
+      );
+    }
+    
+    if (info.type === 'synth' || info.type === 'melodic') {
+      return <p className="text-xs">{info.description}</p>;
+    }
+    
+    return null;
+  };
   
   return (
     <div className="bg-silver text-black p-0 h-auto">
         <Menubar className="bg-transparent border-none p-0 h-auto" onMouseDown={handleMenuClick}>
+           <MenubarMenu>
+             <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto ">Info</MenubarTrigger>
+            <MenubarContent>
+              <MenubarItem onSelect={(e) => e.preventDefault()}>
+                <div className="w-64 text-black">
+                  {renderInfo()}
+                </div>
+              </MenubarItem>
+            </MenubarContent>
+          </MenubarMenu>
           <MenubarMenu>
             <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto ">Effects</MenubarTrigger>
             <MenubarContent>

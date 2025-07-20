@@ -28,9 +28,13 @@ export async function GET(request: Request) {
     const data = await response.json();
 
     // We only need the preview URL
-    const soundUrls = data.results.map((sound: any) => sound.previews['preview-hq-mp3']);
+    const sounds = data.results.map((sound: any) => ({
+      id: sound.id,
+      name: sound.name,
+      previewUrl: sound.previews['preview-hq-mp3'],
+    }));
 
-    return NextResponse.json(soundUrls);
+    return NextResponse.json(sounds);
   } catch (error) {
     console.error(error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
