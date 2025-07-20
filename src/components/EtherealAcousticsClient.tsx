@@ -390,7 +390,7 @@ export default function EtherealAcousticsClient() {
       <AudioEngine ref={audioEngineRef} />
 
       <main className="flex-grow blueprint-grid relative">
-        <div className="absolute top-4 left-4">
+        <div className="absolute top-4 left-4 z-10">
             <DesktopIcon
                 imageUrl="https://i.imgur.com/n1zJ3Fh.png"
                 label="About This App"
