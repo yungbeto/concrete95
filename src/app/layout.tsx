@@ -3,32 +3,32 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
-const siteUrl = 'https://ethereal-acoustics.web.app';
+const siteUrl = 'https://concrete95.web.app';
 const ogImageUrl = `${siteUrl}/og-image.png`;
 
 export const metadata: Metadata = {
-  title: 'Ethereal Acoustics',
-  description: 'Generate ambient soundscapes with AI.',
+  title: 'Concrete 95',
+  description: 'An experimental audio environment.',
   metadataBase: new URL(siteUrl),
   openGraph: {
     type: 'website',
     url: siteUrl,
-    title: 'Ethereal Acoustics',
-    description: 'Generate ambient soundscapes with AI.',
+    title: 'Concrete 95',
+    description: 'An experimental audio environment.',
     images: [
       {
         url: ogImageUrl,
         width: 1200,
         height: 630,
-        alt: 'Ethereal Acoustics - Generate ambient soundscapes with AI.',
+        alt: 'Concrete 95 - An experimental audio environment.',
       },
     ],
-    siteName: 'Ethereal Acoustics',
+    siteName: 'Concrete 95',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Ethereal Acoustics',
-    description: 'Generate ambient soundscapes with AI.',
+    title: 'Concrete 95',
+    description: 'An experimental audio environment.',
     images: [ogImageUrl],
   },
 };
