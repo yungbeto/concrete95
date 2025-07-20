@@ -262,15 +262,15 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       Tone.start();
 
       // --- STABLE SYNTH AND FX SETUP ---
-      // Using a simple, stable synth configuration to prevent crashes.
-      const synth = new Tone.PolySynth(Tone.MonoSynth, {
-        oscillator: { type: 'sawtooth' },
-        envelope: { attack: 0.01, release: 0.8 },
-        filterEnvelope: { attack: 0.05, decay: 0.2, sustain: 0.5, release: 1, baseFrequency: 200, octaves: 4 }
+      const synth = new Tone.PolySynth(Tone.FMSynth, {
+          harmonicity: 1.2,
+          modulationIndex: 10,
+          envelope: { attack: 0.01, release: 0.5 },
+          modulation: { type: 'square' },
+          modulationEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.5 }
       });
       synth.volume.value = -18;
       
-      // Connect directly to master and shared FX bus
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
       const waveform = new Tone.Waveform(1024);
       
@@ -295,7 +295,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
           }
         },
         sequenceEvents,
-        ['8n', '4n', '16n'][Math.floor(Math.random()*3)]
+        '8n' // Use a stable, slower subdivision
       );
 
       sequence.loop = true;
