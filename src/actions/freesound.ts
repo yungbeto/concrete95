@@ -1,8 +1,5 @@
 'use server';
 
-// The base URL for our app, used for the proxy
-const APP_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
-
 export type FreesoundSound = {
   id: number;
   name: string;
@@ -13,7 +10,15 @@ export async function searchFreesound(
   query: string
 ): Promise<FreesoundSound[] | {error: string}> {
   try {
-    const response = await fetch(`${APP_BASE_URL}/api/freesound-proxy?query=${query}`, {
+    // Construct an absolute URL for the API proxy route.
+    // This is necessary because server actions may run in a different context.
+    const baseUrl = process.env.NEXT_PUBLIC_VERCEL_URL
+      ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+      : 'http://localhost:3000';
+    const proxyUrl = new URL('/api/freesound-proxy', baseUrl);
+    proxyUrl.searchParams.append('query', query);
+
+    const response = await fetch(proxyUrl.toString(), {
       cache: 'no-store', // Ensure we get fresh results
     });
 
