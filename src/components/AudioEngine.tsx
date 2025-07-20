@@ -290,7 +290,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         case 'pluck':
             synth = new Tone.PolySynth(Tone.PluckSynth, {
                 attackNoise: 0.8,
-                dampening: 3000,
                 resonance: 0.9,
                 release: 1.5,
             });
@@ -325,7 +324,11 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         (time, note) => {
           if (note) {
             const vel = Math.random() * 0.5 + 0.5; // velocity
-            synth.triggerAttackRelease(note, '16n', time, vel);
+            if (randomSynthType === 'pluck') {
+                synth.triggerAttackRelease(note, '16n', time);
+            } else {
+                synth.triggerAttackRelease(note, '16n', time, vel);
+            }
           }
         },
         sequenceEvents,
