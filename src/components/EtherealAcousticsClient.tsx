@@ -490,7 +490,7 @@ export default function EtherealAcousticsClient() {
                 />
             ))}
           </div>
-          <div className="bg-silver border-2 border-r-white border-b-white border-l-neutral-500 border-t-neutral-500 px-2 py-0.5 shrink-0">
+          <div className="bg-silver border-2 border-r-white border-b-white border-l-neutral-500 border-t-neutral-500 px-2 h-8 flex items-center shrink-0">
              <DigitalClock />
           </div>
       </footer>
