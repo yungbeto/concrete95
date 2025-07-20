@@ -92,7 +92,7 @@ export default function EtherealAcousticsClient() {
             Welcome to Concrete 95, a tool for random audio explorations. Everything is musique. 
           </p>
           <p>
-            This app was built by <a href="http://robysaavedra.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-700">
+            This app was built by <a href="http://robysaavedra.com" target="_blank" rel="noopener noreferrer" className="cursor-pointer text-blue-600 underline hover:text-blue-700">
             Roby Saavedra</a>, a really cool software designer who lives in fabulous Emeryville, CA. 
             
           </p>
