@@ -18,9 +18,6 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  env: {
-    FREESOUND_API_KEY: process.env.FREESOUND_API_KEY,
-  },
 };
 
 export default nextConfig;

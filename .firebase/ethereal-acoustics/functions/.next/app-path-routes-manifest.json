@@ -1,6 +1,6 @@
 {
+  "/favicon.ico/route": "/favicon.ico",
   "/_not-found/page": "/_not-found",
   "/api/freesound-proxy/route": "/api/freesound-proxy",
-  "/favicon.ico/route": "/favicon.ico",
   "/page": "/"
 }

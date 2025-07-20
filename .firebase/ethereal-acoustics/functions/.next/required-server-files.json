@@ -1,7 +1,9 @@
 {
   "version": 1,
   "config": {
-    "env": {},
+    "env": {
+      "FREESOUND_API_KEY": "kGI1moFvyJQM4oT4y84oKLScYUFE3ekPmZBeFM1D"
+    },
     "webpack": null,
     "eslint": {
       "ignoreDuringBuilds": true
