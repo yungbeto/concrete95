@@ -24,7 +24,7 @@ type Layer = {
   send: number;
   node: Tone.Player | Tone.Sequence | null;
   type: 'freesound' | 'synth' | 'melodic';
-  status: 'loading' | 'loaded' | 'playing' | 'stopped';
+  status: 'loading' | 'playing' | 'stopped';
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
@@ -490,7 +490,7 @@ export default function EtherealAcousticsClient() {
                 />
             ))}
           </div>
-          <div className="bg-silver border-2 border-r-white border-b-white border-l-neutral-500 border-t-neutral-500 px-2 py-0.5">
+          <div className="bg-silver border-2 border-r-white border-b-white border-l-neutral-500 border-t-neutral-500 px-2 py-0.5 shrink-0">
              <DigitalClock />
           </div>
       </footer>
