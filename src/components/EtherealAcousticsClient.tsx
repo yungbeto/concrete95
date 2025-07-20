@@ -20,8 +20,8 @@ import { Button } from '@/components/ui/button';
 import DesktopIcon from './DesktopIcon';
 import InfoWindow from './InfoWindow';
 import TaskbarItem from './TaskbarItem';
-import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 type LayerInfo = FreesoundLayerInfo | SynthLayerInfo;
 
@@ -120,14 +120,18 @@ export default function EtherealAcousticsClient() {
           <div className="text-black space-y-4 text-sm">
             <h3 className="font-bold">Global Scale</h3>
             <p className="text-xs">Set the musical scale for all new synth and melodic layers.</p>
-            <RadioGroup value={globalScale} onValueChange={(value) => setGlobalScale(value as ScaleName)}>
-                {scaleNames.map(name => (
-                    <div key={name} className="flex items-center space-x-2">
-                        <RadioGroupItem value={name} id={`scale-${name}`} />
-                        <Label htmlFor={`scale-${name}`}>{name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}</Label>
-                    </div>
-                ))}
-            </RadioGroup>
+            <Select value={globalScale} onValueChange={(value) => setGlobalScale(value as ScaleName)}>
+                <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a scale" />
+                </SelectTrigger>
+                <SelectContent>
+                    {scaleNames.map(name => (
+                        <SelectItem key={name} value={name}>
+                            {name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
           </div>
         ),
         isOpen: false,
@@ -302,23 +306,27 @@ export default function EtherealAcousticsClient() {
     if (type === 'layer') {
         item = layers.find(l => l.id === id);
     } else {
-        // Need to find the window and update its content if it's the settings window
         const win = windows.find(w => w.id === id);
         if (win?.id === 'settings') {
-            setWindows(prev => prev.map(w => w.id === 'settings' ? { ...w, content: (
-                <div className="text-black space-y-4 text-sm">
-                    <h3 className="font-bold">Global Scale</h3>
-                    <p className="text-xs">Set the musical scale for all new synth and melodic layers.</p>
-                    <RadioGroup value={globalScale} onValueChange={(value) => setGlobalScale(value as ScaleName)}>
-                        {scaleNames.map(name => (
-                            <div key={name} className="flex items-center space-x-2">
-                                <RadioGroupItem value={name} id={`scale-${name}`} />
-                                <Label htmlFor={`scale-${name}`}>{name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}</Label>
-                            </div>
-                        ))}
-                    </RadioGroup>
-                  </div>
-            )} : w));
+            const newContent = (
+              <div className="text-black space-y-4 text-sm">
+                <h3 className="font-bold">Global Scale</h3>
+                <p className="text-xs">Set the musical scale for all new synth and melodic layers.</p>
+                <Select value={globalScale} onValueChange={(value) => setGlobalScale(value as ScaleName)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a scale" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {scaleNames.map(name => (
+                      <SelectItem key={name} value={name}>
+                        {name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            );
+            setWindows(prev => prev.map(w => w.id === 'settings' ? { ...w, content: newContent } : w));
         }
         item = win;
     }
