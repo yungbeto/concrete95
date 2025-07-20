@@ -65,7 +65,7 @@ export default function SoundscapeController({
     <div className="z-10">
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
-          <Button variant="start" size="sm">
+          <Button variant="start" size="sm" className="h-8">
             <StartIcon />
             <span className="font-bold">Start</span>
           </Button>

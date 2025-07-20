@@ -470,7 +470,7 @@ export default function EtherealAcousticsClient() {
             canAddLayer={layers.length < MAX_LAYERS}
             hasLayers={layers.length > 0}
           />
-          <div className="flex-grow flex items-center gap-1 mx-2 overflow-hidden">
+          <div className="flex-grow flex items-center gap-1 mx-1 overflow-hidden">
             {windows.filter(w => w.isOpen).map(win => (
                 <TaskbarItem 
                     key={win.id}
