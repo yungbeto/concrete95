@@ -89,15 +89,17 @@ export default function EtherealAcousticsClient() {
       content: (
         <div className="text-black space-y-2 text-sm">
           <p>
-            Welcome to Concrete 95, your personal AI-driven soundscape
-            generator.
+            Welcome to Concrete 95.
           </p>
           <p>
-            Create rich, evolving audio environments by layering synth pads,
-            melodic loops, and unique sounds from Freesound.org. Drag and drop
-            layers, tweak their properties, and let the AI surprise you.
+            Create audio environments by layering synth pads,
+            melodic loops, and captured samples from Freesound.org.
           </p>
-          <p>Built with Next.js, Tone.js, and Genkit.</p>
+          <p>
+            This app was built by <a href="http://robysaavedra.com" target="_blank" rel="noopener noreferrer">
+            Roby Saavedra
+            </a>
+          </p>
         </div>
       ),
       isOpen: false,
@@ -438,7 +440,7 @@ export default function EtherealAcousticsClient() {
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
               <div className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans">
                 <div className="bg-blue-800 text-white flex items-center p-1">
-                  <span className="font-bold text-sm select-none">Concrete 95</span>
+                  <span className="font-bold text-sm select-none">Welcome to Concrete 95!</span>
                 </div>
                 <div className="p-4 flex flex-col items-center gap-4 text-black">
                     <div className="flex items-start gap-4 self-stretch">
