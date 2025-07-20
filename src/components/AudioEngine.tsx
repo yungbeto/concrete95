@@ -275,10 +275,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
 
       const synth = new Tone.PolySynth(Tone.FMSynth, {
-        harmonicity: Math.random() * 2 + 1,
-        modulationIndex: Math.random() * 10 + 5,
-        envelope: { attack: 0.01, release: 1.5 },
-        modulationEnvelope: { attack: 0.05, release: 1 },
+          harmonicity: 1.5,
+          modulationIndex: 8,
+          envelope: { attack: 0.01, release: 1 },
+          modulationEnvelope: { attack: 0.05, release: 0.5 },
       });
       synth.volume.value = -18;
       
