@@ -387,6 +387,14 @@ export default function EtherealAcousticsClient() {
             </Select>
         </Fieldset>
 
+        {layers.length > 0 && (
+            <Fieldset label="Warning" variant="warning">
+                <p className="text-xs">
+                    Changing the scale only affects new layers. For a consistent soundscape, please Stop All layers and start fresh.
+                </p>
+            </Fieldset>
+        )}
+
         <Fieldset label="Master Delay">
             <p className="text-xs mb-2">Feedback: {delayFeedback.toFixed(2)}</p>
             <Slider
@@ -408,14 +416,6 @@ export default function EtherealAcousticsClient() {
                 onValueChange={(value) => handleReverbDecayChange(value[0])}
             />
         </Fieldset>
-        
-        {layers.length > 0 && (
-            <Fieldset label="Warning" variant="warning">
-                <p className="text-xs">
-                    Changing the scale only affects new layers. For a consistent soundscape, please Stop All layers and start fresh.
-                </p>
-            </Fieldset>
-        )}
       </div>
     );
     setWindows(prev => prev.map(w => w.id === 'settings' ? { ...w, content: newSettingsContent } : w));
