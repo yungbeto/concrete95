@@ -240,7 +240,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       });
 
       const delay = new Tone.FeedbackDelay({
-        delayTime: ['8n', '4n', '16n'][Math.floor(Math.random() * 3)],
+        delayTime: ['8n', '4n', '16n', '8t', '16t'][Math.floor(Math.random() * 5)],
         feedback: Math.random() * 0.6 + 0.1,
         wet: Math.random() * 0.5 + 0.1,
       }).chain(reverb, masterLimiter.current);
@@ -253,41 +253,84 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
 
-      const synth = new Tone.PolySynth(Tone.Synth, {
-          volume: -15,
-          oscillator: { type: 'sine' },
-          envelope: {
-              attack: 0.01,
-              decay: 0.1,
-              sustain: 0.5,
-              release: 1,
-          },
-      });
+      // Create a more diverse set of synths
+      const synthTypes = ['fm', 'am', 'mono', 'default'];
+      const randomSynthType = synthTypes[Math.floor(Math.random() * synthTypes.length)];
+
+      let synth;
+      switch (randomSynthType) {
+        case 'fm':
+          synth = new Tone.PolySynth(Tone.FMSynth, {
+            harmonicity: Math.random() * 2 + 0.5,
+            modulationIndex: Math.random() * 10 + 2,
+            envelope: { attack: 0.01, release: 1.5 },
+            modulationEnvelope: { attack: 0.05, release: 1 },
+          });
+          break;
+        case 'am':
+          synth = new Tone.PolySynth(Tone.AMSynth, {
+            harmonicity: Math.random() * 2 + 0.5,
+            envelope: { attack: 0.01, release: 1.5 },
+            modulationEnvelope: { attack: 0.05, release: 1 },
+          });
+          break;
+        case 'mono':
+            synth = new Tone.PolySynth(Tone.MonoSynth, {
+                oscillator: { type: "sawtooth" },
+                filter: { Q: Math.random() * 2 + 1 },
+                envelope: { attack: 0.01, release: 1 },
+                filterEnvelope: { attack: 0.02, baseFrequency: 200, octaves: 3 }
+            });
+            break;
+        default:
+          const oscillatorTypes: Tone.ToneOscillatorType[] = ['triangle', 'sine', 'sawtooth'];
+          synth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)] },
+            envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 1 },
+          });
+          break;
+      }
+      synth.volume.value = -18;
       
       const waveform = new Tone.Waveform(1024);
       synth.connect(delay);
       synth.connect(sendGain);
       synth.connect(waveform);
       
-      const scale = ['C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'D4', 'E4', 'G4', 'A4', 'C5', 'D5', 'E5'];
-      const noteDurations = ['2n', '1m', '4n'];
+      // More complex scale and pattern generation
+      const scales = {
+        minorPentatonic: ['C3', 'Eb3', 'F3', 'G3', 'Bb3', 'C4', 'Eb4', 'F4', 'G4', 'Bb4'],
+        majorPentatonic: ['C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'D4', 'E4', 'G4', 'A4'],
+        blues: ['C3', 'Eb3', 'F3', 'F#3', 'G3', 'Bb3', 'C4'],
+        chromatic: ['C3', 'C#3', 'D3', 'D#3', 'E3', 'F3', 'F#3', 'G3', 'G#3', 'A3', 'A#3', 'B3']
+      };
+      const scaleKeys = Object.keys(scales);
+      const currentScale = scales[scaleKeys[Math.floor(Math.random() * scaleKeys.length)] as keyof typeof scales];
+      
+      const noteDurations = ['4n', '8n', '16n', '2n', '1m'];
+      const sequenceLength = Math.floor(Math.random() * 8) + 4;
+      const sequenceEvents = Array.from({ length: sequenceLength }, () => {
+        // Add a chance for a rest (null)
+        if (Math.random() < 0.3) {
+            return null;
+        }
+        // Add a chance for a chord
+        if (Math.random() < 0.1) {
+            const rootNoteIndex = Math.floor(Math.random() * (currentScale.length - 2));
+            return [currentScale[rootNoteIndex], currentScale[rootNoteIndex + 2]];
+        }
+        return currentScale[Math.floor(Math.random() * currentScale.length)];
+      });
+      const sequenceInterval = noteDurations[Math.floor(Math.random() * noteDurations.length)];
 
       const sequence = new Tone.Sequence(
         (time, note) => {
-          synth.triggerAttackRelease(note, '8n', time);
+          if (note) {
+            synth.triggerAttackRelease(note, '8n', time);
+          }
         },
-        [
-          scale[Math.floor(Math.random() * scale.length)],
-          null,
-          scale[Math.floor(Math.random() * scale.length)],
-          [
-            scale[Math.floor(Math.random() * scale.length)],
-            scale[Math.floor(Math.random() * scale.length)],
-          ],
-          null,
-          scale[Math.floor(Math.random() * scale.length)],
-        ],
-        noteDurations[Math.floor(Math.random() * noteDurations.length)]
+        sequenceEvents,
+        sequenceInterval
       );
 
       sequence.loop = true;

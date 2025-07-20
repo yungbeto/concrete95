@@ -89,16 +89,12 @@ export default function EtherealAcousticsClient() {
       content: (
         <div className="text-black space-y-2 text-sm">
           <p>
-            Welcome to Concrete 95.
+            Welcome to Concrete 95, a tool for random audio explorations. Everything is musique. 
           </p>
           <p>
-            Create audio environments by layering synth pads,
-            melodic loops, and captured samples from Freesound.org.
-          </p>
-          <p>
-            This app was built by <a href="http://robysaavedra.com" target="_blank" rel="noopener noreferrer">
-            Roby Saavedra
-            </a>
+            This app was built by <a href="http://robysaavedra.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-700">
+            Roby Saavedra</a>, a really cool software designer who lives in fabulous Emeryville, CA. 
+            
           </p>
         </div>
       ),
@@ -395,7 +391,7 @@ export default function EtherealAcousticsClient() {
         <div className="absolute top-4 left-4 z-10">
             <DesktopIcon
                 imageUrl="https://d2w9rnfcy7mm78.cloudfront.net/38224701/original_cb679aaf35964f18383c8236e22de27f.png?1752976331?bc=0"
-                label="About This App"
+                label="Readme.info"
                 onClick={() => openWindow('about')}
             />
         </div>
