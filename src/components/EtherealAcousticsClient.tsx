@@ -59,6 +59,7 @@ type DragState = {
 } | null;
 
 const MAX_LAYERS = 8;
+const DESKTOP_ICON_Z_INDEX = 10;
 
 const generateRandomName = () => {
     const name = sillyname();
@@ -140,7 +141,7 @@ export default function EtherealAcousticsClient() {
   ]);
 
   const allItems = [...layers, ...windows.filter(w => w.isOpen)];
-  const maxZIndex = Math.max(...allItems.map(item => item.zIndex), 0);
+  const maxZIndex = Math.max(DESKTOP_ICON_Z_INDEX, ...allItems.map(item => item.zIndex), 0);
   const activeItemId = allItems.find(item => item.zIndex === maxZIndex)?.id;
 
 
@@ -167,7 +168,7 @@ export default function EtherealAcousticsClient() {
   }, []);
 
   const bringToFront = (id: string, type: 'layer' | 'window') => {
-    const currentMaxZ = Math.max(...layers.map(l => l.zIndex), ...windows.map(w => w.zIndex), 0);
+    const currentMaxZ = Math.max(DESKTOP_ICON_Z_INDEX, ...layers.map(l => l.zIndex), ...windows.map(w => w.zIndex), 0);
 
     if (type === 'layer') {
       setLayers(prev => prev.map(l => l.id === id ? { ...l, zIndex: currentMaxZ + 1 } : l));
@@ -512,7 +513,7 @@ export default function EtherealAcousticsClient() {
       <AudioEngine ref={audioEngineRef} />
 
       <main className="flex-grow blueprint-grid relative">
-        <div className="absolute top-4 left-4 z-10 flex gap-2">
+        <div className="absolute top-4 left-4 flex gap-2" style={{zIndex: DESKTOP_ICON_Z_INDEX}}>
             <DesktopIcon
                 imageUrl="/concreteicon.png"
                 label="Readme.info"
