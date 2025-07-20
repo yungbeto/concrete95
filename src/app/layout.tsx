@@ -3,6 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+const ogImageUrl = `${siteUrl}/og-image.png`;
 
 export const metadata: Metadata = {
   title: 'Concrete 95',
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
     description: 'Everything is musique.',
     images: [
       {
-        url: 'https://placehold.co/1200x630.png',
+        url: ogImageUrl,
         width: 1200,
         height: 630,
         alt: 'Concrete 95 - Everything is musique.',
@@ -27,7 +28,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Concrete 95',
     description: 'Everything is musique.',
-    images: ['https://placehold.co/1200x630.png'],
+    images: [ogImageUrl],
   },
 };
 
