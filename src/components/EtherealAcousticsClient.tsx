@@ -96,6 +96,13 @@ export default function EtherealAcousticsClient() {
   const [globalScale, setGlobalScale] = useState<ScaleName>('major');
   const [delayFeedback, setDelayFeedback] = useState(0.6);
   const [reverbDecay, setReverbDecay] = useState(10);
+  const [globalBPM, setGlobalBPM] = useState(120);
+
+  useEffect(() => {
+    if (audioEngineRef.current) {
+        setGlobalBPM(audioEngineRef.current.getBPM());
+    }
+  }, []);
 
 
   const [windows, setWindows] = useState<WindowState[]>([
@@ -367,6 +374,11 @@ export default function EtherealAcousticsClient() {
     setReverbDecay(value);
     audioEngineRef.current?.setReverbDecay(value);
   };
+  
+  const handleBPMChange = (value: number) => {
+    setGlobalBPM(value);
+    audioEngineRef.current?.setBPM(value);
+  }
 
   useEffect(() => {
     const newSettingsContent = (
@@ -394,6 +406,17 @@ export default function EtherealAcousticsClient() {
                 </p>
             </Fieldset>
         )}
+        
+        <Fieldset label="Master Tempo">
+            <p className="text-xs mb-2">BPM: {globalBPM.toFixed(0)}</p>
+            <Slider
+                defaultValue={[globalBPM]}
+                max={180}
+                min={40}
+                step={1}
+                onValueChange={(value) => handleBPMChange(value[0])}
+            />
+        </Fieldset>
 
         <Fieldset label="Master Delay">
             <p className="text-xs mb-2">Feedback: {delayFeedback.toFixed(2)}</p>
@@ -420,7 +443,7 @@ export default function EtherealAcousticsClient() {
     );
     setWindows(prev => prev.map(w => w.id === 'settings' ? { ...w, content: newSettingsContent } : w));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [globalScale, layers.length, delayFeedback, reverbDecay]);
+  }, [globalScale, layers.length, delayFeedback, reverbDecay, globalBPM]);
 
   const handleRemoveAllLayers = () => {
     if (!audioEngineRef.current) return;

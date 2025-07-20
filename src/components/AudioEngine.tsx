@@ -52,6 +52,8 @@ export type AudioEngineHandle = {
   setPlaybackRate: (node: Tone.Player, rate: number) => void;
   setDelayFeedback: (value: number) => void;
   setReverbDecay: (value: number) => void;
+  setBPM: (bpm: number) => void;
+  getBPM: () => number;
   disposeAll: () => void;
   getWaveform: (node: Tone.Player | Tone.Sequence) => Float32Array | null;
 };
@@ -454,6 +456,14 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
             fxBus.current.reverb.decay = value;
         }
     },
+    setBPM: (bpm) => {
+      if (Tone.Transport) {
+        Tone.Transport.bpm.value = bpm;
+      }
+    },
+    getBPM: () => {
+      return Tone.Transport?.bpm.value || 120;
+    }
   }));
 
   return null;
