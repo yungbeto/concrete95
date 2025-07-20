@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     description: 'Everything is musique.',
     images: [
       {
-        url: '/og-image.png',
+        url: 'https://placehold.co/1200x630.png',
         width: 1200,
         height: 630,
         alt: 'Concrete 95 - Everything is musique.',
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Concrete 95',
     description: 'Everything is musique.',
-    images: ['/og-image.png'],
+    images: ['https://placehold.co/1200x630.png'],
   },
 };
 
