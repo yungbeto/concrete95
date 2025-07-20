@@ -394,7 +394,7 @@ export default function EtherealAcousticsClient() {
           <DesktopIcon
             icon={Info}
             label="About This App"
-            onDoubleClick={() => openWindow('about')}
+            onClick={() => openWindow('about')}
           />
         </div>
         <div className="absolute top-0 left-0 w-full h-full">
