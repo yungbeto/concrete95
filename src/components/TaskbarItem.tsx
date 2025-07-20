@@ -22,7 +22,7 @@ export default function TaskbarItem({
       onClick={onClick}
       className={cn(
         'flex items-center gap-1.5 h-7 px-2 text-sm text-black select-none truncate justify-start',
-        'flex-grow flex-shrink min-w-0', // <-- Allow shrinking and growing
+        'flex-grow flex-shrink min-w-0 max-w-48', // <-- Allow shrinking and growing, with a max-width
         'border-2 !rounded-none',
         isActive 
           ? 'bg-neutral-300 border-t-neutral-500 border-l-neutral-500 border-r-white border-b-white' 
