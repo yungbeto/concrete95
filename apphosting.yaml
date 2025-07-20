@@ -5,3 +5,7 @@ runConfig:
   # Increase this value if you'd like to automatically spin up
   # more instances in response to increased traffic.
   maxInstances: 1
+# Pass secrets from Cloud Secret Manager to the app.
+secretEnvironmentVariables:
+  - key: FREESOUND_API_KEY
+    secret: FREESOUND_API_KEY

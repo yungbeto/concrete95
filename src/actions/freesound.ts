@@ -1,5 +1,7 @@
 'use server';
 
+import getConfig from 'next/config';
+
 export type FreesoundSound = {
   id: number;
   name: string;
@@ -7,7 +9,8 @@ export type FreesoundSound = {
 };
 
 async function fetchFromFreesound(query: string) {
-  const apiKey = process.env.FREESOUND_API_KEY;
+  const { serverRuntimeConfig } = getConfig();
+  const apiKey = serverRuntimeConfig.freesoundApiKey;
 
   if (!apiKey) {
     throw new Error('Freesound API key is not configured.');
