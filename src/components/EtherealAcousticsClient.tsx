@@ -199,8 +199,6 @@ export default function EtherealAcousticsClient() {
       handleRemoveLayer(id);
       return;
     }
-    
-    audioEngineRef.current.play(newSynthLoop);
 
     setLayers((prevLayers) =>
       prevLayers.map((l) =>
@@ -237,8 +235,6 @@ export default function EtherealAcousticsClient() {
       handleRemoveLayer(id);
       return;
     }
-
-    audioEngineRef.current.play(newPlayer);
     
     setLayers((prevLayers) =>
       prevLayers.map((l) =>
@@ -256,8 +252,6 @@ export default function EtherealAcousticsClient() {
       handleRemoveLayer(id);
       return;
     }
-
-    audioEngineRef.current.play(newSequence);
 
     setLayers((prevLayers) =>
       prevLayers.map((l) =>
@@ -385,24 +379,6 @@ export default function EtherealAcousticsClient() {
     );
   };
 
-  const handlePlay = (id: string) => {
-    if (!audioEngineRef.current) return;
-    const layer = layers.find((l) => l.id === id);
-    if (layer?.node) {
-      audioEngineRef.current.play(layer.node);
-    }
-  };
-
-  const handleStop = (id: string) => {
-    if (!audioEngineRef.current) return;
-    const layer = layers.find((l) => l.id === id);
-    if (layer?.node) {
-        const allNodes = layers.map(l => l.node).filter(n => n !== null) as (Tone.Player | Tone.Sequence)[];
-        audioEngineRef.current.stop(layer.node, allNodes);
-    }
-  };
-
-
   return (
     <div className="relative w-full h-screen flex flex-col overflow-hidden">
       <AudioEngine ref={audioEngineRef} />
@@ -434,8 +410,6 @@ export default function EtherealAcousticsClient() {
               onVolumeChange={handleVolumeChange}
               onSendChange={handleSendChange}
               onPlaybackRateChange={handlePlaybackRateChange}
-              onPlay={handlePlay}
-              onStop={handleStop}
               onMouseDown={(e) => handleDragStart(layer.id, 'layer', e)}
             />
           ))}

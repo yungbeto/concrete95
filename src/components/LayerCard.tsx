@@ -2,7 +2,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Play, Square, X, Zap, Waves, Music } from 'lucide-react';
+import { X, Zap, Waves, Music } from 'lucide-react';
 import LayerMenuBar from './LayerMenuBar';
 import { type AudioEngineHandle } from './AudioEngine';
 import * as Tone from 'tone';
@@ -25,8 +25,6 @@ interface LayerCardProps {
   onSendChange: (id: string, send: number) => void;
   onPlaybackRateChange: (id: string, rate: number) => void;
   onMouseDown: (e: React.MouseEvent) => void;
-  onPlay: (id: string) => void;
-  onStop: (id: string) => void;
 }
 
 const layerIcons = {
@@ -128,8 +126,6 @@ export default function LayerCard({
   onSendChange,
   onPlaybackRateChange,
   onMouseDown,
-  onPlay,
-  onStop,
 }: LayerCardProps) {
   const cardStyle = {
     left: `${position.x}px`,
@@ -137,7 +133,6 @@ export default function LayerCard({
     zIndex: zIndex,
   };
   const isLoading = status === 'loading';
-  const isTransportDisabled = isLoading;
 
   return (
     <div 
@@ -183,18 +178,6 @@ export default function LayerCard({
 
       <SoundRecorderDisplay audioEngineRef={audioEngineRef} node={node} />
       
-      {/* Separator */}
-      <div className="h-[2px] w-full bg-silver border-t-neutral-500 border-b-white" />
-
-      {/* Control Buttons */}
-       <div className="p-2 w-full flex items-center justify-center space-x-2" onMouseDown={(e) => e.stopPropagation()}>
-         <Button className="w-full" variant="retro" size="icon" title="Play" onClick={() => onPlay(id)} disabled={isTransportDisabled}>
-           <Play className="text-black" fill="black" />
-         </Button>
-         <Button className="w-full" variant="retro" size="icon" title="Stop" onClick={() => onStop(id)} disabled={isTransportDisabled}>
-           <Square className="text-black" fill="black" />
-         </Button>
-       </div>
     </div>
   );
 }
