@@ -323,12 +323,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const sequence = new Tone.Sequence(
         (time, note) => {
           if (note) {
-            const vel = Math.random() * 0.5 + 0.5; // velocity
-            if (randomSynthType === 'pluck') {
-                synth.triggerAttackRelease(note, '16n', time);
-            } else {
-                synth.triggerAttackRelease(note, '16n', time, vel);
-            }
+            synth.triggerAttackRelease(note, '16n', time);
           }
         },
         sequenceEvents,
