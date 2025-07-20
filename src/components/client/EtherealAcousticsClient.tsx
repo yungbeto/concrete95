@@ -3,7 +3,6 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import * as Tone from 'tone';
-import sillyname from 'sillyname';
 import AudioEngine, {
   type AudioEngineHandle,
   type FreesoundLayerInfo,
@@ -17,14 +16,14 @@ import { useToast } from '@/hooks/use-toast';
 import LayerCard from '@/components/LayerCard';
 import { Info, Music, Settings, Waves, Zap, type LucideIcon, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import DesktopIcon from './DesktopIcon';
-import InfoWindow from './InfoWindow';
-import TaskbarItem from './TaskbarItem';
-import { Label } from './ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Alert, AlertDescription, AlertTitle } from './ui/alert';
-import Fieldset from './Fieldset';
-import { Slider } from './ui/slider';
+import DesktopIcon from '../DesktopIcon';
+import InfoWindow from '../InfoWindow';
+import TaskbarItem from '../TaskbarItem';
+import { Label } from '../ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import Fieldset from '../Fieldset';
+import { Slider } from '../ui/slider';
 
 type LayerInfo = FreesoundLayerInfo | SynthLayerInfo;
 
@@ -61,10 +60,15 @@ type DragState = {
 const MAX_LAYERS = 8;
 const DESKTOP_ICON_Z_INDEX = 10;
 
+const adjectives = ["Whispering", "Crimson", "Silent", "Wandering", "Golden", "Frozen", "Electric", "Forgotten", "Dreaming", "Floating"];
+const nouns = ["Echo", "Void", "Mirage", "Nexus", "Nebula", "Tide", "Signal", "Cipher", "Ghost", "Fragment"];
+
 const generateRandomName = () => {
-    const name = sillyname();
-    return name.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  return `${adj} ${noun}`;
 };
+
 
 function DigitalClock() {
   const [time, setTime] = useState<Date | null>(null);
@@ -113,12 +117,12 @@ export default function EtherealAcousticsClient() {
       content: (
         <div className="text-black space-y-2 text-sm">
           <p>
-            Welcome to Concrete 95, a tool for random audio explorations. Everything is musique. 
+            Welcome to Concrete 95, a tool for random audio explorations. Everything is musique.
           </p>
           <p>
             This app was built by <a href="http://robysaavedra.com" target="_blank" rel="noopener noreferrer" className="cursor-pointer text-blue-600 underline hover:text-blue-700">
-            Roby Saavedra</a>, a really cool software designer who lives in fabulous Emeryville, CA. 
-            
+            Roby Saavedra</a>, a really cool software designer who lives in fabulous Emeryville, CA.
+
           </p>
         </div>
       ),
@@ -321,7 +325,7 @@ export default function EtherealAcousticsClient() {
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!dragState) return;
-  
+
     const moveItem = (items: any[]) => {
       return items.map(item =>
         item.id === dragState.id
@@ -335,7 +339,7 @@ export default function EtherealAcousticsClient() {
           : item
       );
     };
-  
+
     if (dragState.type === 'layer') {
       setLayers(prev => moveItem(prev));
     } else {
@@ -375,7 +379,7 @@ export default function EtherealAcousticsClient() {
     setReverbDecay(value);
     audioEngineRef.current?.setReverbDecay(value);
   };
-  
+
   const handleBPMChange = (value: number) => {
     setGlobalBPM(value);
     audioEngineRef.current?.setBPM(value);
@@ -406,7 +410,7 @@ export default function EtherealAcousticsClient() {
                 </Fieldset>
             )}
         </Fieldset>
-        
+
         <Fieldset label="Master Tempo">
             <p className="text-xs mb-2">BPM: {globalBPM.toFixed(0)}</p>
             <Slider
@@ -525,7 +529,7 @@ export default function EtherealAcousticsClient() {
                 onClick={() => openWindow('settings')}
             />
         </div>
-        
+
         <div className="absolute top-0 left-0 w-full h-full">
           {layers.map((layer) => (
             <LayerCard
@@ -573,7 +577,7 @@ export default function EtherealAcousticsClient() {
                     <div className="flex items-start gap-4 self-stretch">
                         <Info className="w-8 h-8 text-blue-600 flex-shrink-0" />
                         <div>
-                            
+
                             <p>Click the "Start" button to add a sound layer.</p>
                         </div>
                     </div>
@@ -590,7 +594,7 @@ export default function EtherealAcousticsClient() {
           )}
         </div>
       </main>
-      
+
       <footer className="w-full h-10 bg-silver border-t-2 border-t-white flex items-center px-2 z-20 shrink-0">
          <SoundscapeController
             onAddSynthLayer={addSynthLayer}
@@ -602,7 +606,7 @@ export default function EtherealAcousticsClient() {
           />
           <div className="flex-grow flex items-center gap-1 mx-1 overflow-hidden h-full">
             {windows.filter(w => w.isOpen).map(win => (
-                <TaskbarItem 
+                <TaskbarItem
                     key={win.id}
                     icon={win.id === 'about' ? Info : Settings}
                     label={win.title}
@@ -611,7 +615,7 @@ export default function EtherealAcousticsClient() {
                 />
             ))}
             {layers.map(layer => (
-                <TaskbarItem 
+                <TaskbarItem
                     key={layer.id}
                     icon={layerIcons[layer.type]}
                     label={layer.title}
