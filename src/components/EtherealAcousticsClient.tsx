@@ -352,11 +352,15 @@ export default function EtherealAcousticsClient() {
   }, [dragState, handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
+    const handleValueChange = (value: string) => {
+      setGlobalScale(value as ScaleName);
+    };
+
     const newSettingsContent = (
       <div className="text-black space-y-4 text-sm">
         <Fieldset label="Musical Scale">
             <p className="text-xs mb-2">Set the musical scale for all new synth and melodic layers.</p>
-            <Select value={globalScale} onValueChange={(value) => setGlobalScale(value as ScaleName)}>
+            <Select value={globalScale} onValueChange={handleValueChange}>
             <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a scale" />
             </SelectTrigger>
@@ -371,7 +375,7 @@ export default function EtherealAcousticsClient() {
         </Fieldset>
         
         {layers.length > 0 && (
-            <Fieldset label="Warning">
+            <Fieldset label="Warning" variant="warning">
                 <p className="text-xs">
                     Changing the scale only affects new layers. For a consistent soundscape, please Stop All layers and start fresh.
                 </p>
