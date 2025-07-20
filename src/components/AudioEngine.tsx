@@ -261,38 +261,20 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (!masterLimiter.current || !fxBus.current) return null;
       Tone.start();
 
-      // --- SYNTH AND FX SETUP ---
+      // --- STABLE SYNTH AND FX SETUP ---
+      // Using a simple, stable synth configuration to prevent crashes.
       const synth = new Tone.PolySynth(Tone.MonoSynth, {
         oscillator: { type: 'sawtooth' },
         envelope: { attack: 0.01, release: 0.8 },
         filterEnvelope: { attack: 0.05, decay: 0.2, sustain: 0.5, release: 1, baseFrequency: 200, octaves: 4 }
       });
-      
       synth.volume.value = -18;
       
-      const delay = new Tone.FeedbackDelay({
-        delayTime: '8n',
-        feedback: 0.3,
-        wet: 0.3,
-      });
-
-      const reverb = new Tone.Reverb({
-        decay: 2.5,
-        wet: 0.25,
-      });
-
-      const filter = new Tone.Filter(800, 'lowpass');
-
-      const lfo = new Tone.LFO({
-        frequency: 0.1,
-        min: 600,
-        max: 2000
-      }).connect(filter.frequency).start();
-
+      // Connect directly to master and shared FX bus
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
       const waveform = new Tone.Waveform(1024);
       
-      synth.chain(delay, reverb, filter, sendGain, waveform, masterLimiter.current);
+      synth.chain(sendGain, waveform, masterLimiter.current);
 
       // --- MELODY AND RHYTHM GENERATION ---
       const currentScale = sessionScale.current;
@@ -300,7 +282,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const sequenceLength = Math.floor(Math.random() * 8) + 8; // 8-15 events
       const sequenceEvents = Array.from({ length: sequenceLength }, () => {
         if (Math.random() < 0.35) {
-            return null;
+            return null; // Rest note
         }
         return currentScale[Math.floor(Math.random() * currentScale.length)];
       });
@@ -324,9 +306,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       
       sequence.start(0);
 
+      // Assign resources for cleanup
       (sequence as any).synth = synth;
-      (sequence as any).lfo = lfo;
-      (sequence as any).effects = { delay, reverb, filter };
+      (sequence as any).lfo = null; // No LFO in this stable version
+      (sequence as any).effects = {}; // No individual effects
       (sequence as any).sendGain = sendGain;
       (sequence as any).waveform = waveform;
 
@@ -348,6 +331,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         if (effects.filter && !effects.filter.disposed) effects.filter.dispose();
       }
       if (synth && !synth.disposed) {
+        // Handle PolySynth and PluckSynth correctly
         if (synth instanceof Tone.PolySynth || synth instanceof Tone.PluckSynth) {
           synth.releaseAll();
         }
@@ -363,7 +347,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         if (node instanceof Tone.Sequence) {
           const synth = (node as any).synth;
           if (synth && !synth.disposed) {
-            // Check if synth is PluckSynth or PolySynth and set volume accordingly
              if (synth instanceof Tone.PluckSynth || synth instanceof Tone.PolySynth) {
                 synth.volume.value = volume;
              }
