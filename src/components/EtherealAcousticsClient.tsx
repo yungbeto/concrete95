@@ -23,6 +23,7 @@ import TaskbarItem from './TaskbarItem';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import Fieldset from './Fieldset';
 
 type LayerInfo = FreesoundLayerInfo | SynthLayerInfo;
 
@@ -353,30 +354,28 @@ export default function EtherealAcousticsClient() {
   useEffect(() => {
     const newSettingsContent = (
       <div className="text-black space-y-4 text-sm">
-        <div>
-          <h3 className="font-bold">Global Scale</h3>
-          <p className="text-xs">Set the musical scale for all new synth and melodic layers.</p>
-        </div>
-        <Select value={globalScale} onValueChange={(value) => setGlobalScale(value as ScaleName)}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select a scale" />
-          </SelectTrigger>
-          <SelectContent>
-            {scaleNames.map(name => (
-              <SelectItem key={name} value={name}>
-                {name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Fieldset label="Musical Scale">
+            <p className="text-xs mb-2">Set the musical scale for all new synth and melodic layers.</p>
+            <Select value={globalScale} onValueChange={(value) => setGlobalScale(value as ScaleName)}>
+            <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a scale" />
+            </SelectTrigger>
+            <SelectContent>
+                {scaleNames.map(name => (
+                <SelectItem key={name} value={name}>
+                    {name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}
+                </SelectItem>
+                ))}
+            </SelectContent>
+            </Select>
+        </Fieldset>
+        
         {layers.length > 0 && (
-            <Alert variant="destructive" className="bg-yellow-100 border-yellow-300 text-yellow-800">
-                <AlertTriangle className="h-4 w-4 text-yellow-800" />
-                <AlertTitle className="font-bold">Active Layers Detected</AlertTitle>
-                <AlertDescription className="text-xs">
+            <Fieldset label="Warning">
+                <p className="text-xs">
                     Changing the scale only affects new layers. For a consistent soundscape, please Stop All layers and start fresh.
-                </AlertDescription>
-            </Alert>
+                </p>
+            </Fieldset>
         )}
       </div>
     );
