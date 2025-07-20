@@ -50,6 +50,8 @@ export type AudioEngineHandle = {
   setVolume: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, volume: number) => void;
   setSendAmount: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, amount: number) => void;
   setPlaybackRate: (node: Tone.Player, rate: number) => void;
+  setDelayFeedback: (value: number) => void;
+  setReverbDecay: (value: number) => void;
   disposeAll: () => void;
   getWaveform: (node: Tone.Player | Tone.Sequence) => Float32Array | null;
 };
@@ -441,6 +443,16 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (node instanceof Tone.Player && !node.disposed) {
         node.playbackRate = rate;
       }
+    },
+    setDelayFeedback: (value) => {
+        if (fxBus.current?.delay && !fxBus.current.delay.disposed) {
+            fxBus.current.delay.feedback.value = value;
+        }
+    },
+    setReverbDecay: (value) => {
+        if (fxBus.current?.reverb && !fxBus.current.reverb.disposed) {
+            fxBus.current.reverb.decay = value;
+        }
     },
   }));
 

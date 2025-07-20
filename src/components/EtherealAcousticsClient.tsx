@@ -24,6 +24,7 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import Fieldset from './Fieldset';
+import { Slider } from './ui/slider';
 
 type LayerInfo = FreesoundLayerInfo | SynthLayerInfo;
 
@@ -93,6 +94,8 @@ export default function EtherealAcousticsClient() {
   const [dragState, setDragState] = useState<DragState>(null);
   const [isAlertDismissed, setIsAlertDismissed] = useState(false);
   const [globalScale, setGlobalScale] = useState<ScaleName>('major');
+  const [delayFeedback, setDelayFeedback] = useState(0.6);
+  const [reverbDecay, setReverbDecay] = useState(10);
 
 
   const [windows, setWindows] = useState<WindowState[]>([
@@ -351,16 +354,26 @@ export default function EtherealAcousticsClient() {
     };
   }, [dragState, handleMouseMove, handleMouseUp]);
 
-  useEffect(() => {
-    const handleValueChange = (value: string) => {
-      setGlobalScale(value as ScaleName);
-    };
+  const handleScaleChange = (value: string) => {
+    setGlobalScale(value as ScaleName);
+  };
 
+  const handleDelayFeedbackChange = (value: number) => {
+    setDelayFeedback(value);
+    audioEngineRef.current?.setDelayFeedback(value);
+  };
+
+  const handleReverbDecayChange = (value: number) => {
+    setReverbDecay(value);
+    audioEngineRef.current?.setReverbDecay(value);
+  };
+
+  useEffect(() => {
     const newSettingsContent = (
       <div className="text-black space-y-4 text-sm">
         <Fieldset label="Musical Scale">
             <p className="text-xs mb-2">Set the musical scale for all new synth and melodic layers.</p>
-            <Select value={globalScale} onValueChange={handleValueChange}>
+            <Select value={globalScale} onValueChange={handleScaleChange}>
             <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a scale" />
             </SelectTrigger>
@@ -373,6 +386,28 @@ export default function EtherealAcousticsClient() {
             </SelectContent>
             </Select>
         </Fieldset>
+
+        <Fieldset label="Master Delay">
+            <p className="text-xs mb-2">Feedback: {delayFeedback.toFixed(2)}</p>
+            <Slider
+                defaultValue={[delayFeedback]}
+                max={0.95}
+                min={0}
+                step={0.01}
+                onValueChange={(value) => handleDelayFeedbackChange(value[0])}
+            />
+        </Fieldset>
+
+        <Fieldset label="Master Reverb">
+            <p className="text-xs mb-2">Decay: {reverbDecay.toFixed(1)}s</p>
+            <Slider
+                defaultValue={[reverbDecay]}
+                max={20}
+                min={0.5}
+                step={0.1}
+                onValueChange={(value) => handleReverbDecayChange(value[0])}
+            />
+        </Fieldset>
         
         {layers.length > 0 && (
             <Fieldset label="Warning" variant="warning">
@@ -384,7 +419,8 @@ export default function EtherealAcousticsClient() {
       </div>
     );
     setWindows(prev => prev.map(w => w.id === 'settings' ? { ...w, content: newSettingsContent } : w));
-  }, [globalScale, layers.length]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalScale, layers.length, delayFeedback, reverbDecay]);
 
   const handleRemoveAllLayers = () => {
     if (!audioEngineRef.current) return;
