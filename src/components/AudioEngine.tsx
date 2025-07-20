@@ -274,33 +274,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
 
-      const synthTypes = ['fm', 'pluck', 'default'];
-      const randomSynthType = synthTypes[Math.floor(Math.random() * synthTypes.length)];
-
-      let synth: Tone.PolySynth | Tone.PluckSynth;
-      switch (randomSynthType) {
-        case 'fm':
-          synth = new Tone.PolySynth(Tone.FMSynth, {
-            harmonicity: 1.5,
-            modulationIndex: 8,
-            envelope: { attack: 0.01, release: 1 },
-            modulationEnvelope: { attack: 0.05, release: 0.8 },
-          });
-          break;
-        case 'pluck':
-            synth = new Tone.PluckSynth({
-                attackNoise: 0.8,
-                resonance: 0.9,
-                release: 1.5,
-            });
-            break;
-        default:
-          synth = new Tone.PolySynth(Tone.Synth, {
-            oscillator: { type: 'sine' },
-            envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 1 },
-          });
-          break;
-      }
+      const synth = new Tone.PolySynth(Tone.FMSynth, {
+        harmonicity: Math.random() * 2 + 1,
+        modulationIndex: Math.random() * 10 + 5,
+        envelope: { attack: 0.01, release: 1.5 },
+        modulationEnvelope: { attack: 0.05, release: 1 },
+      });
       synth.volume.value = -18;
       
       const waveform = new Tone.Waveform(1024);
