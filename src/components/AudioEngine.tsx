@@ -262,14 +262,14 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       Tone.start();
 
       // --- STABLE SYNTH AND FX SETUP ---
-      const synth = new Tone.PolySynth(Tone.FMSynth, {
-          harmonicity: 1.2,
-          modulationIndex: 10,
-          envelope: { attack: 0.01, release: 0.5 },
-          modulation: { type: 'square' },
-          modulationEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.5 }
+      const synth = new Tone.PluckSynth({
+        attackNoise: 0.5,
+        dampening: 4000,
+        resonance: 0.85,
+        release: 1,
       });
-      synth.volume.value = -18;
+
+      synth.volume.value = -12;
       
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
       const waveform = new Tone.Waveform(1024);
@@ -291,7 +291,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const sequence = new Tone.Sequence(
         (time, note) => {
           if (note) {
-            synth.triggerAttackRelease(note, '16n', time);
+            // Use triggerAttack instead of triggerAttackRelease for PluckSynth in a sequence
+            synth.triggerAttack(note, time);
           }
         },
         sequenceEvents,
@@ -323,9 +324,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       if (waveform && !waveform.disposed) waveform.dispose();
 
       if (synth && !synth.disposed) {
-        if (synth instanceof Tone.PolySynth) {
-          synth.releaseAll();
-        }
+        // PluckSynth does not have a releaseAll method.
         synth.dispose();
       }
       if (sequence && !sequence.disposed) {
