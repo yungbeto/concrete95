@@ -21,7 +21,8 @@ export default function TaskbarItem({
     <button
       onClick={onClick}
       className={cn(
-        'flex items-center gap-1.5 h-7 px-2 text-sm text-black select-none truncate w-40 justify-start',
+        'flex items-center gap-1.5 h-7 px-2 text-sm text-black select-none truncate justify-start',
+        'flex-grow flex-shrink min-w-0', // <-- Allow shrinking and growing
         'border-2 !rounded-none',
         isActive 
           ? 'bg-neutral-300 border-t-neutral-500 border-l-neutral-500 border-r-white border-b-white' 

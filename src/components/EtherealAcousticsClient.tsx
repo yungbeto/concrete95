@@ -24,7 +24,7 @@ type Layer = {
   send: number;
   node: Tone.Player | Tone.Sequence | null;
   type: 'freesound' | 'synth' | 'melodic';
-  status: 'loading' | 'loaded';
+  status: 'loading' | 'loaded' | 'playing' | 'stopped';
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
@@ -209,7 +209,7 @@ export default function EtherealAcousticsClient() {
 
     setLayers((prevLayers) =>
       prevLayers.map((l) =>
-        l.id === id ? { ...l, node: newSynthLoop, status: 'loaded' } : l
+        l.id === id ? { ...l, node: newSynthLoop, status: 'playing' } : l
       )
     );
   };
@@ -244,7 +244,7 @@ export default function EtherealAcousticsClient() {
 
     setLayers((prevLayers) =>
       prevLayers.map((l) =>
-        l.id === id ? { ...l, node: newPlayer, status: 'loaded' } : l
+        l.id === id ? { ...l, node: newPlayer, status: 'playing' } : l
       )
     );
   };
@@ -261,7 +261,7 @@ export default function EtherealAcousticsClient() {
 
     setLayers((prevLayers) =>
       prevLayers.map((l) =>
-        l.id === id ? { ...l, node: newSequence, status: 'loaded' } : l
+        l.id === id ? { ...l, node: newSequence, status: 'playing' } : l
       )
     );
   };
@@ -470,7 +470,7 @@ export default function EtherealAcousticsClient() {
             canAddLayer={layers.length < MAX_LAYERS}
             hasLayers={layers.length > 0}
           />
-          <div className="flex-grow flex items-center gap-1 mx-2">
+          <div className="flex-grow flex items-center gap-1 mx-2 overflow-hidden">
             {windows.filter(w => w.isOpen).map(win => (
                 <TaskbarItem 
                     key={win.id}
