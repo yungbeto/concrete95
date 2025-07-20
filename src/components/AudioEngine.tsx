@@ -262,48 +262,31 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       Tone.start();
 
       // --- SYNTH AND FX SETUP ---
-      const synthTypes = ['MonoSynth', 'PluckSynth'];
-      const randomSynthName = synthTypes[Math.floor(Math.random() * synthTypes.length)];
-      
-      let synth: any;
-
-      switch (randomSynthName) {
-        case 'MonoSynth':
-           synth = new Tone.PolySynth(Tone.MonoSynth, {
-             oscillator: { type: 'sawtooth' },
-             envelope: { attack: 0.01, release: 0.8 },
-             filterEnvelope: { attack: 0.05, decay: 0.2, sustain: 0.5, release: 1, baseFrequency: 200, octaves: 4 }
-           });
-           break;
-        case 'PluckSynth':
-        default:
-           synth = new Tone.PluckSynth({
-            attackNoise: 0.8,
-            resonance: 0.9,
-            release: 1.5,
-           });
-           break;
-      }
+      const synth = new Tone.PolySynth(Tone.MonoSynth, {
+        oscillator: { type: 'sawtooth' },
+        envelope: { attack: 0.01, release: 0.8 },
+        filterEnvelope: { attack: 0.05, decay: 0.2, sustain: 0.5, release: 1, baseFrequency: 200, octaves: 4 }
+      });
       
       synth.volume.value = -18;
       
       const delay = new Tone.FeedbackDelay({
-        delayTime: ['8n', '4n.', '16n'][Math.floor(Math.random() * 3)],
-        feedback: Math.random() * 0.4 + 0.2,
-        wet: Math.random() * 0.4 + 0.2,
+        delayTime: '8n',
+        feedback: 0.3,
+        wet: 0.3,
       });
 
       const reverb = new Tone.Reverb({
-        decay: Math.random() * 3 + 2,
-        wet: Math.random() * 0.3 + 0.2,
+        decay: 2.5,
+        wet: 0.25,
       });
 
-      const filter = new Tone.Filter(Math.random() * 2000 + 500, 'lowpass');
+      const filter = new Tone.Filter(800, 'lowpass');
 
       const lfo = new Tone.LFO({
-        frequency: Math.random() * 0.2 + 0.05,
-        min: 400,
-        max: 2500
+        frequency: 0.1,
+        min: 600,
+        max: 2000
       }).connect(filter.frequency).start();
 
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
@@ -380,7 +363,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         if (node instanceof Tone.Sequence) {
           const synth = (node as any).synth;
           if (synth && !synth.disposed) {
-             synth.volume.value = volume;
+            // Check if synth is PluckSynth or PolySynth and set volume accordingly
+             if (synth instanceof Tone.PluckSynth || synth instanceof Tone.PolySynth) {
+                synth.volume.value = volume;
+             }
           }
         } else {
             (node as Tone.Player | Tone.PolySynth | Tone.PluckSynth).volume.value = volume;
