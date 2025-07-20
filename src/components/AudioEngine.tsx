@@ -274,7 +274,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
       const waveform = new Tone.Waveform(1024);
       
-      synth.chain(sendGain, waveform, masterLimiter.current);
+      synth.chain(sendGain, masterLimiter.current);
+      synth.connect(waveform);
 
       // --- MELODY AND RHYTHM GENERATION ---
       const currentScale = sessionScale.current;
