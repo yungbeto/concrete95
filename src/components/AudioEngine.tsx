@@ -173,7 +173,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       
       const info: SynthLayerInfo = {
         type: 'synth',
-        description: `Synth Pad (${selectedOscillator}) playing ${scaleName} scale. Attack: ${attack.toFixed(1)}s, Release: ${release.toFixed(1)}s. Filter Freq: ${filter.frequency.value.toFixed(0)}Hz`
+        description: `Synth Pad (${selectedOscillator}) at ${Tone.Transport.bpm.value.toFixed(0)} BPM in ${scaleName} scale. Attack: ${attack.toFixed(1)}s, Release: ${release.toFixed(1)}s. Filter Freq: ${filter.frequency.value.toFixed(0)}Hz`
       };
 
       return { sequence, info };
@@ -383,7 +383,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
       const info: SynthLayerInfo = {
         type: 'melodic',
-        description: `${synthDescription} playing ${scaleName} scale. Filter at ${filterFreq.toFixed(0)}Hz modulated by LFO at ${lfoFreq.toFixed(2)}Hz. Delay at ${delayTime}, Reverb decay ${reverbDecay.toFixed(1)}s.`
+        description: `${synthDescription} playing at ${Tone.Transport.bpm.value.toFixed(0)} BPM in ${scaleName} scale. Filter at ${filterFreq.toFixed(0)}Hz modulated by LFO at ${lfoFreq.toFixed(2)}Hz. Delay at ${delayTime}, Reverb decay ${reverbDecay.toFixed(1)}s.`
       };
 
       return { sequence, info };
