@@ -60,6 +60,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
 
   if (typeof window !== 'undefined' && !masterLimiter.current) {
     masterLimiter.current = new Tone.Limiter(-6).toDestination();
+    Tone.Transport.bpm.value = Math.floor(Math.random() * (100 - 60 + 1)) + 60;
     const delay = new Tone.FeedbackDelay({
       delayTime: '4n',
       feedback: 0.6,
