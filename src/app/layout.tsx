@@ -6,19 +6,19 @@ const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
 export const metadata: Metadata = {
   title: 'Concrete 95',
-  description: 'AI-Driven Generative Soundscapes. Create unique, evolving audio environments with a retro-inspired interface.',
+  description: 'Everything is musique.',
   metadataBase: new URL(siteUrl),
   openGraph: {
     type: 'website',
     url: siteUrl,
     title: 'Concrete 95',
-    description: 'AI-Driven Generative Soundscapes. Create unique, evolving audio environments with a retro-inspired interface.',
+    description: 'Everything is musique.',
     images: [
       {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'Concrete 95 - AI-Driven Generative Soundscapes',
+        alt: 'Concrete 95 - Everything is musique.',
       },
     ],
     siteName: 'Concrete 95',
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Concrete 95',
-    description: 'AI-Driven Generative Soundscapes. Create unique, evolving audio environments with a retro-inspired interface.',
+    description: 'Everything is musique.',
     images: ['/og-image.png'],
   },
 };

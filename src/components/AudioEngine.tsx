@@ -15,8 +15,23 @@ export type FreesoundLayerInfo = {
   name: string;
 };
 
+const scales = {
+  random: [],
+  minorPentatonic: ['C3', 'Eb3', 'F3', 'G3', 'Bb3', 'C4', 'Eb4', 'F4', 'G4', 'Bb4', 'C5'],
+  majorPentatonic: ['C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'D4', 'E4', 'G4', 'A4', 'C5'],
+  blues: ['C3', 'Eb3', 'F3', 'F#3', 'G3', 'Bb3', 'C4', 'Eb4', 'F4', 'F#4', 'G4', 'Bb4'],
+  chromatic: ['C3', 'C#3', 'D3', 'D#3', 'E3', 'F3', 'F#3', 'G3', 'G#3', 'A3', 'A#3', 'B3', 'C4'],
+  dorian: ['C3', 'D3', 'Eb3', 'F3', 'G3', 'A3', 'Bb3', 'C4'],
+  mixolydian: ['C3', 'D3', 'E3', 'F3', 'G3', 'A3', 'Bb3', 'C4'],
+};
+
+export type ScaleName = keyof typeof scales;
+
+export const scaleNames = Object.keys(scales) as ScaleName[];
+
+
 export type AudioEngineHandle = {
-  startSynthLoop: () => {
+  startSynthLoop: (scale?: ScaleName) => {
     sequence: Tone.Sequence;
     info: SynthLayerInfo;
   } | null;
@@ -25,7 +40,7 @@ export type AudioEngineHandle = {
     sound: { id: number; name: string; previewUrl: string }
   ) => Promise<{ player: Tone.Player; info: FreesoundLayerInfo } | null>;
   stopFreesoundLoop: (player: Tone.Player) => void;
-  startMelodicLoop: () => {
+  startMelodicLoop: (scale?: ScaleName) => {
     sequence: Tone.Sequence;
     info: SynthLayerInfo;
   } | null;
@@ -81,108 +96,96 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         }
         return null;
     },
-    startSynthLoop: () => {
+    startSynthLoop: (scale) => {
       if (!masterLimiter.current || !fxBus.current) return null;
       Tone.start();
 
       const oscillatorTypes: Tone.ToneOscillatorType[] = [
         'fatsquare',
         'fattriangle',
-        'fatsine',
-        'square',
-        'triangle',
+        'fatsawtooth',
         'sine',
+        'triangle',
       ];
-      const randomOscillatorType =
+      const selectedOscillator =
         oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)];
 
-      const filterFreq = Math.random() * 1500 + 500;
-      const filter = new Tone.Filter(filterFreq, 'lowpass').connect(masterLimiter.current);
+      const attack = Math.random() * 2 + 1;
+      const release = Math.random() * 4 + 2;
 
-      const lfoFreq = Math.random() * 0.1 + 0.05;
-      const lfo = new Tone.LFO({
-        frequency: lfoFreq,
-        min: 200,
-        max: 2500,
-      }).connect(filter.frequency).start();
-      
-      const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
-
-      const attack = Math.random() * 5 + 3;
-      const release = Math.random() * 6 + 5;
       const synth = new Tone.PolySynth(Tone.Synth, {
-        oscillator: {
-          type: randomOscillatorType,
-        },
+        oscillator: { type: selectedOscillator },
         envelope: {
           attack: attack,
           decay: 0.1,
-          sustain: 0.9,
+          sustain: 0.8,
           release: release,
         },
-        volume: -12,
       });
-
+      synth.volume.value = -18;
+      
+      const filter = new Tone.Filter({
+        type: 'lowpass',
+        frequency: Math.random() * 1000 + 500,
+        Q: Math.random() * 2 + 0.5,
+      }).connect(masterLimiter.current);
+      
+      const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
+      
       const waveform = new Tone.Waveform(1024);
       synth.connect(filter);
       synth.connect(sendGain);
       synth.connect(waveform);
       
-      const scale = ['C2', 'E2', 'G2', 'A2', 'C3', 'E3', 'G3', 'A3', 'C4', 'E4', 'G4', 'A4'];
-      const notesAndChords = [
-        scale[Math.floor(Math.random() * scale.length)],
-        [scale[0], scale[2], scale[4]],
-        scale[Math.floor(Math.random() * scale.length)],
-        null,
-        [scale[1], scale[3], scale[5]],
-        scale[Math.floor(Math.random() * scale.length)],
-        null,
+      const scaleKeys = Object.keys(scales).filter(k => k !== 'random') as Exclude<ScaleName, 'random'>[];
+      let scaleName: ScaleName = scale || 'random';
+      if (scaleName === 'random') {
+        scaleName = scaleKeys[Math.floor(Math.random() * scaleKeys.length)];
+      }
+      const currentScale = scales[scaleName];
+      
+      const chords = [
+        [currentScale[0], currentScale[2], currentScale[4]],
+        [currentScale[1], currentScale[3], currentScale[5]],
+        [currentScale[2], currentScale[4], currentScale[6]],
+        [currentScale[3], currentScale[5], currentScale[0]],
       ];
 
-      const sequenceEvents = notesAndChords
-        .sort(() => 0.5 - Math.random())
-        .slice(0, Math.floor(Math.random() * 3) + 2);
-
       const sequence = new Tone.Sequence(
-        (time, note) => {
-           if (note) {
-            synth.triggerAttackRelease(note, '4m', time);
-          }
+        (time, chord) => {
+          synth.triggerAttackRelease(chord, '4m', time);
         },
-        sequenceEvents,
-        '2m'
+        chords,
+        '4m'
       );
-      
       sequence.loop = true;
       sequence.start(0);
 
       (sequence as any).synth = synth;
-      (sequence as any).lfo = lfo;
       (sequence as any).sendGain = sendGain;
       (sequence as any).waveform = waveform;
-      
+
       if (Tone.Transport.state !== 'started') {
         Tone.Transport.start();
       }
-
+      
       const info: SynthLayerInfo = {
         type: 'synth',
-        description: `Synth Pad: ${randomOscillatorType} oscillator with an attack of ${attack.toFixed(2)}s and release of ${release.toFixed(2)}s. A low-pass filter at ${filterFreq.toFixed(0)}Hz is modulated by an LFO at ${lfoFreq.toFixed(2)}Hz.`
+        description: `Synth Pad (${selectedOscillator}) playing ${scaleName} scale. Attack: ${attack.toFixed(1)}s, Release: ${release.toFixed(1)}s. Filter Freq: ${filter.frequency.value.toFixed(0)}Hz`
       };
 
       return { sequence, info };
     },
     stopSynthLoop: (sequence) => {
       const synth = (sequence as any).synth;
-      const lfo = (sequence as any).lfo;
       const sendGain = (sequence as any).sendGain;
       const waveform = (sequence as any).waveform;
-
-      if (lfo && !lfo.disposed) lfo.stop().dispose();
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
       if (synth && !synth.disposed) {
-        if (synth instanceof Tone.PolySynth) synth.releaseAll();
+        if (synth instanceof Tone.PolySynth) {
+          synth.releaseAll();
+        }
         synth.dispose();
       }
       if (sequence && !sequence.disposed) {
@@ -193,56 +196,28 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
     startFreesoundLoop: async (sound) => {
       if (!masterLimiter.current || !fxBus.current) return null;
       await Tone.start();
-
-      const filter = new Tone.Filter(Math.random() * 1000 + 400, 'lowpass').connect(masterLimiter.current);
-      
-      const lfo = new Tone.LFO({
-        frequency: Math.random() * 0.2 + 0.01,
-        min: 400,
-        max: 2000,
-      }).connect(filter.frequency).start();
-
-      const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
-
       const player = new Tone.Player({
         url: sound.previewUrl,
         loop: true,
-        fadeOut: 1,
-        volume: -12,
-        playbackRate: 1,
       });
+      player.volume.value = -12;
 
+      const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
       const waveform = new Tone.Waveform(1024);
-      player.connect(filter);
+      player.connect(masterLimiter.current);
       player.connect(sendGain);
       player.connect(waveform);
       
       await Tone.loaded();
-      
-      const duration = player.buffer.duration;
-      const minLoopDuration = 0.5;
-      const maxLoopDuration = 3.5;
-
-      if (duration > minLoopDuration) {
-        const effectiveMaxLoopDuration = Math.min(duration, maxLoopDuration);
-        const loopDuration = Math.random() * (effectiveMaxLoopDuration - minLoopDuration) + minLoopDuration;
-        const maxStartTime = duration - loopDuration;
-        const startTime = Math.random() * maxStartTime;
-
-        player.loopStart = startTime;
-        player.loopEnd = startTime + loopDuration;
-      }
-      
       player.start();
-      
-      (player as any).lfo = lfo;
-      (player as any).sendGain = sendGain;
-      (player as any).waveform = waveform;
 
       if (Tone.Transport.state !== 'started') {
         Tone.Transport.start();
       }
       
+      (player as any).sendGain = sendGain;
+      (player as any).waveform = waveform;
+
       const info: FreesoundLayerInfo = {
         type: 'freesound',
         id: sound.id,
@@ -252,30 +227,27 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       return { player, info };
     },
     stopFreesoundLoop: (player) => {
-      const lfo = (player as any).lfo;
       const sendGain = (player as any).sendGain;
       const waveform = (player as any).waveform;
-
-      if (lfo && !lfo.disposed) lfo.stop().dispose();
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
       if (player && !player.disposed) {
-        if (Tone.Transport.state === 'started' && player.state === 'started') player.stop();
+        if (Tone.Transport.state === 'started') player.stop();
         player.dispose();
       }
     },
-    startMelodicLoop: () => {
+    startMelodicLoop: (scale) => {
       if (!masterLimiter.current || !fxBus.current) return null;
       Tone.start();
 
-      const filterFreq = Math.random() * 4000 + 800;
+      const filterFreq = Math.random() * 2000 + 800;
       const filter = new Tone.Filter({
-        frequency: filterFreq,
         type: 'lowpass',
+        frequency: filterFreq,
         Q: Math.random() * 2 + 1,
       });
-      
-      const lfoFreq = Math.random() * 0.3 + 0.1;
+
+      const lfoFreq = Math.random() * 0.5 + 0.1;
       const lfo = new Tone.LFO({
         frequency: lfoFreq,
         min: filter.frequency.value * 0.8,
@@ -358,14 +330,11 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       synth.connect(sendGain);
       synth.connect(waveform);
       
-      const scales = {
-        minorPentatonic: ['C3', 'Eb3', 'F3', 'G3', 'Bb3', 'C4', 'Eb4', 'F4', 'G4', 'Bb4'],
-        majorPentatonic: ['C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'D4', 'E4', 'G4', 'A4'],
-        blues: ['C3', 'Eb3', 'F3', 'F#3', 'G3', 'Bb3', 'C4'],
-        chromatic: ['C3', 'C#3', 'D3', 'D#3', 'E3', 'F3', 'F#3', 'G3', 'G#3', 'A3', 'A#3', 'B3']
-      };
-      const scaleKeys = Object.keys(scales);
-      const scaleName = scaleKeys[Math.floor(Math.random() * scaleKeys.length)] as keyof typeof scales;
+      const scaleKeys = Object.keys(scales).filter(k => k !== 'random') as Exclude<ScaleName, 'random'>[];
+      let scaleName: ScaleName = scale || 'random';
+      if (scaleName === 'random') {
+        scaleName = scaleKeys[Math.floor(Math.random() * scaleKeys.length)];
+      }
       const currentScale = scales[scaleName];
       
       const noteDurations = ['4n', '8n', '16n', '2n', '1m'];

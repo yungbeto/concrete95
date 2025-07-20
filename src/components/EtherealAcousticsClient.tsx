@@ -8,16 +8,20 @@ import AudioEngine, {
   type AudioEngineHandle,
   type FreesoundLayerInfo,
   type SynthLayerInfo,
+  type ScaleName,
+  scaleNames,
 } from '@/components/AudioEngine';
 import SoundscapeController from '@/components/SoundscapeController';
 import { searchFreesound, type FreesoundSound } from '@/actions/freesound';
 import { useToast } from '@/hooks/use-toast';
 import LayerCard from '@/components/LayerCard';
-import { Info, Music, Waves, Zap, type LucideIcon } from 'lucide-react';
+import { Info, Music, Settings, Waves, Zap, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DesktopIcon from './DesktopIcon';
 import InfoWindow from './InfoWindow';
 import TaskbarItem from './TaskbarItem';
+import { RadioGroup, RadioGroupItem } from './ui/radio-group';
+import { Label } from './ui/label';
 
 type LayerInfo = FreesoundLayerInfo | SynthLayerInfo;
 
@@ -86,6 +90,8 @@ export default function EtherealAcousticsClient() {
   const { toast } = useToast();
   const [dragState, setDragState] = useState<DragState>(null);
   const [isAlertDismissed, setIsAlertDismissed] = useState(false);
+  const [globalScale, setGlobalScale] = useState<ScaleName>('random');
+
 
   const [windows, setWindows] = useState<WindowState[]>([
     {
@@ -107,6 +113,27 @@ export default function EtherealAcousticsClient() {
       position: { x: 250, y: 150 },
       zIndex: 1,
     },
+    {
+        id: 'settings',
+        title: 'Global Settings',
+        content: (
+          <div className="text-black space-y-4 text-sm">
+            <h3 className="font-bold">Global Scale</h3>
+            <p className="text-xs">Set the musical scale for all new synth and melodic layers.</p>
+            <RadioGroup value={globalScale} onValueChange={(value) => setGlobalScale(value as ScaleName)}>
+                {scaleNames.map(name => (
+                    <div key={name} className="flex items-center space-x-2">
+                        <RadioGroupItem value={name} id={`scale-${name}`} />
+                        <Label htmlFor={`scale-${name}`}>{name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}</Label>
+                    </div>
+                ))}
+            </RadioGroup>
+          </div>
+        ),
+        isOpen: false,
+        position: { x: 300, y: 200 },
+        zIndex: 1,
+      },
   ]);
 
   const allItems = [...layers, ...windows.filter(w => w.isOpen)];
@@ -204,7 +231,7 @@ export default function EtherealAcousticsClient() {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('synth', { volume: -12 });
 
-    const newSynthData = audioEngineRef.current.startSynthLoop();
+    const newSynthData = audioEngineRef.current.startSynthLoop(globalScale);
     if (!newSynthData) {
       handleRemoveLayer(id);
       return;
@@ -256,7 +283,7 @@ export default function EtherealAcousticsClient() {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('melodic', { volume: -15 });
 
-    const newMelodicData = audioEngineRef.current.startMelodicLoop();
+    const newMelodicData = audioEngineRef.current.startMelodicLoop(globalScale);
     if (!newMelodicData) {
       handleRemoveLayer(id);
       return;
@@ -271,7 +298,31 @@ export default function EtherealAcousticsClient() {
 
   const handleDragStart = (id: string, type: 'layer' | 'window', e: React.MouseEvent) => {
     bringToFront(id, type);
-    const item = type === 'layer' ? layers.find(l => l.id === id) : windows.find(w => w.id === id);
+    let item;
+    if (type === 'layer') {
+        item = layers.find(l => l.id === id);
+    } else {
+        // Need to find the window and update its content if it's the settings window
+        const win = windows.find(w => w.id === id);
+        if (win?.id === 'settings') {
+            setWindows(prev => prev.map(w => w.id === 'settings' ? { ...w, content: (
+                <div className="text-black space-y-4 text-sm">
+                    <h3 className="font-bold">Global Scale</h3>
+                    <p className="text-xs">Set the musical scale for all new synth and melodic layers.</p>
+                    <RadioGroup value={globalScale} onValueChange={(value) => setGlobalScale(value as ScaleName)}>
+                        {scaleNames.map(name => (
+                            <div key={name} className="flex items-center space-x-2">
+                                <RadioGroupItem value={name} id={`scale-${name}`} />
+                                <Label htmlFor={`scale-${name}`}>{name.charAt(0).toUpperCase() + name.slice(1).replace(/([A-Z])/g, ' $1')}</Label>
+                            </div>
+                        ))}
+                    </RadioGroup>
+                  </div>
+            )} : w));
+        }
+        item = win;
+    }
+
     if (!item) return;
 
     setDragState({
@@ -284,7 +335,7 @@ export default function EtherealAcousticsClient() {
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!dragState) return;
-
+  
     const moveItem = (items: any[]) => {
       return items.map(item =>
         item.id === dragState.id
@@ -298,11 +349,11 @@ export default function EtherealAcousticsClient() {
           : item
       );
     };
-
+  
     if (dragState.type === 'layer') {
-      setLayers(moveItem);
+      setLayers(prev => moveItem(prev));
     } else {
-      setWindows(moveItem);
+      setWindows(prev => moveItem(prev));
     }
   }, [dragState]);
 
@@ -393,11 +444,16 @@ export default function EtherealAcousticsClient() {
       <AudioEngine ref={audioEngineRef} />
 
       <main className="flex-grow blueprint-grid relative">
-        <div className="absolute top-4 left-4 z-10">
+        <div className="absolute top-4 left-4 z-10 flex gap-2">
             <DesktopIcon
                 imageUrl="https://d2w9rnfcy7mm78.cloudfront.net/38224701/original_cb679aaf35964f18383c8236e22de27f.png?1752976331?bc=0"
                 label="Readme.info"
                 onClick={() => openWindow('about')}
+            />
+             <DesktopIcon
+                icon={Settings}
+                label="Settings.exe"
+                onClick={() => openWindow('settings')}
             />
         </div>
         
@@ -479,7 +535,7 @@ export default function EtherealAcousticsClient() {
             {windows.filter(w => w.isOpen).map(win => (
                 <TaskbarItem 
                     key={win.id}
-                    icon={Info}
+                    icon={win.id === 'about' ? Info : Settings}
                     label={win.title}
                     isActive={activeItemId === win.id}
                     onClick={() => bringToFront(win.id, 'window')}
