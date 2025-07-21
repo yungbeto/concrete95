@@ -32,13 +32,13 @@ export default function InfoWindow({
 
   return (
     <div
-      className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute"
+      className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute flex flex-col"
       style={windowStyle}
       onMouseDown={onMouseDown}
       onTouchStart={onTouchStart}
     >
       {/* Title Bar */}
-      <div className="bg-blue-800 text-white flex items-center justify-between p-1 cursor-move">
+      <div className="bg-blue-800 text-white flex items-center justify-between p-1 cursor-move flex-shrink-0">
         <span className="font-bold text-sm select-none">{title}</span>
         <Button
           variant="retro"
@@ -58,11 +58,12 @@ export default function InfoWindow({
 
       {/* Content */}
       <div
+        className="overflow-hidden flex-grow"
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
       >
-        <ScrollArea className="max-h-[70vh] w-full">
-            <div className="p-4">{children}</div>
+        <ScrollArea className="h-full w-full p-4">
+          {children}
         </ScrollArea>
       </div>
     </div>
