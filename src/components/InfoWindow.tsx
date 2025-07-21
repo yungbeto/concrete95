@@ -3,6 +3,7 @@
 
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
+import { ScrollArea } from './ui/scroll-area';
 
 interface InfoWindowProps {
   title: string;
@@ -31,7 +32,7 @@ export default function InfoWindow({
 
   return (
     <div
-      className="w-96 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute"
+      className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute"
       style={windowStyle}
       onMouseDown={onMouseDown}
       onTouchStart={onTouchStart}
@@ -57,11 +58,13 @@ export default function InfoWindow({
 
       {/* Content */}
       <div
-        className="p-4"
+        className="p-0"
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
       >
-        {children}
+        <ScrollArea className="max-h-[70vh] w-full">
+            <div className="p-4">{children}</div>
+        </ScrollArea>
       </div>
     </div>
   );
