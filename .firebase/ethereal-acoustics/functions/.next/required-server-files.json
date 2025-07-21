@@ -84,9 +84,7 @@
     "i18n": null,
     "productionBrowserSourceMaps": false,
     "excludeDefaultMomentLocales": true,
-    "serverRuntimeConfig": {
-      "freesoundApiKey": "kGI1moFvyJQM4oT4y84oKLScYUFE3ekPmZBeFM1D"
-    },
+    "serverRuntimeConfig": {},
     "publicRuntimeConfig": {},
     "reactProductionProfiling": false,
     "reactStrictMode": null,
