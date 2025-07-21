@@ -28,6 +28,7 @@ interface LayerCardProps {
   onSendChange: (id: string, send: number) => void;
   onPlaybackRateChange: (id: string, rate: number) => void;
   onMouseDown: (e: React.MouseEvent) => void;
+  onTouchStart: (e: React.TouchEvent) => void;
 }
 
 const layerIcons = {
@@ -102,7 +103,7 @@ function SoundRecorderDisplay({
 
 
   return (
-    <div className="flex flex-col gap-2 p-2" onMouseDown={(e) => e.stopPropagation()}>
+    <div className="flex flex-col gap-2 p-2" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
       <div className="flex items-stretch justify-between gap-2 text-black text-xs">
         <div className="flex-grow h-[40px] bg-black border-2 border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white p-1">
           <canvas ref={canvasRef} className="w-full h-full" />
@@ -130,6 +131,7 @@ export default function LayerCard({
   onSendChange,
   onPlaybackRateChange,
   onMouseDown,
+  onTouchStart,
 }: LayerCardProps) {
   const cardStyle = {
     left: `${position.x}px`,
@@ -147,6 +149,7 @@ export default function LayerCard({
         <div 
             className="bg-blue-800 text-white flex items-center justify-between p-1 cursor-move"
             onMouseDown={onMouseDown}
+            onTouchStart={onTouchStart}
         >
             <div className="flex items-center gap-1">
                 {layerIcons[type]}
@@ -162,13 +165,14 @@ export default function LayerCard({
               }}
               aria-label="Close"
               onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
             >
               <X className="w-3 h-3 text-black" />
             </Button>
         </div>
 
         {/* Menu Bar */}
-        <div onMouseDown={(e) => e.stopPropagation()}>
+        <div onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
             <LayerMenuBar
                 type={type}
                 volume={volume}

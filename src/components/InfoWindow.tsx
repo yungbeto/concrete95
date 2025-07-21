@@ -10,6 +10,7 @@ interface InfoWindowProps {
   zIndex: number;
   onClose: () => void;
   onMouseDown: (e: React.MouseEvent) => void;
+  onTouchStart: (e: React.TouchEvent) => void;
   children: React.ReactNode;
 }
 
@@ -19,6 +20,7 @@ export default function InfoWindow({
   zIndex,
   onClose,
   onMouseDown,
+  onTouchStart,
   children,
 }: InfoWindowProps) {
   const windowStyle = {
@@ -32,6 +34,7 @@ export default function InfoWindow({
       className="w-96 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute"
       style={windowStyle}
       onMouseDown={onMouseDown}
+      onTouchStart={onTouchStart}
     >
       {/* Title Bar */}
       <div className="bg-blue-800 text-white flex items-center justify-between p-1 cursor-move">
@@ -46,6 +49,7 @@ export default function InfoWindow({
           }}
           aria-label="Close"
           onMouseDown={(e) => e.stopPropagation()} // Prevent drag
+          onTouchStart={(e) => e.stopPropagation()} // Prevent drag on touch
         >
           <X className="w-3 h-3 text-black" />
         </Button>
@@ -55,6 +59,7 @@ export default function InfoWindow({
       <div
         className="p-4"
         onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
       >
         {children}
       </div>

@@ -14,16 +14,15 @@ import SoundscapeController from '@/components/SoundscapeController';
 import { searchFreesound, type FreesoundSound } from '@/actions/freesound';
 import { useToast } from '@/hooks/use-toast';
 import LayerCard from '@/components/LayerCard';
-import { Info, Music, Settings, Waves, Zap, type LucideIcon, AlertTriangle } from 'lucide-react';
+import { Info, Music, Settings, Waves, Zap, type LucideIcon, Speaker } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DesktopIcon from '../DesktopIcon';
 import InfoWindow from '../InfoWindow';
 import TaskbarItem from '../TaskbarItem';
-import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import Fieldset from '../Fieldset';
 import { Slider } from '../ui/slider';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 type LayerInfo = FreesoundLayerInfo | SynthLayerInfo;
 
@@ -102,6 +101,9 @@ export default function EtherealAcousticsClient() {
   const [delayFeedback, setDelayFeedback] = useState(0.6);
   const [reverbDecay, setReverbDecay] = useState(10);
   const [globalBPM, setGlobalBPM] = useState(120);
+  const [isAudioReady, setIsAudioReady] = useState(false);
+  const isMobile = useIsMobile();
+
 
   useEffect(() => {
     if (audioEngineRef.current) {
@@ -180,6 +182,34 @@ export default function EtherealAcousticsClient() {
       setWindows(prev => prev.map(w => w.id === id ? { ...w, zIndex: currentMaxZ + 1 } : w));
     }
   };
+  
+  const getNewLayerPosition = () => {
+    if (isMobile) {
+        // 320 is card width, 40 is vertical offset per layer
+        const x = (window.innerWidth / 2) - 160; 
+        const y = 80 + layers.length * 40;
+        return { x, y };
+    }
+    return {
+        x: Math.random() * (window.innerWidth / 2),
+        y: Math.random() * (window.innerHeight / 4)
+    };
+  };
+
+  const getNewWindowPosition = () => {
+    if (isMobile) {
+        // 384 is window width
+        const x = (window.innerWidth / 2) - 192;
+        const y = 100;
+        return {x, y};
+    }
+    const openWindows = windows.filter(w => w.isOpen);
+    return {
+        x: 250 + openWindows.length * 20,
+        y: 150 + openWindows.length * 20
+    }
+  }
+
 
   const addLayer = (
     type: 'synth' | 'freesound' | 'melodic',
@@ -194,10 +224,7 @@ export default function EtherealAcousticsClient() {
       node: null,
       type: type,
       status: 'loading',
-      position: {
-        x: Math.random() * (window.innerWidth / 2),
-        y: Math.random() * (window.innerHeight / 4)
-      },
+      position: getNewLayerPosition(),
       zIndex: maxZIndex + 1,
       ...baseProperties,
     };
@@ -304,7 +331,7 @@ export default function EtherealAcousticsClient() {
     );
   };
 
-  const handleDragStart = (id: string, type: 'layer' | 'window', e: React.MouseEvent) => {
+  const handleDragStart = (id: string, type: 'layer' | 'window', e: React.MouseEvent | React.TouchEvent) => {
     bringToFront(id, type);
     let item;
     if (type === 'layer') {
@@ -312,59 +339,72 @@ export default function EtherealAcousticsClient() {
     } else {
         item = windows.find(w => w.id === id);
     }
-
+  
     if (!item) return;
-
+  
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+  
     setDragState({
       id: id,
       type,
-      offsetX: e.clientX - item.position.x,
-      offsetY: e.clientY - item.position.y,
+      offsetX: clientX - item.position.x,
+      offsetY: clientY - item.position.y,
     });
   };
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
+  
+  const handleMouseMove = useCallback((e: MouseEvent | TouchEvent) => {
     if (!dragState) return;
-
+  
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+  
     const moveItem = (items: any[]) => {
       return items.map(item =>
         item.id === dragState.id
           ? {
               ...item,
               position: {
-                x: e.clientX - dragState.offsetX,
-                y: e.clientY - dragState.offsetY,
+                x: clientX - dragState.offsetX,
+                y: clientY - dragState.offsetY,
               },
             }
           : item
       );
     };
-
+  
     if (dragState.type === 'layer') {
       setLayers(prev => moveItem(prev));
     } else {
       setWindows(prev => moveItem(prev));
     }
   }, [dragState]);
-
+  
   const handleMouseUp = useCallback(() => {
     setDragState(null);
   }, []);
-
+  
   useEffect(() => {
     if (dragState) {
       window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('touchmove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('touchend', handleMouseUp);
     } else {
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('touchmove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchend', handleMouseUp);
     }
-
+  
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('touchmove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchend', handleMouseUp);
     };
   }, [dragState, handleMouseMove, handleMouseUp]);
+  
 
   const handleScaleChange = (value: string) => {
     setGlobalScale(value as ScaleName);
@@ -468,7 +508,7 @@ export default function EtherealAcousticsClient() {
   const openWindow = (id: string) => {
     bringToFront(id, 'window');
     setWindows(prev =>
-      prev.map(w => (w.id === id ? { ...w, isOpen: true } : w))
+      prev.map(w => (w.id === id ? { ...w, isOpen: true, position: getNewWindowPosition() } : w))
     );
   };
 
@@ -511,10 +551,40 @@ export default function EtherealAcousticsClient() {
       prevLayers.map((l) => (l.id === id ? { ...l, playbackRate: rate } : l))
     );
   };
+  
+  const handleStartAudio = async () => {
+    await Tone.start();
+    setIsAudioReady(true);
+  };
 
   return (
     <div className="relative w-full h-screen flex flex-col overflow-hidden">
       <AudioEngine ref={audioEngineRef} />
+
+      {!isAudioReady && (
+        <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center">
+            <div className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans">
+                <div className="bg-blue-800 text-white flex items-center p-1">
+                  <span className="font-bold text-sm select-none">Audio Permission</span>
+                </div>
+                <div className="p-4 flex flex-col items-center gap-4 text-black">
+                    <div className="flex items-start gap-4 self-stretch">
+                        <Speaker className="w-8 h-8 text-blue-600 flex-shrink-0" />
+                        <div>
+                            <p>This experience requires audio. Please click the button below to enable it.</p>
+                        </div>
+                    </div>
+                    <Button
+                        variant="retro"
+                        className="px-8"
+                        onClick={handleStartAudio}
+                    >
+                        Enable Audio
+                    </Button>
+                </div>
+              </div>
+        </div>
+      )}
 
       <main className="flex-grow blueprint-grid relative">
         <div className="absolute top-4 left-4 flex gap-2" style={{zIndex: DESKTOP_ICON_Z_INDEX}}>
@@ -551,6 +621,7 @@ export default function EtherealAcousticsClient() {
               onSendChange={handleSendChange}
               onPlaybackRateChange={handlePlaybackRateChange}
               onMouseDown={(e) => handleDragStart(layer.id, 'layer', e)}
+              onTouchStart={(e) => handleDragStart(layer.id, 'layer', e)}
             />
           ))}
           {windows.map(win =>
@@ -562,12 +633,13 @@ export default function EtherealAcousticsClient() {
                 zIndex={win.zIndex}
                 onClose={() => closeWindow(win.id)}
                 onMouseDown={(e) => handleDragStart(win.id, 'window', e)}
+                onTouchStart={(e) => handleDragStart(win.id, 'window', e)}
               >
                 {win.content}
               </InfoWindow>
             ) : null
           )}
-          {layers.length === 0 && !isAlertDismissed && (
+          {layers.length === 0 && !isAlertDismissed && isAudioReady &&(
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
               <div className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans">
                 <div className="bg-blue-800 text-white flex items-center p-1">
@@ -601,7 +673,7 @@ export default function EtherealAcousticsClient() {
             onAddFreesoundLayer={addFreesoundLayer}
             onAddMelodicLayer={addMelodicLayer}
             onStopAll={handleRemoveAllLayers}
-            canAddLayer={layers.length < MAX_LAYERS}
+            canAddLayer={layers.length < MAX_LAYERS && isAudioReady}
             hasLayers={layers.length > 0}
           />
           <div className="flex-grow flex items-center gap-1 mx-1 overflow-hidden h-full">
