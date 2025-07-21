@@ -103,14 +103,16 @@ export default function EtherealAcousticsClient() {
   const [reverbDecay, setReverbDecay] = useState(10);
   const [globalBPM, setGlobalBPM] = useState(120);
   const [isAudioReady, setIsAudioReady] = useState(false);
+  const [isEngineInitialized, setIsEngineInitialized] = useState(false);
   const isMobile = useIsMobile();
 
 
   useEffect(() => {
-    if (audioEngineRef.current) {
+    if (audioEngineRef.current && !isMobile) {
         setGlobalBPM(audioEngineRef.current.getBPM());
+        setIsEngineInitialized(true);
     }
-  }, []);
+  }, [isMobile]);
 
 
   const [windows, setWindows] = useState<WindowState[]>([
@@ -216,8 +218,7 @@ export default function EtherealAcousticsClient() {
     type: 'synth' | 'freesound' | 'melodic',
     baseProperties: Partial<Layer> = {}
   ) => {
-    if (!isAudioReady && isMobile) {
-        // Don't add layers on mobile if audio not enabled yet.
+    if (!isEngineInitialized) {
         return;
     }
     const id = `layer_${Date.now()}_${Math.random()}`;
@@ -562,12 +563,17 @@ export default function EtherealAcousticsClient() {
   
   const handleStartAudio = async () => {
     await Tone.start();
+    if (audioEngineRef.current) {
+        audioEngineRef.current.initialize();
+        setGlobalBPM(audioEngineRef.current.getBPM());
+        setIsEngineInitialized(true);
+    }
     setIsAudioReady(true);
   };
 
   return (
     <div className="relative w-full h-dvh flex flex-col overflow-hidden">
-      <AudioEngine ref={audioEngineRef} />
+      <AudioEngine ref={audioEngineRef} isMobile={isMobile} />
 
       {isMobile && !isAudioReady && (
         <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center">
@@ -647,7 +653,7 @@ export default function EtherealAcousticsClient() {
               </InfoWindow>
             ) : null
           )}
-          {layers.length === 0 && !isAlertDismissed && (!isMobile || isAudioReady) && (
+          {layers.length === 0 && !isAlertDismissed && isEngineInitialized && (
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
               <div className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans">
                 <div className="bg-blue-800 text-white flex items-center p-1">
@@ -681,7 +687,7 @@ export default function EtherealAcousticsClient() {
             onAddFreesoundLayer={addFreesoundLayer}
             onAddMelodicLayer={addMelodicLayer}
             onStopAll={handleRemoveAllLayers}
-            canAddLayer={layers.length < MAX_LAYERS && (!isMobile || isAudioReady)}
+            canAddLayer={layers.length < MAX_LAYERS && isEngineInitialized}
             hasLayers={layers.length > 0}
           />
           <div className="flex-grow flex items-center gap-1 mx-1 overflow-hidden h-full">

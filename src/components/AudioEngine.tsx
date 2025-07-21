@@ -34,6 +34,7 @@ export const scaleNames = Object.keys(scales) as ScaleName[];
 
 
 export type AudioEngineHandle = {
+  initialize: () => void;
   startSynthLoop: (scale?: ScaleName) => {
     sequence: Tone.Sequence;
     info: SynthLayerInfo;
@@ -59,13 +60,13 @@ export type AudioEngineHandle = {
   getWaveform: (node: Tone.Player | Tone.Sequence) => Float32Array | null;
 };
 
-const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
+const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props, ref) => {
   const masterLimiter = useRef<Tone.Limiter | null>(null);
   const fxBus = useRef<{ delay: Tone.FeedbackDelay, reverb: Tone.Reverb } | null>(null);
 
   const isInitialized = useRef(false);
 
-  useEffect(() => {
+  const initializeAudio = () => {
     if (typeof window !== 'undefined' && !isInitialized.current) {
         masterLimiter.current = new Tone.Limiter(-6).toDestination();
         Tone.Transport.bpm.value = Math.floor(Math.random() * (100 - 60 + 1)) + 60;
@@ -86,6 +87,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         fxBus.current = { delay, reverb };
         isInitialized.current = true;
     }
+  }
+
+  useEffect(() => {
+    if (!props.isMobile) {
+        initializeAudio();
+    }
     
     return () => {
         if (isInitialized.current) {
@@ -97,9 +104,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
             isInitialized.current = false;
         }
     };
-  }, []);
+  }, [props.isMobile]);
 
   useImperativeHandle(ref, () => ({
+    initialize: () => {
+        initializeAudio();
+    },
     disposeAll: () => {
         Tone.Transport.stop();
         Tone.Transport.cancel();
