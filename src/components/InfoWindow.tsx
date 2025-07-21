@@ -58,7 +58,7 @@ export default function InfoWindow({
 
       {/* Content */}
       <div
-        className="p-0 max-h-[70vh]"
+        className="max-h-[70vh] overflow-hidden"
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
       >
