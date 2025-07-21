@@ -58,11 +58,11 @@ export default function InfoWindow({
 
       {/* Content */}
       <div
-        className="p-0"
+        className="p-0 max-h-[70vh]"
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
       >
-        <ScrollArea className="max-h-[70vh] w-full">
+        <ScrollArea className="h-full w-full">
             <div className="p-4">{children}</div>
         </ScrollArea>
       </div>
