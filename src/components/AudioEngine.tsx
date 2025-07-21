@@ -162,16 +162,16 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       }
       const currentScale = scales[scaleName];
       
-      const sequenceLength = Math.floor(Math.random() * 3) + 2;
+      const sequenceLength = Math.floor(Math.random() * 3) + 2; // 2, 3, or 4
       const events = Array.from({ length: sequenceLength }, () => {
         const randomValue = Math.random();
-        if (randomValue < 0.2) { 
+        if (randomValue < 0.2) { // 20% chance of rest
           return null;
-        } else if (randomValue < 0.5) { 
+        } else if (randomValue < 0.5) { // 30% chance of single note
           return currentScale[Math.floor(Math.random() * currentScale.length)];
-        } else {
+        } else { // 50% chance of chord
             const chord = new Set<string>();
-            const numNotes = Math.random() < 0.1 ? 4 : 3;
+            const numNotes = Math.random() < 0.1 ? 4 : 3; // 10% chance of 4-note chord
             while (chord.size < numNotes && chord.size < currentScale.length) {
                 const note = currentScale[Math.floor(Math.random() * currentScale.length)];
                 chord.add(note);
