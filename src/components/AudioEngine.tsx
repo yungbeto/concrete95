@@ -62,30 +62,40 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
   const masterLimiter = useRef<Tone.Limiter | null>(null);
   const fxBus = useRef<{ delay: Tone.FeedbackDelay, reverb: Tone.Reverb } | null>(null);
 
-  if (typeof window !== 'undefined' && !masterLimiter.current) {
-    masterLimiter.current = new Tone.Limiter(-6).toDestination();
-    Tone.Transport.bpm.value = Math.floor(Math.random() * (100 - 60 + 1)) + 60;
-    const delay = new Tone.FeedbackDelay({
-      delayTime: '4n',
-      feedback: 0.6,
-      wet: 0.8,
-    });
-    const reverb = new Tone.Reverb({
-      decay: 10,
-      preDelay: 0.05,
-      wet: 0.9,
-    });
-    delay.chain(reverb, masterLimiter.current);
-    fxBus.current = { delay, reverb };
-  }
+  // Use a ref to track initialization state
+  const isInitialized = useRef(false);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && !isInitialized.current) {
+        masterLimiter.current = new Tone.Limiter(-6).toDestination();
+        Tone.Transport.bpm.value = Math.floor(Math.random() * (100 - 60 + 1)) + 60;
+        
+        const delay = new Tone.FeedbackDelay({
+            delayTime: '4n',
+            feedback: 0.6,
+        });
+        delay.wet.value = 0.8;
+
+        const reverb = new Tone.Reverb({
+            decay: 10,
+            preDelay: 0.05,
+        });
+        reverb.wet.value = 0.9;
+
+        delay.chain(reverb, masterLimiter.current);
+        fxBus.current = { delay, reverb };
+        isInitialized.current = true; // Mark as initialized
+    }
+    
     return () => {
-      masterLimiter.current?.dispose();
-      masterLimiter.current = null;
-      fxBus.current?.delay.dispose();
-      fxBus.current?.reverb.dispose();
-      fxBus.current = null;
+        if (isInitialized.current) {
+            masterLimiter.current?.dispose();
+            fxBus.current?.delay.dispose();
+            fxBus.current?.reverb.dispose();
+            masterLimiter.current = null;
+            fxBus.current = null;
+            isInitialized.current = false;
+        }
     };
   }, []);
 
@@ -119,7 +129,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const attack = Math.random() * 2 + 1;
       const release = Math.random() * 4 + 2;
 
-      const synth = new Tone.PolySynth(Tone.Synth, {
+      const synthOptions: Tone.SynthOptions = {
         oscillator: { type: selectedOscillator },
         envelope: {
           attack: attack,
@@ -127,19 +137,19 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
           sustain: 0.8,
           release: release,
         },
-      } as any);
+      };
+
+      const synth = new Tone.PolySynth(Tone.Synth, synthOptions);
       synth.volume.value = -18;
       
-      const filter = new Tone.Filter({
-        type: 'lowpass',
-        frequency: Math.random() * 1000 + 500,
-        Q: Math.random() * 2 + 0.5,
-      }).connect(masterLimiter.current);
+      const filterFreq = Math.random() * 1000 + 500;
+      const filter = new Tone.Filter(filterFreq, 'lowpass', '48db');
+      filter.Q.value = Math.random() * 2 + 0.5;
       
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
       
       const waveform = new Tone.Waveform(1024);
-      synth.connect(filter);
+      synth.chain(filter, masterLimiter.current);
       synth.connect(sendGain);
       synth.connect(waveform);
       
@@ -177,7 +187,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       
       const info: SynthLayerInfo = {
         type: 'synth',
-        description: `Synth Pad (${selectedOscillator}) at ${Tone.Transport.bpm.value.toFixed(0)} BPM in ${scaleName} scale. Attack: ${attack.toFixed(1)}s, Release: ${release.toFixed(1)}s. Filter Freq: ${(filter.frequency.value as number).toFixed(0)}Hz`
+        description: `Synth Pad (${selectedOscillator}) at ${Tone.Transport.bpm.value.toFixed(0)} BPM in ${scaleName} scale. Attack: ${attack.toFixed(1)}s, Release: ${release.toFixed(1)}s. Filter Freq: ${filterFreq.toFixed(0)}Hz`
       };
 
       return { sequence, info };
@@ -247,32 +257,22 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       Tone.start();
 
       const filterFreq = Math.random() * 2000 + 800;
-      const filter = new Tone.Filter({
-        type: 'lowpass',
-        frequency: filterFreq,
-        Q: Math.random() * 2 + 1,
-      });
+      const filter = new Tone.Filter(filterFreq, 'lowpass', '24db');
+      filter.Q.value = Math.random() * 2 + 1;
 
       const lfoFreq = Math.random() * 0.5 + 0.1;
-      const lfo = new Tone.LFO({
-        frequency: lfoFreq,
-        min: filter.frequency.value * 0.8,
-        max: filter.frequency.value * 1.2,
-      }).connect(filter.frequency).start();
+      const lfo = new Tone.LFO(lfoFreq, filter.frequency.value * 0.8, filter.frequency.value * 1.2);
+      lfo.connect(filter.frequency).start();
       
       const reverbDecay = Math.random() * 4 + 1;
-      const reverb = new Tone.Reverb({
-        decay: reverbDecay,
-        wet: Math.random() * 0.4 + 0.1,
-      });
+      const reverb = new Tone.Reverb(reverbDecay);
+      reverb.wet.value = Math.random() * 0.4 + 0.1;
 
       const delayTimeOptions = ['8n', '4n', '16n', '8t', '16t'];
       const delayTime = delayTimeOptions[Math.floor(Math.random() * delayTimeOptions.length)];
-      const delay = new Tone.FeedbackDelay({
-        delayTime: delayTime,
-        feedback: Math.random() * 0.6 + 0.1,
-        wet: Math.random() * 0.5 + 0.1,
-      }).chain(filter, reverb, masterLimiter.current);
+      const delay = new Tone.FeedbackDelay(delayTime, Math.random() * 0.6 + 0.1);
+      delay.wet.value = Math.random() * 0.5 + 0.1;
+      delay.chain(filter, reverb, masterLimiter.current);
       
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
 
@@ -290,7 +290,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
             modulationIndex: modIndex,
             envelope: { attack: 0.01, release: 1.5 },
             modulationEnvelope: { attack: 0.05, release: 1 },
-          } as any);
+          } as Partial<Tone.FMSynthOptions>);
           synthDescription = `FMSynth (h:${harmonicity.toFixed(1)}, i:${modIndex.toFixed(1)})`;
           break;
         case 'am':
@@ -299,7 +299,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
             harmonicity: amHarmonicity,
             envelope: { attack: 0.01, release: 1.5 },
             modulationEnvelope: { attack: 0.05, release: 1 },
-          } as any);
+          } as Partial<Tone.AMSynthOptions>);
           synthDescription = `AMSynth (h:${amHarmonicity.toFixed(1)})`;
           break;
         case 'mono':
@@ -308,7 +308,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
                 filter: { Q: Math.random() * 2 + 1 },
                 envelope: { attack: 0.01, release: 1 },
                 filterEnvelope: { attack: 0.02, baseFrequency: 200, octaves: 3 }
-            } as any);
+            } as Partial<Tone.MonoSynthOptions>);
             synthDescription = `MonoSynth (sawtooth)`;
             break;
         case 'pluck':
@@ -325,7 +325,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
           synth = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: oscType },
             envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 1 },
-          } as any);
+          } as Partial<Tone.SynthOptions>);
           synthDescription = `Synth (${oscType})`;
           break;
       }
