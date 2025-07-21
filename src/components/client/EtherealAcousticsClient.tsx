@@ -200,7 +200,7 @@ export default function EtherealAcousticsClient() {
 
   const getNewWindowPosition = () => {
     if (isMobile) {
-        const x = (window.innerWidth / 2) - 192;
+        const x = (window.innerWidth / 2) - 160;
         const y = 100;
         return {x, y};
     }

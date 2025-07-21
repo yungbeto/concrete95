@@ -7,6 +7,14 @@
   src: url('https://fonts.cdnfonts.com/s/16569/LCD-7.woff') format('woff');
 }
 
+html, body {
+  overscroll-behavior: none;
+  overflow: hidden;
+  height: 100%;
+  position: fixed;
+  width: 100%;
+}
+
 body {
   font-family: Arial, Helvetica, sans-serif;
 }
