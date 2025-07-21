@@ -59,8 +59,8 @@ type DragState = {
 const MAX_LAYERS = 8;
 const DESKTOP_ICON_Z_INDEX = 10;
 
-const adjectives = ["Whispering", "Crimson", "Silent", "Wandering", "Golden", "Frozen", "Electric", "Forgotten", "Dreaming", "Floating"];
-const nouns = ["Echo", "Void", "Mirage", "Nexus", "Nebula", "Tide", "Signal", "Cipher", "Ghost", "Fragment"];
+const adjectives = ["Whispering", "Crimson", "Silent", "Wandering", "Golden", "Frozen", "Electric", "Forgotten", "Dreaming", "Floating", "Luminous", "Distant", "Hollow", "Fading", "Shimmering", "Pulsating", "Drifting", "Cosmic", "Spectral", "Resonant", "Astral", "Veiled", "Lucid", "Starlit", "Subtle"];
+const nouns = ["Echo", "Void", "Mirage", "Nexus", "Nebula", "Tide", "Signal", "Cipher", "Ghost", "Fragment", "Pulse", "Resonance", "Drift", "Particle", "Stardust", "Hum", "Frequency", "Vibration", "Glimmer", "Wave", "Artifact", "Oracle", "Monolith", "Chime", "Whisper"];
 
 
 const generateRandomName = () => {
@@ -216,8 +216,9 @@ export default function EtherealAcousticsClient() {
     type: 'synth' | 'freesound' | 'melodic',
     baseProperties: Partial<Layer> = {}
   ) => {
-    if (!isAudioReady && !isMobile) {
-        setIsAudioReady(true);
+    if (!isAudioReady && isMobile) {
+        // Don't add layers on mobile if audio not enabled yet.
+        return;
     }
     const id = `layer_${Date.now()}_${Math.random()}`;
     const newLayerStub: Layer = {
@@ -269,6 +270,7 @@ export default function EtherealAcousticsClient() {
   const addSynthLayer = () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('synth', { volume: -18 });
+    if (!id) return;
 
     const newSynthData = audioEngineRef.current.startSynthLoop(globalScale);
     if (!newSynthData) {
@@ -286,6 +288,7 @@ export default function EtherealAcousticsClient() {
   const addFreesoundLayer = async () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('freesound', { volume: -12, playbackRate: 1 });
+    if (!id) return;
 
     const sounds = await searchFreesound('');
 
@@ -321,6 +324,7 @@ export default function EtherealAcousticsClient() {
   const addMelodicLayer = () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
     const id = addLayer('melodic', { volume: -18 });
+    if (!id) return;
 
     const newMelodicData = audioEngineRef.current.startMelodicLoop(globalScale);
     if (!newMelodicData) {
@@ -643,7 +647,7 @@ export default function EtherealAcousticsClient() {
               </InfoWindow>
             ) : null
           )}
-          {layers.length === 0 && !isAlertDismissed && (isAudioReady || !isMobile) && (
+          {layers.length === 0 && !isAlertDismissed && (!isMobile || isAudioReady) && (
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
               <div className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans">
                 <div className="bg-blue-800 text-white flex items-center p-1">
@@ -677,7 +681,7 @@ export default function EtherealAcousticsClient() {
             onAddFreesoundLayer={addFreesoundLayer}
             onAddMelodicLayer={addMelodicLayer}
             onStopAll={handleRemoveAllLayers}
-            canAddLayer={layers.length < MAX_LAYERS && (isAudioReady || !isMobile)}
+            canAddLayer={layers.length < MAX_LAYERS && (!isMobile || isAudioReady)}
             hasLayers={layers.length > 0}
           />
           <div className="flex-grow flex items-center gap-1 mx-1 overflow-hidden h-full">
