@@ -140,7 +140,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       synth.volume.value = -18;
       
       const filterFreq = Math.random() * 1000 + 500;
-      const filter = new Tone.Filter(filterFreq, 'lowpass', '48db');
+      const filter = new Tone.Filter(filterFreq, 'lowpass', -48);
       filter.Q.value = Math.random() * 2 + 0.5;
       
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
@@ -254,7 +254,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       Tone.start();
 
       const filterFreq = Math.random() * 2000 + 800;
-      const filter = new Tone.Filter(filterFreq, 'lowpass', '24db');
+      const filter = new Tone.Filter(filterFreq, 'lowpass', -24);
       filter.Q.value = Math.random() * 2 + 1;
 
       const lfoFreq = Math.random() * 0.5 + 0.1;
