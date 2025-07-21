@@ -126,16 +126,18 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const selectedOscillator =
         oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)];
 
-      const attack = Math.random() * 2 + 1;
-      const release = Math.random() * 4 + 2;
+      const attack = Math.random() * 2 + 1; // Range: 1 to 3 seconds
+      const decay = Math.random() * 0.4 + 0.1; // Range: 0.1 to 0.5
+      const sustain = Math.random() * 0.3 + 0.6; // Range: 0.6 to 0.9
+      const release = Math.random() * 4 + 2; // Range: 2 to 6 seconds
 
       const synth = new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: selectedOscillator },
         envelope: {
-          attack: attack,
-          decay: 0.1,
-          sustain: 0.8,
-          release: release,
+          attack,
+          decay,
+          sustain,
+          release,
         },
       });
       synth.volume.value = -18;
@@ -205,7 +207,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       
       const info: SynthLayerInfo = {
         type: 'synth',
-        description: `Synth Pad (${selectedOscillator}) at ${Tone.Transport.bpm.value.toFixed(0)} BPM in ${scaleName} scale. Attack: ${attack.toFixed(1)}s, Release: ${release.toFixed(1)}s. Filter Freq: ${filterFreq.toFixed(0)}Hz modulated by LFO at ${lfoFreq.toFixed(2)}Hz.`
+        description: `Synth Pad (${selectedOscillator}) at ${Tone.Transport.bpm.value.toFixed(0)} BPM in ${scaleName} scale. Envelope A:${attack.toFixed(1)} D:${decay.toFixed(1)} S:${sustain.toFixed(1)} R:${release.toFixed(1)}. Filter Freq: ${filterFreq.toFixed(0)}Hz modulated by LFO at ${lfoFreq.toFixed(2)}Hz.`
       };
 
       return { sequence, info };
