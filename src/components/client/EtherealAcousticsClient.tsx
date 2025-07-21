@@ -185,7 +185,6 @@ export default function EtherealAcousticsClient() {
   
   const getNewLayerPosition = () => {
     if (isMobile) {
-        // 320 is card width, 40 is vertical offset per layer
         const x = (window.innerWidth / 2) - 160; 
         const y = 80 + layers.length * 40;
         return { x, y };
@@ -198,7 +197,6 @@ export default function EtherealAcousticsClient() {
 
   const getNewWindowPosition = () => {
     if (isMobile) {
-        // 384 is window width
         const x = (window.innerWidth / 2) - 192;
         const y = 100;
         return {x, y};
@@ -215,6 +213,9 @@ export default function EtherealAcousticsClient() {
     type: 'synth' | 'freesound' | 'melodic',
     baseProperties: Partial<Layer> = {}
   ) => {
+    if (!isAudioReady && !isMobile) {
+        setIsAudioReady(true);
+    }
     const id = `layer_${Date.now()}_${Math.random()}`;
     const newLayerStub: Layer = {
       id,
@@ -561,7 +562,7 @@ export default function EtherealAcousticsClient() {
     <div className="relative w-full h-screen flex flex-col overflow-hidden">
       <AudioEngine ref={audioEngineRef} />
 
-      {!isAudioReady && (
+      {isMobile && !isAudioReady && (
         <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center">
             <div className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans">
                 <div className="bg-blue-800 text-white flex items-center p-1">
@@ -639,7 +640,7 @@ export default function EtherealAcousticsClient() {
               </InfoWindow>
             ) : null
           )}
-          {layers.length === 0 && !isAlertDismissed && isAudioReady &&(
+          {layers.length === 0 && !isAlertDismissed && (isAudioReady || !isMobile) && (
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
               <div className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans">
                 <div className="bg-blue-800 text-white flex items-center p-1">
@@ -673,7 +674,7 @@ export default function EtherealAcousticsClient() {
             onAddFreesoundLayer={addFreesoundLayer}
             onAddMelodicLayer={addMelodicLayer}
             onStopAll={handleRemoveAllLayers}
-            canAddLayer={layers.length < MAX_LAYERS && isAudioReady}
+            canAddLayer={layers.length < MAX_LAYERS && (isAudioReady || !isMobile)}
             hasLayers={layers.length > 0}
           />
           <div className="flex-grow flex items-center gap-1 mx-1 overflow-hidden h-full">
