@@ -10,6 +10,9 @@ export default {
   ],
   theme: {
     extend: {
+      height: {
+        'dvh': '100dvh',
+      },
       fontFamily: {
         body: ['Inter', 'sans-serif'],
         headline: ['Inter', 'sans-serif'],

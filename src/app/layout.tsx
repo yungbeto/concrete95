@@ -15,7 +15,7 @@ export const metadata: Metadata = {
     type: 'website',
     url: siteUrl,
     title: 'Concrete 95',
-    description: 'An experimental audio environment. Sounds from Freesound.org.',
+    description: 'An experimental audio environment. Sounds from Freesound.org and Tone.js.',
     images: [
       {
         url: ogImageUrl,
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Concrete 95',
-    description: 'An experimental audio environment. Sounds from Freesound.org.',
+    description: 'An experimental audio environment. Sounds from Freesound.org and Tone.js.',
     images: [ogImageUrl],
   },
 };

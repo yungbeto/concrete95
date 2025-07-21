@@ -120,7 +120,7 @@ export default function EtherealAcousticsClient() {
       content: (
         <div className="text-black space-y-2 text-sm">
           <p>
-            Welcome to Concrete 95, a tool for random audio explorations.
+            Welcome to Concrete 95, a tool for random audio explorations. All audio from Freesound.org and Tone.js. 
           </p>
           <p>
             This app was built by <a href="http://robysaavedra.com" target="_blank" rel="noopener noreferrer" className="cursor-pointer text-blue-600 underline hover:text-blue-700">
@@ -566,7 +566,7 @@ export default function EtherealAcousticsClient() {
   };
 
   return (
-    <div className="relative w-full h-screen flex flex-col overflow-hidden">
+    <div className="relative w-full h-dvh flex flex-col overflow-hidden">
       <AudioEngine ref={audioEngineRef} />
 
       {isMobile && !isAudioReady && (
