@@ -385,14 +385,15 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const noteDurations = ['4n', '8n', '16n', '2n', '1m'];
       const sequenceLength = Math.floor(Math.random() * 8) + 4;
       const sequenceEvents = Array.from({ length: sequenceLength }, () => {
-        if (Math.random() < 0.3) {
+        const rand = Math.random();
+        if (rand < 0.3) { // 30% chance of rest
             return null;
-        }
-        if (Math.random() < 0.1 && synth instanceof Tone.PolySynth) {
+        } else if (rand < 0.4 && synth instanceof Tone.PolySynth) { // 10% chance of dyad (2-note chord)
             const rootNoteIndex = Math.floor(Math.random() * (currentScale.length - 2));
             return [currentScale[rootNoteIndex], currentScale[rootNoteIndex + 2]];
+        } else { // 60% chance of single note
+            return currentScale[Math.floor(Math.random() * currentScale.length)];
         }
-        return currentScale[Math.floor(Math.random() * currentScale.length)];
       });
       const sequenceInterval = noteDurations[Math.floor(Math.random() * noteDurations.length)];
 
