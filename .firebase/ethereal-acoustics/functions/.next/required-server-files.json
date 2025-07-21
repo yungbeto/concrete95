@@ -1,9 +1,7 @@
 {
   "version": 1,
   "config": {
-    "env": {
-      "FREESOUND_API_KEY": "kGI1moFvyJQM4oT4y84oKLScYUFE3ekPmZBeFM1D"
-    },
+    "env": {},
     "webpack": null,
     "eslint": {
       "ignoreDuringBuilds": true
@@ -86,7 +84,9 @@
     "i18n": null,
     "productionBrowserSourceMaps": false,
     "excludeDefaultMomentLocales": true,
-    "serverRuntimeConfig": {},
+    "serverRuntimeConfig": {
+      "freesoundApiKey": "kGI1moFvyJQM4oT4y84oKLScYUFE3ekPmZBeFM1D"
+    },
     "publicRuntimeConfig": {},
     "reactProductionProfiling": false,
     "reactStrictMode": null,
