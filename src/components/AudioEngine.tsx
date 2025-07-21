@@ -13,6 +13,7 @@ export type FreesoundLayerInfo = {
   type: 'freesound';
   id: number;
   name: string;
+  description: string;
 };
 
 const scales = {
@@ -142,6 +143,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const filterFreq = Math.random() * 1000 + 500;
       const filter = new Tone.Filter(filterFreq, 'lowpass', -48);
       filter.Q.value = Math.random() * 2 + 0.5;
+
+      const lfoFreq = Math.random() * 0.4 + 0.1;
+      const lfo = new Tone.LFO(lfoFreq, filter.frequency.value * 0.7, filter.frequency.value * 1.3).start();
+      lfo.connect(filter.frequency);
       
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
       
@@ -175,6 +180,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       sequence.start(0);
 
       (sequence as any).synth = synth;
+      (sequence as any).lfo = lfo;
+      (sequence as any).filter = filter;
       (sequence as any).sendGain = sendGain;
       (sequence as any).waveform = waveform;
 
@@ -184,15 +191,19 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       
       const info: SynthLayerInfo = {
         type: 'synth',
-        description: `Synth Pad (${selectedOscillator}) at ${Tone.Transport.bpm.value.toFixed(0)} BPM in ${scaleName} scale. Attack: ${attack.toFixed(1)}s, Release: ${release.toFixed(1)}s. Filter Freq: ${filterFreq.toFixed(0)}Hz`
+        description: `Synth Pad (${selectedOscillator}) at ${Tone.Transport.bpm.value.toFixed(0)} BPM in ${scaleName} scale. Attack: ${attack.toFixed(1)}s, Release: ${release.toFixed(1)}s. Filter Freq: ${filterFreq.toFixed(0)}Hz modulated by LFO at ${lfoFreq.toFixed(2)}Hz.`
       };
 
       return { sequence, info };
     },
     stopSynthLoop: (sequence) => {
       const synth = (sequence as any).synth;
+      const lfo = (sequence as any).lfo;
+      const filter = (sequence as any).filter;
       const sendGain = (sequence as any).sendGain;
       const waveform = (sequence as any).waveform;
+      if (lfo && !lfo.disposed) lfo.stop().dispose();
+      if (filter && !filter.disposed) filter.dispose();
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
       if (synth && !synth.disposed) {
@@ -215,9 +226,17 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       });
       player.volume.value = -12;
 
+      const filterFreq = Math.random() * 4000 + 1000;
+      const filter = new Tone.Filter(filterFreq, 'lowpass', -24);
+      filter.Q.value = Math.random() * 2 + 0.5;
+
+      const lfoFreq = Math.random() * 0.5 + 0.1;
+      const lfo = new Tone.LFO(lfoFreq, filter.frequency.value * 0.5, filter.frequency.value).start();
+      lfo.connect(filter.frequency);
+
       const sendGain = new Tone.Gain(0).connect(fxBus.current.delay);
       const waveform = new Tone.Waveform(1024);
-      player.connect(masterLimiter.current);
+      player.chain(filter, masterLimiter.current);
       player.connect(sendGain);
       player.connect(waveform);
       
@@ -230,11 +249,14 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       
       (player as any).sendGain = sendGain;
       (player as any).waveform = waveform;
+      (player as any).filter = filter;
+      (player as any).lfo = lfo;
 
       const info: FreesoundLayerInfo = {
         type: 'freesound',
         id: sound.id,
         name: sound.name,
+        description: `Sample loop. Filter at ${filterFreq.toFixed(0)}Hz modulated by LFO at ${lfoFreq.toFixed(2)}Hz.`
       };
 
       return { player, info };
@@ -242,6 +264,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
     stopFreesoundLoop: (player) => {
       const sendGain = (player as any).sendGain;
       const waveform = (player as any).waveform;
+      const filter = (player as any).filter;
+      const lfo = (player as any).lfo;
+      if (lfo && !lfo.disposed) lfo.stop().dispose();
+      if (filter && !filter.disposed) filter.dispose();
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
       if (player && !player.disposed) {

@@ -44,15 +44,18 @@ export default function LayerMenuBar({
 
     if (info.type === 'freesound') {
       return (
-        <a
-          href={`https://freesound.org/s/${info.id}/`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-blue-600 underline hover:text-blue-800"
-          onClick={(e) => e.stopPropagation()} // Prevent menu from closing
-        >
-          {info.name}
-        </a>
+        <div className="space-y-2">
+          <a
+            href={`https://freesound.org/s/${info.id}/`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-600 underline hover:text-blue-800"
+            onClick={(e) => e.stopPropagation()} // Prevent menu from closing
+          >
+            {info.name}
+          </a>
+          <p className="text-xs">{info.description}</p>
+        </div>
       );
     }
     

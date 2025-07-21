@@ -62,6 +62,7 @@ const DESKTOP_ICON_Z_INDEX = 10;
 const adjectives = ["Whispering", "Crimson", "Silent", "Wandering", "Golden", "Frozen", "Electric", "Forgotten", "Dreaming", "Floating"];
 const nouns = ["Echo", "Void", "Mirage", "Nexus", "Nebula", "Tide", "Signal", "Cipher", "Ghost", "Fragment"];
 
+
 const generateRandomName = () => {
   const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
   const noun = nouns[Math.floor(Math.random() * nouns.length)];
@@ -79,7 +80,7 @@ function DigitalClock() {
   }, []);
 
   return (
-    <div className="font-lcd text-lg text-neutral-800">
+    <div className="font-lcd text-md text-neutral-800">
       {time ? time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '00:00'}
     </div>
   );
@@ -119,12 +120,14 @@ export default function EtherealAcousticsClient() {
       content: (
         <div className="text-black space-y-2 text-sm">
           <p>
-            Welcome to Concrete 95, a tool for random audio explorations. Everything is musique.
+            Welcome to Concrete 95, a tool for random audio explorations.
           </p>
           <p>
             This app was built by <a href="http://robysaavedra.com" target="_blank" rel="noopener noreferrer" className="cursor-pointer text-blue-600 underline hover:text-blue-700">
-            Roby Saavedra</a>, a really cool software designer who lives in fabulous Emeryville, CA.
-
+            Roby Saavedra</a>.
+          </p>
+          <p>
+            Last updated: July 21, 2025
           </p>
         </div>
       ),
