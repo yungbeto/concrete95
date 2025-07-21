@@ -32,7 +32,7 @@ export default function InfoWindow({
 
   return (
     <div
-      className="w-80 h-auto max-h-[70vh] bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute flex flex-col"
+      className="w-80 h-auto bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute flex flex-col"
       style={windowStyle}
       onMouseDown={onMouseDown}
       onTouchStart={onTouchStart}
@@ -58,13 +58,11 @@ export default function InfoWindow({
 
       {/* Content */}
       <div
-        className="h-[calc(100%-28px)]" // Total height minus title bar height
+        className="p-4"
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
       >
-        <ScrollArea className="h-full w-full p-4">
-          {children}
-        </ScrollArea>
+        {children}
       </div>
     </div>
   );
