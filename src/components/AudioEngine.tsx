@@ -162,12 +162,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       }
       const currentScale = scales[scaleName];
       
-      const chords = [
-        [currentScale[0], currentScale[2], currentScale[4]],
-        [currentScale[1], currentScale[3], currentScale[5]],
-        [currentScale[2], currentScale[4], currentScale[6]],
-        [currentScale[3], currentScale[5], currentScale[0]],
-      ];
+      const chords = Array.from({ length: 4 }, () => {
+        const rootIndex = Math.floor(Math.random() * (currentScale.length - 4));
+        return [currentScale[rootIndex], currentScale[rootIndex + 2], currentScale[rootIndex + 4]];
+      });
 
       const sequence = new Tone.Sequence(
         (time, chord) => {
