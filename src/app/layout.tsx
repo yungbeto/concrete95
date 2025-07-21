@@ -2,32 +2,33 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
+import AnalyticsProvider from '@/components/AnalyticsProvider';
 
 const siteUrl = 'https://concrete95.net';
 const ogImageUrl = `${siteUrl}/og-image.png`;
 
 export const metadata: Metadata = {
-  title: 'Concrete 95',
+  title: 'Ethereal Acoustics',
   description: 'An experimental audio environment.',
   metadataBase: new URL(siteUrl),
   openGraph: {
     type: 'website',
     url: siteUrl,
-    title: 'Concrete 95',
+    title: 'Ethereal Acoustics',
     description: 'An experimental audio environment. Sounds from Freesound.org.',
     images: [
       {
         url: ogImageUrl,
         width: 1200,
         height: 630,
-        alt: 'Concrete 95 - An experimental audio environment.',
+        alt: 'Ethereal Acoustics - An experimental audio environment.',
       },
     ],
-    siteName: 'Concrete 95',
+    siteName: 'Ethereal Acoustics',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Concrete 95',
+    title: 'Ethereal Acoustics',
     description: 'An experimental audio environment. Sounds from Freesound.org.',
     images: [ogImageUrl],
   },
@@ -41,6 +42,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
+      <AnalyticsProvider />
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
