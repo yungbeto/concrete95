@@ -162,18 +162,30 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       }
       const currentScale = scales[scaleName];
       
-      const chords = Array.from({ length: 4 }, () => {
-        const rootIndex = Math.floor(Math.random() * (currentScale.length - 4));
-        return [currentScale[rootIndex], currentScale[rootIndex + 2], currentScale[rootIndex + 4]];
+      const sequenceLength = Math.floor(Math.random() * 3) + 2; // Random length between 2 and 4
+      const events = Array.from({ length: sequenceLength }, () => {
+        const randomValue = Math.random();
+        if (randomValue < 0.2) { // 20% chance of rest
+          return null;
+        } else if (randomValue < 0.5) { // 30% chance of single note
+          return currentScale[Math.floor(Math.random() * currentScale.length)];
+        } else { // 50% chance of chord
+          const rootIndex = Math.floor(Math.random() * (currentScale.length - 4));
+          if (rootIndex < 0) return currentScale[0];
+          return [currentScale[rootIndex], currentScale[rootIndex + 2], currentScale[rootIndex + 4]];
+        }
       });
 
       const sequence = new Tone.Sequence(
-        (time, chord) => {
-          synth.triggerAttackRelease(chord as Tone.Frequency[], '4m', time);
+        (time, event) => {
+          if (event) {
+            synth.triggerAttackRelease(event as Tone.Frequency | Tone.Frequency[], '4m', time);
+          }
         },
-        chords,
+        events,
         '4m'
       );
+
       sequence.loop = true;
       sequence.start(0);
 
