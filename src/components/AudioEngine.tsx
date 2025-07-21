@@ -108,11 +108,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       Tone.start();
 
       const oscillatorTypes: Tone.ToneOscillatorType[] = [
-        'fatsquare',
-        'fattriangle',
-        'fatsawtooth',
-        'sine',
+        'square',
         'triangle',
+        'sawtooth',
+        'sine',
       ];
       const selectedOscillator =
         oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)];
@@ -128,7 +127,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
           sustain: 0.8,
           release: release,
         },
-      });
+      } as any);
       synth.volume.value = -18;
       
       const filter = new Tone.Filter({
@@ -178,7 +177,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       
       const info: SynthLayerInfo = {
         type: 'synth',
-        description: `Synth Pad (${selectedOscillator}) at ${Tone.Transport.bpm.value.toFixed(0)} BPM in ${scaleName} scale. Attack: ${attack.toFixed(1)}s, Release: ${release.toFixed(1)}s. Filter Freq: ${filter.frequency.value.toFixed(0)}Hz`
+        description: `Synth Pad (${selectedOscillator}) at ${Tone.Transport.bpm.value.toFixed(0)} BPM in ${scaleName} scale. Attack: ${attack.toFixed(1)}s, Release: ${release.toFixed(1)}s. Filter Freq: ${(filter.frequency.value as number).toFixed(0)}Hz`
       };
 
       return { sequence, info };
@@ -280,7 +279,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const synthTypes = ['fm', 'am', 'mono', 'default', 'pluck'];
       const randomSynthType = synthTypes[Math.floor(Math.random() * synthTypes.length)];
 
-      let synth;
+      let synth: Tone.PolySynth | Tone.PluckSynth;
       let synthDescription = '';
       switch (randomSynthType) {
         case 'fm':
@@ -291,7 +290,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
             modulationIndex: modIndex,
             envelope: { attack: 0.01, release: 1.5 },
             modulationEnvelope: { attack: 0.05, release: 1 },
-          });
+          } as any);
           synthDescription = `FMSynth (h:${harmonicity.toFixed(1)}, i:${modIndex.toFixed(1)})`;
           break;
         case 'am':
@@ -300,7 +299,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
             harmonicity: amHarmonicity,
             envelope: { attack: 0.01, release: 1.5 },
             modulationEnvelope: { attack: 0.05, release: 1 },
-          });
+          } as any);
           synthDescription = `AMSynth (h:${amHarmonicity.toFixed(1)})`;
           break;
         case 'mono':
@@ -309,7 +308,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
                 filter: { Q: Math.random() * 2 + 1 },
                 envelope: { attack: 0.01, release: 1 },
                 filterEnvelope: { attack: 0.02, baseFrequency: 200, octaves: 3 }
-            });
+            } as any);
             synthDescription = `MonoSynth (sawtooth)`;
             break;
         case 'pluck':
@@ -326,7 +325,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
           synth = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: oscType },
             envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 1 },
-          });
+          } as any);
           synthDescription = `Synth (${oscType})`;
           break;
       }
@@ -363,7 +362,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
           if (note) {
             if (synth instanceof Tone.PluckSynth) {
                 synth.triggerAttack(note as string, time);
-            } else {
+            } else if (synth instanceof Tone.PolySynth) {
                 synth.triggerAttackRelease(note, '8n', time);
             }
           }
