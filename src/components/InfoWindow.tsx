@@ -32,13 +32,13 @@ export default function InfoWindow({
 
   return (
     <div
-      className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute flex flex-col"
+      className="w-80 h-auto max-h-[70vh] bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute flex flex-col"
       style={windowStyle}
       onMouseDown={onMouseDown}
       onTouchStart={onTouchStart}
     >
       {/* Title Bar */}
-      <div className="bg-blue-800 text-white flex items-center justify-between p-1 cursor-move flex-shrink-0">
+      <div className="bg-blue-800 text-white flex items-center justify-between p-1 h-7 cursor-move flex-shrink-0">
         <span className="font-bold text-sm select-none">{title}</span>
         <Button
           variant="retro"
@@ -58,7 +58,7 @@ export default function InfoWindow({
 
       {/* Content */}
       <div
-        className="overflow-hidden flex-grow"
+        className="h-[calc(100%-28px)]" // Total height minus title bar height
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
       >
