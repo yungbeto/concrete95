@@ -128,17 +128,14 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
       const attack = Math.random() * 2 + 1;
       const release = Math.random() * 4 + 2;
 
-      const synth = new Tone.PolySynth({
-        synth: Tone.Synth,
-        options: {
-          oscillator: { type: selectedOscillator },
-          envelope: {
-            attack: attack,
-            decay: 0.1,
-            sustain: 0.8,
-            release: release,
-          },
-        }
+      const synth = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: selectedOscillator },
+        envelope: {
+          attack: attack,
+          decay: 0.1,
+          sustain: 0.8,
+          release: release,
+        },
       });
       synth.volume.value = -18;
       
@@ -285,38 +282,29 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         case 'fm':
           const harmonicity = Math.random() * 2 + 0.5;
           const modIndex = Math.random() * 10 + 2;
-          synth = new Tone.PolySynth({
-            synth: Tone.FMSynth,
-            options: {
-                harmonicity: harmonicity,
-                modulationIndex: modIndex,
-                envelope: { attack: 0.01, release: 1.5 },
-                modulationEnvelope: { attack: 0.05, release: 1 },
-            }
+          synth = new Tone.PolySynth(Tone.FMSynth, {
+            harmonicity: harmonicity,
+            modulationIndex: modIndex,
+            envelope: { attack: 0.01, release: 1.5 },
+            modulationEnvelope: { attack: 0.05, release: 1 },
           });
           synthDescription = `FMSynth (h:${harmonicity.toFixed(1)}, i:${modIndex.toFixed(1)})`;
           break;
         case 'am':
           const amHarmonicity = Math.random() * 2 + 0.5;
-          synth = new Tone.PolySynth({
-            synth: Tone.AMSynth,
-            options: {
-              harmonicity: amHarmonicity,
-              envelope: { attack: 0.01, release: 1.5 },
-              modulationEnvelope: { attack: 0.05, release: 1 },
-            }
+          synth = new Tone.PolySynth(Tone.AMSynth, {
+            harmonicity: amHarmonicity,
+            envelope: { attack: 0.01, release: 1.5 },
+            modulationEnvelope: { attack: 0.05, release: 1 },
           });
           synthDescription = `AMSynth (h:${amHarmonicity.toFixed(1)})`;
           break;
         case 'mono':
-            synth = new Tone.PolySynth({
-                synth: Tone.MonoSynth,
-                options: {
-                    oscillator: { type: "sawtooth" },
-                    filter: { Q: Math.random() * 2 + 1 },
-                    envelope: { attack: 0.01, release: 1 },
-                    filterEnvelope: { attack: 0.02, baseFrequency: 200, octaves: 3 }
-                }
+            synth = new Tone.PolySynth(Tone.MonoSynth, {
+                oscillator: { type: "sawtooth" },
+                filter: { Q: Math.random() * 2 + 1 },
+                envelope: { attack: 0.01, release: 1 },
+                filterEnvelope: { attack: 0.02, baseFrequency: 200, octaves: 3 }
             });
             synthDescription = `MonoSynth (sawtooth)`;
             break;
@@ -331,12 +319,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, {}>((props, ref) => {
         default:
           const oscillatorTypes: Tone.ToneOscillatorType[] = ['triangle', 'sine', 'sawtooth'];
           const oscType = oscillatorTypes[Math.floor(Math.random() * oscillatorTypes.length)];
-          synth = new Tone.PolySynth({
-            synth: Tone.Synth,
-            options: {
-              oscillator: { type: oscType },
-              envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 1 },
-            }
+          synth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { type: oscType },
+            envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 1 },
           });
           synthDescription = `Synth (${oscType})`;
           break;
