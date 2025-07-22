@@ -14,7 +14,7 @@ import SoundscapeController from '@/components/SoundscapeController';
 import { searchFreesound, type FreesoundSound } from '@/actions/freesound';
 import { useToast } from '@/hooks/use-toast';
 import LayerCard from '@/components/LayerCard';
-import { Info, Music, Settings, Waves, Zap, type LucideIcon, Speaker } from 'lucide-react';
+import { Info, Music, Settings, Waves, Zap, type LucideIcon, Speaker, VolumeX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DesktopIcon from '../DesktopIcon';
 import InfoWindow from '../InfoWindow';
@@ -43,6 +43,7 @@ type Layer = {
 type WindowState = {
   id: string;
   title: string;
+  icon: LucideIcon;
   content: React.ReactNode;
   isOpen: boolean;
   position: { x: number; y: number };
@@ -104,6 +105,7 @@ export default function EtherealAcousticsClient() {
   const [globalBPM, setGlobalBPM] = useState(120);
   const [isAudioReady, setIsAudioReady] = useState(false);
   const [isEngineInitialized, setIsEngineInitialized] = useState(false);
+  const [isSilentMode, setIsSilentMode] = useState(false);
   const isMobile = useIsMobile();
 
 
@@ -119,6 +121,7 @@ export default function EtherealAcousticsClient() {
     {
       id: 'about',
       title: 'About Concrete 95',
+      icon: Info,
       content: (
         <div className="text-black space-y-2 text-sm">
           <p>
@@ -140,6 +143,7 @@ export default function EtherealAcousticsClient() {
     {
         id: 'settings',
         title: 'Global Settings',
+        icon: Settings,
         content: (
           <div className="text-black space-y-4 text-sm">
              {/* This content is dynamically generated */}
@@ -149,6 +153,24 @@ export default function EtherealAcousticsClient() {
         position: { x: 300, y: 200 },
         zIndex: 1,
       },
+      {
+        id: 'silent-mode',
+        title: 'Silent Mode Detected',
+        icon: VolumeX,
+        content: (
+            <div className="text-black space-y-2 text-sm">
+                <p>
+                    Your device appears to be in Silent Mode.
+                </p>
+                <p>
+                    To hear the audio experience, please use the physical switch on the side of your device to turn off silent mode.
+                </p>
+            </div>
+        ),
+        isOpen: false,
+        position: { x: 350, y: 250},
+        zIndex: 1,
+      }
   ]);
 
   const allItems = [...layers, ...windows.filter(w => w.isOpen)];
@@ -515,10 +537,10 @@ export default function EtherealAcousticsClient() {
   };
 
   const openWindow = (id: string) => {
-    bringToFront(id, 'window');
-    setWindows(prev =>
-      prev.map(w => (w.id === id ? { ...w, isOpen: true, position: getNewWindowPosition() } : w))
-    );
+    setWindows(prev => {
+        const currentMaxZ = Math.max(DESKTOP_ICON_Z_INDEX, ...prev.map(w => w.zIndex), ...layers.map(l => l.zIndex));
+        return prev.map(w => (w.id === id ? { ...w, isOpen: true, position: getNewWindowPosition(), zIndex: currentMaxZ + 1 } : w));
+    });
   };
 
   const closeWindow = (id: string) => {
@@ -563,6 +585,29 @@ export default function EtherealAcousticsClient() {
   
   const handleStartAudio = async () => {
     await Tone.start();
+
+    // A tiny, silent audio file as a data URI.
+    const silentAudio = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+    const audio = new Audio(silentAudio);
+    
+    // Check for silent mode by measuring playback time
+    const startTime = performance.now();
+    try {
+        await audio.play();
+        const playbackTime = performance.now() - startTime;
+        
+        // If playback time is near zero, it's likely silent mode.
+        if (playbackTime < 10) { 
+            setIsSilentMode(true);
+            openWindow('silent-mode');
+        } else {
+            setIsSilentMode(false);
+        }
+    } catch (e) {
+        // Playback failed, probably not in silent mode but some other issue.
+        setIsSilentMode(false);
+    }
+    
     if (audioEngineRef.current) {
         audioEngineRef.current.initialize();
         setGlobalBPM(audioEngineRef.current.getBPM());
@@ -612,6 +657,13 @@ export default function EtherealAcousticsClient() {
                 label="Settings.exe"
                 onClick={() => openWindow('settings')}
             />
+            {isSilentMode && (
+                <DesktopIcon
+                    icon={VolumeX}
+                    label="Silent Mode"
+                    onClick={() => openWindow('silent-mode')}
+                />
+            )}
         </div>
 
         <div className="absolute top-0 left-0 w-full h-full">
@@ -694,7 +746,7 @@ export default function EtherealAcousticsClient() {
             {windows.filter(w => w.isOpen).map(win => (
                 <TaskbarItem
                     key={win.id}
-                    icon={win.id === 'about' ? Info : Settings}
+                    icon={win.icon}
                     label={win.title}
                     isActive={activeItemId === win.id}
                     onClick={() => bringToFront(win.id, 'window')}
