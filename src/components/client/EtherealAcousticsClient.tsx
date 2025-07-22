@@ -105,7 +105,6 @@ export default function EtherealAcousticsClient() {
   const [globalBPM, setGlobalBPM] = useState(120);
   const [isAudioReady, setIsAudioReady] = useState(false);
   const [isEngineInitialized, setIsEngineInitialized] = useState(false);
-  const [isSilentMode, setIsSilentMode] = useState(false);
   const isMobile = useIsMobile();
 
 
@@ -153,24 +152,6 @@ export default function EtherealAcousticsClient() {
         position: { x: 300, y: 200 },
         zIndex: 1,
       },
-      {
-        id: 'silent-mode',
-        title: 'Silent Mode Detected',
-        icon: VolumeX,
-        content: (
-            <div className="text-black space-y-2 text-sm">
-                <p>
-                    Your device appears to be in Silent Mode.
-                </p>
-                <p>
-                    To hear the audio experience, please use the physical switch on the side of your device to turn off silent mode.
-                </p>
-            </div>
-        ),
-        isOpen: false,
-        position: { x: 350, y: 250},
-        zIndex: 1,
-      }
   ]);
 
   const allItems = [...layers, ...windows.filter(w => w.isOpen)];
@@ -585,29 +566,6 @@ export default function EtherealAcousticsClient() {
   
   const handleStartAudio = async () => {
     await Tone.start();
-
-    // A tiny, silent audio file as a data URI.
-    const silentAudio = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
-    const audio = new Audio(silentAudio);
-    
-    // Check for silent mode by measuring playback time
-    const startTime = performance.now();
-    try {
-        await audio.play();
-        const playbackTime = performance.now() - startTime;
-        
-        // If playback time is near zero, it's likely silent mode.
-        if (playbackTime < 10) { 
-            setIsSilentMode(true);
-            openWindow('silent-mode');
-        } else {
-            setIsSilentMode(false);
-        }
-    } catch (e) {
-        // Playback failed, probably not in silent mode but some other issue.
-        setIsSilentMode(false);
-    }
-    
     if (audioEngineRef.current) {
         audioEngineRef.current.initialize();
         setGlobalBPM(audioEngineRef.current.getBPM());
@@ -657,13 +615,6 @@ export default function EtherealAcousticsClient() {
                 label="Settings.exe"
                 onClick={() => openWindow('settings')}
             />
-            {isSilentMode && (
-                <DesktopIcon
-                    icon={VolumeX}
-                    label="Silent Mode"
-                    onClick={() => openWindow('silent-mode')}
-                />
-            )}
         </div>
 
         <div className="absolute top-0 left-0 w-full h-full">
