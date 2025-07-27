@@ -16,7 +16,7 @@ import SoundscapeController from '@/components/SoundscapeController';
 import { searchFreesound, type FreesoundSound } from '@/actions/freesound';
 import { useToast } from '@/hooks/use-toast';
 import LayerCard from '@/components/LayerCard';
-import { Info, Music, Settings, Waves, Zap, type LucideIcon, Speaker, Volume1, SlidersHorizontal } from 'lucide-react';
+import { Info, Music, Settings, Waves, Zap, type LucideIcon, Speaker, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DesktopIcon from '../DesktopIcon';
 import InfoWindow from '../InfoWindow';
@@ -109,7 +109,7 @@ export default function EtherealAcousticsClient() {
   const [reverbWet, setReverbWet] = useState(0.9);
   const [reverbDiffusion, setReverbDiffusion] = useState(0.7);
   const [globalBPM, setGlobalBPM] = useState(120);
-  const [isAudioReady, setIsAudioReady] = useState(false);
+  const [isAudioReady, setIsAudioReady] = useState(isMobile);
   const [isEngineInitialized, setIsEngineInitialized] = useState(false);
   const isMobile = useIsMobile();
 
@@ -823,7 +823,7 @@ export default function EtherealAcousticsClient() {
                 className="w-5 h-5 p-0 m-0 !bg-transparent hover:!bg-neutral-300"
                 onClick={() => openWindow('fx')}
             >
-                <Volume1 className="w-4 h-4 text-black" />
+                <SlidersHorizontal className="w-4 h-4 text-black" />
              </Button>
              <DigitalClock />
           </div>
@@ -831,3 +831,5 @@ export default function EtherealAcousticsClient() {
     </div>
   );
 }
+
+    
