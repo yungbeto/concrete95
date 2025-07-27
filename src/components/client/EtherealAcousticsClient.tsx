@@ -14,7 +14,7 @@ import SoundscapeController from '@/components/SoundscapeController';
 import { searchFreesound, type FreesoundSound } from '@/actions/freesound';
 import { useToast } from '@/hooks/use-toast';
 import LayerCard from '@/components/LayerCard';
-import { Info, Music, Settings, Waves, Zap, type LucideIcon, Speaker, VolumeX } from 'lucide-react';
+import { Info, Music, Settings, Waves, Zap, type LucideIcon, Speaker, Volume1, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DesktopIcon from '../DesktopIcon';
 import InfoWindow from '../InfoWindow';
@@ -124,10 +124,10 @@ export default function EtherealAcousticsClient() {
       content: (
         <div className="text-black space-y-2 text-sm">
           <p>
-            Welcome to Concrete 95, a tool for random audio explorations. All audio from Freesound.org and Tone.js. 
+            Welcome to <span className="font-bold">Concrete 95</span>, a tool for random audio explorations inspired by <a href="https://en.wikipedia.org/wiki/Musique_concr%C3%A8te" target="_blank" rel="noopener noreferrer" className="cursor-pointer text-blue-800 underline hover:text-blue-700">Musique concrète</a>. All audio from Freesound.org and Tone.js. 
           </p>
           <p>
-            This app was built by <a href="http://robysaavedra.com" target="_blank" rel="noopener noreferrer" className="cursor-pointer text-blue-600 underline hover:text-blue-700">
+            This app was built by <a href="http://robysaavedra.com" target="_blank" rel="noopener noreferrer" className="cursor-pointer text-blue-800 underline hover:text-blue-700">
             Roby Saavedra</a>.
           </p>
           <p>
@@ -152,6 +152,19 @@ export default function EtherealAcousticsClient() {
         position: { x: 300, y: 200 },
         zIndex: 1,
       },
+      {
+        id: 'fx',
+        title: 'Master FX',
+        icon: SlidersHorizontal,
+        content: (
+            <div className="text-black space-y-4 text-sm">
+                {/* This content is dynamically generated */}
+            </div>
+        ),
+        isOpen: false,
+        position: { x: 350, y: 250 },
+        zIndex: 1,
+      }
   ]);
 
   const allItems = [...layers, ...windows.filter(w => w.isOpen)];
@@ -438,7 +451,7 @@ export default function EtherealAcousticsClient() {
   }
 
   useEffect(() => {
-    const newSettingsContent = (
+    const settingsContent = (
       <div className="text-black space-y-4 text-sm">
         <Fieldset label="Musical Scale">
             <p className="text-xs mb-2">Set the musical scale for all new synth and melodic layers.</p>
@@ -473,31 +486,40 @@ export default function EtherealAcousticsClient() {
                 onValueChange={(value) => handleBPMChange(value[0])}
             />
         </Fieldset>
-
-        <Fieldset label="Master Delay">
-            <p className="text-xs mb-2">Feedback: {delayFeedback.toFixed(2)}</p>
-            <Slider
-                defaultValue={[delayFeedback]}
-                max={0.95}
-                min={0}
-                step={0.01}
-                onValueChange={(value) => handleDelayFeedbackChange(value[0])}
-            />
-        </Fieldset>
-
-        <Fieldset label="Master Reverb">
-            <p className="text-xs mb-2">Decay: {reverbDecay.toFixed(1)}s</p>
-            <Slider
-                defaultValue={[reverbDecay]}
-                max={20}
-                min={0.5}
-                step={0.1}
-                onValueChange={(value) => handleReverbDecayChange(value[0])}
-            />
-        </Fieldset>
       </div>
     );
-    setWindows(prev => prev.map(w => w.id === 'settings' ? { ...w, content: newSettingsContent } : w));
+
+    const fxContent = (
+        <div className="text-black space-y-4 text-sm">
+            <Fieldset label="Master Delay">
+                <p className="text-xs mb-2">Feedback: {delayFeedback.toFixed(2)}</p>
+                <Slider
+                    defaultValue={[delayFeedback]}
+                    max={0.95}
+                    min={0}
+                    step={0.01}
+                    onValueChange={(value) => handleDelayFeedbackChange(value[0])}
+                />
+            </Fieldset>
+    
+            <Fieldset label="Master Reverb">
+                <p className="text-xs mb-2">Decay: {reverbDecay.toFixed(1)}s</p>
+                <Slider
+                    defaultValue={[reverbDecay]}
+                    max={20}
+                    min={0.5}
+                    step={0.1}
+                    onValueChange={(value) => handleReverbDecayChange(value[0])}
+                />
+            </Fieldset>
+        </div>
+    );
+
+    setWindows(prev => prev.map(w => {
+        if (w.id === 'settings') return { ...w, content: settingsContent };
+        if (w.id === 'fx') return { ...w, content: fxContent };
+        return w;
+    }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [globalScale, layers.length, delayFeedback, reverbDecay, globalBPM]);
 
@@ -520,6 +542,10 @@ export default function EtherealAcousticsClient() {
   const openWindow = (id: string) => {
     setWindows(prev => {
         const currentMaxZ = Math.max(DESKTOP_ICON_Z_INDEX, ...prev.map(w => w.zIndex), ...layers.map(l => l.zIndex));
+        const isOpen = prev.find(w => w.id === id)?.isOpen;
+        if (isOpen) {
+             return prev.map(w => (w.id === id ? { ...w, zIndex: currentMaxZ + 1 } : w));
+        }
         return prev.map(w => (w.id === id ? { ...w, isOpen: true, position: getNewWindowPosition(), zIndex: currentMaxZ + 1 } : w));
     });
   };
@@ -582,13 +608,24 @@ export default function EtherealAcousticsClient() {
         <div className="absolute inset-0 bg-black/50 z-50 flex items-center justify-center">
             <div className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans">
                 <div className="bg-blue-800 text-white flex items-center p-1">
-                  <span className="font-bold text-sm select-none">Audio Permission</span>
+                  <span className="font-bold text-sm select-none">📲 Device Audio Permission</span>
                 </div>
                 <div className="p-4 flex flex-col items-center gap-4 text-black">
                     <div className="flex items-start gap-4 self-stretch">
                         <Speaker className="w-8 h-8 text-blue-600 flex-shrink-0" />
                         <div>
-                            <p>This experience requires audio. Please click the button below to enable it.</p>
+                          <p className="mb-4">
+                            Mobile devices require permission to play audio.
+                          </p>
+                            <p>
+                              Please click the button below to enable audio.
+                              </p>
+                            
+                            <Fieldset label="Btw" variant="info" className="mt-6">
+                    <p className="text-xs">
+                        No audio will play if your phone is set to silent 🪨 
+                    </p>
+                </Fieldset>
                         </div>
                     </div>
                     <Button
@@ -596,7 +633,7 @@ export default function EtherealAcousticsClient() {
                         className="px-8"
                         onClick={handleStartAudio}
                     >
-                        Enable Audio
+                        ✨ Enable Audio
                     </Button>
                 </div>
               </div>
@@ -713,7 +750,15 @@ export default function EtherealAcousticsClient() {
                 />
             ))}
           </div>
-          <div className="bg-silver border-2 border-r-white border-b-white border-l-neutral-500 border-t-neutral-500 px-2 h-8 flex items-center shrink-0">
+          <div className="bg-silver border-2 border-r-white border-b-white border-l-neutral-500 border-t-neutral-500 px-2 h-8 flex items-center shrink-0 gap-1.5">
+             <Button 
+                variant="ghost" 
+                size="icon" 
+                className="w-5 h-5 p-0 m-0 !bg-transparent hover:!bg-neutral-300"
+                onClick={() => openWindow('fx')}
+            >
+                <Volume1 className="w-4 h-4 text-black" />
+             </Button>
              <DigitalClock />
           </div>
       </footer>

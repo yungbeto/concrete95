@@ -12,6 +12,7 @@ const fieldsetVariants = cva(
       variant: {
         default: "bg-silver text-black",
         warning: "bg-yellow-200 text-yellow-900",
+        info: "bg-blue-200 text-blue-900",
       },
     },
     defaultVariants: {
@@ -29,7 +30,10 @@ export interface FieldsetProps
 
 
 export default function Fieldset({ label, children, className, variant }: FieldsetProps) {
-  const spanBgClass = variant === 'warning' ? 'bg-yellow-200' : 'bg-silver';
+  const spanBgClass = 
+  variant === 'warning' ? 'bg-yellow-200' : 
+  variant === 'info' ? 'bg-blue-200' : 
+  'bg-silver';
 
   return (
     <div className={cn(fieldsetVariants({ variant }), className)}>
