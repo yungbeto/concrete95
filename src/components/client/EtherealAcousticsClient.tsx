@@ -9,6 +9,8 @@ import AudioEngine, {
   type SynthLayerInfo,
   type ScaleName,
   scaleNames,
+  delayTimeOptions,
+  type DelayTime,
 } from '@/components/AudioEngine';
 import SoundscapeController from '@/components/SoundscapeController';
 import { searchFreesound, type FreesoundSound } from '@/actions/freesound';
@@ -101,7 +103,11 @@ export default function EtherealAcousticsClient() {
   const [isAlertDismissed, setIsAlertDismissed] = useState(false);
   const [globalScale, setGlobalScale] = useState<ScaleName>('major');
   const [delayFeedback, setDelayFeedback] = useState(0.6);
+  const [delayTime, setDelayTime] = useState<DelayTime>('4n');
+  const [delayCutoff, setDelayCutoff] = useState(20000);
   const [reverbDecay, setReverbDecay] = useState(10);
+  const [reverbWet, setReverbWet] = useState(0.9);
+  const [reverbDiffusion, setReverbDiffusion] = useState(0.7);
   const [globalBPM, setGlobalBPM] = useState(120);
   const [isAudioReady, setIsAudioReady] = useState(false);
   const [isEngineInitialized, setIsEngineInitialized] = useState(false);
@@ -440,9 +446,31 @@ export default function EtherealAcousticsClient() {
     audioEngineRef.current?.setDelayFeedback(value);
   };
 
+  const handleDelayTimeChange = (value: string) => {
+    const newDelayTime = value as DelayTime;
+    setDelayTime(newDelayTime);
+    audioEngineRef.current?.setDelayTime(newDelayTime);
+  };
+  
+  const handleDelayCutoffChange = (value: number) => {
+    setDelayCutoff(value);
+    audioEngineRef.current?.setDelayCutoff(value);
+  };
+  
+
   const handleReverbDecayChange = (value: number) => {
     setReverbDecay(value);
     audioEngineRef.current?.setReverbDecay(value);
+  };
+
+  const handleReverbWetChange = (value: number) => {
+    setReverbWet(value);
+    audioEngineRef.current?.setReverbWet(value);
+  };
+  
+  const handleReverbDiffusionChange = (value: number) => {
+    setReverbDiffusion(value);
+    audioEngineRef.current?.setReverbDiffusion(value);
   };
 
   const handleBPMChange = (value: number) => {
@@ -492,13 +520,35 @@ export default function EtherealAcousticsClient() {
     const fxContent = (
         <div className="text-black space-y-4 text-sm">
             <Fieldset label="Master Delay">
-                <p className="text-xs mb-2">Feedback: {delayFeedback.toFixed(2)}</p>
+                <p className="text-xs mb-2">Time</p>
+                <Select value={delayTime} onValueChange={handleDelayTimeChange}>
+                    <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select a time" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {delayTimeOptions.map(name => (
+                        <SelectItem key={name} value={name}>
+                            {name}
+                        </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+
+                <p className="text-xs mt-4 mb-2">Feedback: {delayFeedback.toFixed(2)}</p>
                 <Slider
                     defaultValue={[delayFeedback]}
                     max={0.95}
                     min={0}
                     step={0.01}
                     onValueChange={(value) => handleDelayFeedbackChange(value[0])}
+                />
+                 <p className="text-xs mt-4 mb-2">Hi-Cut: {(delayCutoff / 1000).toFixed(1)} kHz</p>
+                <Slider
+                    defaultValue={[delayCutoff]}
+                    max={20000}
+                    min={500}
+                    step={100}
+                    onValueChange={(value) => handleDelayCutoffChange(value[0])}
                 />
             </Fieldset>
     
@@ -511,6 +561,22 @@ export default function EtherealAcousticsClient() {
                     step={0.1}
                     onValueChange={(value) => handleReverbDecayChange(value[0])}
                 />
+                 <p className="text-xs mt-4 mb-2">Wet/Dry: {reverbWet.toFixed(2)}</p>
+                <Slider
+                    defaultValue={[reverbWet]}
+                    max={1}
+                    min={0}
+                    step={0.01}
+                    onValueChange={(value) => handleReverbWetChange(value[0])}
+                />
+                 <p className="text-xs mt-4 mb-2">Diffusion: {reverbDiffusion.toFixed(2)}</p>
+                <Slider
+                    defaultValue={[reverbDiffusion]}
+                    max={1}
+                    min={0}
+                    step={0.01}
+                    onValueChange={(value) => handleReverbDiffusionChange(value[0])}
+                />
             </Fieldset>
         </div>
     );
@@ -521,7 +587,7 @@ export default function EtherealAcousticsClient() {
         return w;
     }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [globalScale, layers.length, delayFeedback, reverbDecay, globalBPM]);
+  }, [globalScale, layers.length, delayFeedback, delayTime, delayCutoff, reverbDecay, reverbWet, reverbDiffusion, globalBPM]);
 
   const handleRemoveAllLayers = () => {
     if (!audioEngineRef.current) return;
@@ -765,5 +831,3 @@ export default function EtherealAcousticsClient() {
     </div>
   );
 }
-
-    

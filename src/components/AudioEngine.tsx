@@ -31,6 +31,8 @@ const scales = {
 export type ScaleName = keyof typeof scales;
 
 export const scaleNames = Object.keys(scales) as ScaleName[];
+export const delayTimeOptions = ['1n', '2n', '4n', '8n', '16n', '32n', '2t', '4t', '8t', '16t'] as const;
+export type DelayTime = typeof delayTimeOptions[number];
 
 
 export type AudioEngineHandle = {
@@ -53,7 +55,11 @@ export type AudioEngineHandle = {
   setSendAmount: (node: Tone.Player | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence, amount: number) => void;
   setPlaybackRate: (node: Tone.Player, rate: number) => void;
   setDelayFeedback: (value: number) => void;
+  setDelayTime: (value: DelayTime) => void;
+  setDelayCutoff: (value: number) => void;
   setReverbDecay: (value: number) => void;
+  setReverbWet: (value: number) => void;
+  setReverbDiffusion: (value: number) => void;
   setBPM: (bpm: number) => void;
   getBPM: () => number;
   disposeAll: () => void;
@@ -62,7 +68,7 @@ export type AudioEngineHandle = {
 
 const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props, ref) => {
   const masterLimiter = useRef<Tone.Limiter | null>(null);
-  const fxBus = useRef<{ delay: Tone.FeedbackDelay, reverb: Tone.Reverb } | null>(null);
+  const fxBus = useRef<{ delay: Tone.FeedbackDelay, delayFilter: Tone.Filter, reverb: Tone.Reverb } | null>(null);
 
   const isInitialized = useRef(false);
 
@@ -77,14 +83,17 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         });
         delay.wet.value = 0.8;
 
+        const delayFilter = new Tone.Filter(20000, 'lowpass');
+
         const reverb = new Tone.Reverb({
             decay: 10,
             preDelay: 0.05,
+            wet: 0.9,
         });
-        reverb.wet.value = 0.9;
+        (reverb as any).diffusion = 0.7; 
 
-        delay.chain(reverb, masterLimiter.current);
-        fxBus.current = { delay, reverb };
+        delay.chain(delayFilter, reverb, masterLimiter.current);
+        fxBus.current = { delay, delayFilter, reverb };
         isInitialized.current = true;
     }
   }
@@ -98,6 +107,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         if (isInitialized.current) {
             masterLimiter.current?.dispose();
             fxBus.current?.delay.dispose();
+            fxBus.current?.delayFilter.dispose();
             fxBus.current?.reverb.dispose();
             masterLimiter.current = null;
             fxBus.current = null;
@@ -500,9 +510,29 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             fxBus.current.delay.feedback.value = value;
         }
     },
+    setDelayTime: (value) => {
+      if (fxBus.current?.delay && !fxBus.current.delay.disposed) {
+        fxBus.current.delay.delayTime.value = value;
+      }
+    },
+    setDelayCutoff: (value) => {
+        if (fxBus.current?.delayFilter && !fxBus.current.delayFilter.disposed) {
+            fxBus.current.delayFilter.frequency.value = value;
+        }
+    },
     setReverbDecay: (value) => {
         if (fxBus.current?.reverb && !fxBus.current.reverb.disposed) {
             fxBus.current.reverb.decay = value;
+        }
+    },
+    setReverbWet: (value) => {
+        if (fxBus.current?.reverb && !fxBus.current.reverb.disposed) {
+            fxBus.current.reverb.wet.value = value;
+        }
+    },
+    setReverbDiffusion: (value) => {
+        if (fxBus.current?.reverb && !fxBus.current.reverb.disposed) {
+            (fxBus.current.reverb as any).diffusion = value;
         }
     },
     setBPM: (bpm) => {
