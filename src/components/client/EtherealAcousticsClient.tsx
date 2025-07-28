@@ -109,9 +109,9 @@ export default function EtherealAcousticsClient() {
   const [reverbWet, setReverbWet] = useState(0.9);
   const [reverbDiffusion, setReverbDiffusion] = useState(0.7);
   const [globalBPM, setGlobalBPM] = useState(120);
+  const isMobile = useIsMobile();
   const [isAudioReady, setIsAudioReady] = useState(isMobile);
   const [isEngineInitialized, setIsEngineInitialized] = useState(false);
-  const isMobile = useIsMobile();
 
 
   useEffect(() => {
@@ -831,5 +831,3 @@ export default function EtherealAcousticsClient() {
     </div>
   );
 }
-
-    
