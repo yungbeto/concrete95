@@ -18,10 +18,14 @@ async function fetchFromFreesound(query: string) {
   // An empty query will return the latest sounds.
   const freesoundUrl = `https://freesound.org/apiv2/search/text/?query=${encodeURIComponent(
     query || ''
-  )}&token=${apiKey}&filter=duration:[1%20TO%2015]%20license:"Creative%20Commons%200"&fields=id,name,previews,license,username,duration&sort=created_desc&page_size=50`;
+  )}&filter=duration:[1%20TO%2015]%20license:"Creative%20Commons%200"&fields=id,name,previews,license,username,duration&sort=created_desc&page_size=50`;
 
   try {
-    const response = await fetch(freesoundUrl);
+    const response = await fetch(freesoundUrl, {
+      headers: {
+        Authorization: `Api-Key ${apiKey}`,
+      },
+    });
     if (!response.ok) {
       throw new Error(`Freesound API error: ${response.statusText}`);
     }
