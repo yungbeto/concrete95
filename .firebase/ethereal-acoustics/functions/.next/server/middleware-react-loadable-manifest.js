@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST='{"app/page.tsx -> @/components/client/EtherealAcousticsClient":{"id":6908,"files":["static/chunks/965-65e026c105143d38.js","static/chunks/472.fdc14d18377e9060.js","static/chunks/908.6e9b192397eb2ea1.js"]}}';
+self.__REACT_LOADABLE_MANIFEST='{"app/page.tsx -> @/components/client/EtherealAcousticsClient":{"id":6908,"files":["static/chunks/965-65e026c105143d38.js","static/chunks/260.ef0c9fabce46a0ce.js","static/chunks/908.acdf8dd6b44b1324.js"]}}';

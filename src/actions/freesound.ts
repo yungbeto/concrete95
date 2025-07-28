@@ -21,9 +21,7 @@ async function fetchFromFreesound(query: string) {
   )}&token=${apiKey}&filter=duration:[1%20TO%2015]%20license:"Creative%20Commons%200"&fields=id,name,previews,license,username,duration&sort=created_desc&page_size=50`;
 
   try {
-    const response = await fetch(freesoundUrl, {
-        cache: 'no-store', 
-    });
+    const response = await fetch(freesoundUrl);
     if (!response.ok) {
       throw new Error(`Freesound API error: ${response.statusText}`);
     }
