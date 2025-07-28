@@ -12,10 +12,11 @@ async function fetchFromFreesound(query: string) {
   console.log('Attempting to fetch from Freesound...');
 
   if (!apiKey) {
-    console.error('Freesound API key is not configured.');
-    throw new Error('Freesound API key is not configured.');
+    const errorMsg = 'Freesound API key is not configured.';
+    console.error(errorMsg);
+    throw new Error(errorMsg);
   } else {
-    console.log('Freesound API key found, length:', apiKey.length);
+    console.log('Freesound API key found.');
   }
 
   // We are searching for sounds that are licensed under the Creative Commons 0 license, have a duration between 1 and 15 seconds,
