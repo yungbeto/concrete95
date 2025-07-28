@@ -15,11 +15,9 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Initialize Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-
 const initializeAnalytics = async () => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && firebaseConfig.projectId) {
+        const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
         const isAnalyticsSupported = await isSupported();
         if (isAnalyticsSupported) {
             getAnalytics(app);
