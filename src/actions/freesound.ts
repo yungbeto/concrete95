@@ -11,30 +11,33 @@ async function fetchFromFreesound(query: string) {
   const apiKey = process.env.FREESOUND_API_KEY;
 
   if (!apiKey) {
-    throw new Error('Freesound API key is not configured. Please check your .env.local file.');
+    throw new Error('Freesound API key is not configured. Please check your environment variables.');
   }
 
-  // We are searching for sounds that are licensed under the Creative Commons 0 license, have a duration between 1 and 15 seconds,
-  // and are of the highest quality. We are also sorting the results by creation date to get more variety.
-  // An empty query will return the latest sounds.
+  // Freesound API requires the API key to be passed as a 'token' query parameter.
   const freesoundUrl = `https://freesound.org/apiv2/search/text/?query=${encodeURIComponent(
     query || ''
-  )}&filter=duration:[1%20TO%2015]%20license:"Creative%20Commons%200"&fields=id,name,previews&sort=created_desc&page_size=50`;
+  )}&filter=duration:[1%20TO%2015]%20license:"Creative%20Commons%200"&fields=id,name,previews&sort=created_desc&page_size=50&token=${apiKey}`;
 
   try {
-    const response = await fetch(freesoundUrl, {
-      headers: {
-        Authorization: `Api-Key ${apiKey}`,
-      },
-    });
+    // The request does not need an Authorization header when using the token parameter.
+    const response = await fetch(freesoundUrl);
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Freesound API error: ${response.statusText} - ${errorText}`);
+      // Attempt to parse the error for a more specific message.
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.detail) {
+          throw new Error(`Freesound API error: ${errorJson.detail}`);
+        }
+      } catch (e) {
+        // Fallback to raw text if JSON parsing fails.
+        throw new Error(`Freesound API error: ${response.statusText} - ${errorText}`);
+      }
     }
     const data = await response.json();
 
-    // We only need the preview URL
     const sounds = data.results.map((sound: any) => ({
       id: sound.id,
       name: sound.name,
