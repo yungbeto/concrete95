@@ -9,8 +9,13 @@ export type FreesoundSound = {
 async function fetchFromFreesound(query: string) {
   const apiKey = process.env.FREESOUND_API_KEY;
 
+  console.log('Attempting to fetch from Freesound...');
+
   if (!apiKey) {
+    console.error('Freesound API key is not configured.');
     throw new Error('Freesound API key is not configured.');
+  } else {
+    console.log('Freesound API key found, length:', apiKey.length);
   }
 
   // We are searching for sounds that are licensed under the Creative Commons 0 license, have a duration between 1 and 15 seconds,
@@ -21,13 +26,19 @@ async function fetchFromFreesound(query: string) {
   )}&filter=duration:[1%20TO%2015]%20license:"Creative%20Commons%200"&fields=id,name,previews,license,username,duration&sort=created_desc&page_size=50`;
 
   try {
+    console.log('Fetching from URL:', freesoundUrl);
     const response = await fetch(freesoundUrl, {
       headers: {
         Authorization: `Api-Key ${apiKey}`,
       },
     });
+
+    console.log('Freesound API Response Status:', response.status);
+
     if (!response.ok) {
-      throw new Error(`Freesound API error: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('Freesound API error response text:', errorText);
+      throw new Error(`Freesound API error: ${response.statusText} - ${errorText}`);
     }
     const data = await response.json();
 
@@ -38,9 +49,10 @@ async function fetchFromFreesound(query: string) {
       previewUrl: sound.previews['preview-hq-mp3'],
     }));
 
+    console.log(`Successfully fetched ${sounds.length} sounds.`);
     return sounds;
   } catch (error) {
-    console.error('Failed to fetch from Freesound API:', error);
+    console.error('Failed to fetch from Freesound API (catch block):', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     throw new Error(errorMessage);
   }
