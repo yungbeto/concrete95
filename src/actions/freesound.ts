@@ -11,7 +11,7 @@ async function fetchFromFreesound(query: string) {
   const apiKey = process.env.FREESOUND_API_KEY;
 
   if (!apiKey) {
-    throw new Error('Freesound API key is not configured.');
+    throw new Error('Freesound API key is not configured. Please check your .env.local file.');
   }
 
   // We are searching for sounds that are licensed under the Creative Commons 0 license, have a duration between 1 and 15 seconds,
