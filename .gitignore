@@ -6,6 +6,19 @@
 .pnp.js
 .yarn/install-state.gz
 
+# Firebase Studio / nested Next app build artifacts
+.firebase/**/node_modules/
+.firebase/**/.next/
+.firebase/**/hosting/
+
+# env files (secrets — use .env.local for local dev, Firebase Secret Manager for prod)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.firebase/**/.env
+
 # testing
 /coverage
 
@@ -25,15 +38,16 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# local env files
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Firebase Studio IDE files
+.idx/
+.modified
+
+# Firebase deployment cache
+.firebase/*.cache
