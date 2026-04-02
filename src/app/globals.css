@@ -2,10 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@font-face {
-  font-family: 'Pixel-LCD7';
-  src: url('https://fonts.cdnfonts.com/s/16569/LCD-7.woff') format('woff');
-}
+/* Pixel clock face: loaded via Google Fonts in layout.tsx (old cdnfonts LCD-7.woff URL 404s). */
 
 html, body {
   overscroll-behavior: none;

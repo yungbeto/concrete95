@@ -2,13 +2,13 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { X, Zap, Waves, Music } from 'lucide-react';
+import { X, Zap, Waves, Music, Sparkles } from 'lucide-react';
 import LayerMenuBar from './LayerMenuBar';
-import { type AudioEngineHandle, type FreesoundLayerInfo, type SynthLayerInfo } from './AudioEngine';
+import { type AudioEngineHandle, type FreesoundLayerInfo, type GrainLayerInfo, type SynthLayerInfo } from './AudioEngine';
 import * as Tone from 'tone';
 import { useRef, useEffect } from 'react';
 
-type LayerInfo = FreesoundLayerInfo | SynthLayerInfo;
+type LayerInfo = FreesoundLayerInfo | GrainLayerInfo | SynthLayerInfo;
 
 interface LayerCardProps {
   id: string;
@@ -16,17 +16,29 @@ interface LayerCardProps {
   volume: number;
   send: number;
   status: 'loading' | 'playing' | 'stopped';
-  type: 'synth' | 'freesound' | 'melodic';
+  type: 'synth' | 'freesound' | 'grain' | 'melodic';
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
+  reverse?: boolean;
+  filterCutoff?: number;
+  filterResonance?: number;
+  probability?: number;
+  grainSize?: number;
+  grainDrift?: number;
   audioEngineRef: React.RefObject<AudioEngineHandle>;
-  node: Tone.Player | Tone.Sequence | null;
+  node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | null;
   info?: LayerInfo;
   onRemove: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
   onSendChange: (id: string, send: number) => void;
   onPlaybackRateChange: (id: string, rate: number) => void;
+  onReverseChange: (id: string, reverse: boolean) => void;
+  onFilterCutoffChange: (id: string, freq: number) => void;
+  onFilterResonanceChange: (id: string, q: number) => void;
+  onProbabilityChange: (id: string, value: number) => void;
+  onGrainSizeChange: (size: number) => void;
+  onGrainDriftChange: (drift: number) => void;
   onMouseDown: (e: React.MouseEvent) => void;
   onTouchStart: (e: React.TouchEvent) => void;
 }
@@ -34,6 +46,7 @@ interface LayerCardProps {
 const layerIcons = {
   synth: <Zap className="w-4 h-4" />,
   freesound: <Waves className="w-4 h-4" />,
+  grain: <Sparkles className="w-4 h-4" />,
   melodic: <Music className="w-4 h-4" />,
 };
 
@@ -43,7 +56,7 @@ function SoundRecorderDisplay({
     node,
 }: {
     audioEngineRef: React.RefObject<AudioEngineHandle>;
-    node: Tone.Player | Tone.Sequence | null;
+    node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -123,6 +136,12 @@ export default function LayerCard({
   position,
   zIndex,
   playbackRate,
+  reverse,
+  filterCutoff,
+  filterResonance,
+  probability,
+  grainSize,
+  grainDrift,
   audioEngineRef,
   node,
   info,
@@ -130,6 +149,12 @@ export default function LayerCard({
   onVolumeChange,
   onSendChange,
   onPlaybackRateChange,
+  onReverseChange,
+  onFilterCutoffChange,
+  onFilterResonanceChange,
+  onProbabilityChange,
+  onGrainSizeChange,
+  onGrainDriftChange,
   onMouseDown,
   onTouchStart,
 }: LayerCardProps) {
@@ -142,7 +167,7 @@ export default function LayerCard({
 
   return (
     <div 
-      className="w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute select-none"
+      className={`${type === 'grain' ? 'w-96' : 'w-80'} bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute select-none`}
       style={cardStyle}
     >
         {/* Title Bar */}
@@ -178,10 +203,22 @@ export default function LayerCard({
                 volume={volume}
                 send={send}
                 playbackRate={playbackRate}
+                reverse={reverse}
+                filterCutoff={filterCutoff}
+                filterResonance={filterResonance}
+                probability={probability}
+                grainSize={grainSize}
+                grainDrift={grainDrift}
                 info={info}
                 onVolumeChange={(value) => onVolumeChange(id, value)}
                 onSendChange={(value) => onSendChange(id, value)}
                 onPlaybackRateChange={(value) => onPlaybackRateChange(id, value)}
+                onReverseChange={(value) => onReverseChange(id, value)}
+                onFilterCutoffChange={(value) => onFilterCutoffChange(id, value)}
+                onFilterResonanceChange={(value) => onFilterResonanceChange(id, value)}
+                onProbabilityChange={(value) => onProbabilityChange(id, value)}
+                onGrainSizeChange={onGrainSizeChange}
+                onGrainDriftChange={onGrainDriftChange}
             />
         </div>
 

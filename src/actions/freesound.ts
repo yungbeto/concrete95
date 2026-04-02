@@ -14,9 +14,12 @@ async function fetchFromFreesound(query: string, retries = 1) {
     throw new Error('Freesound API key is not configured. Please check your environment variables.');
   }
 
+  // Random page offset so repeated calls return different sounds from the pool
+  const page = Math.floor(Math.random() * 4) + 1;
+
   const freesoundUrl = `https://freesound.org/apiv2/search/text/?query=${encodeURIComponent(
     query || ''
-  )}&filter=duration:[1%20TO%2015]%20license:"Creative%20Commons%200"&fields=id,name,previews&sort=created_desc&page_size=50&token=${apiKey}`;
+  )}&filter=duration:[10%20TO%2090]%20license:"Creative%20Commons%200"&fields=id,name,previews&sort=created_desc&page_size=50&page=${page}&token=${apiKey}`;
 
   try {
     const response = await fetch(freesoundUrl);
