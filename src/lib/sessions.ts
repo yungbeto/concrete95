@@ -284,7 +284,8 @@ export async function listUserSessions(uid: string): Promise<SavedSession[]> {
 }
 
 export async function saveUserSession(uid: string, session: SavedSession): Promise<void> {
-  await setDoc(doc(db, 'users', uid, 'sessions', session.id), session);
+  const data = JSON.parse(JSON.stringify(session));
+  await setDoc(doc(db, 'users', uid, 'sessions', session.id), data);
 }
 
 export async function deleteUserSession(uid: string, sessionId: string): Promise<void> {

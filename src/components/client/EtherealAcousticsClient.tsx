@@ -40,6 +40,7 @@ import SessionsAuthModal from '../SessionsAuthModal';
 import RecordingExportDialog from '../RecordingExportDialog';
 import MidiClockPanel from '../MidiClockPanel';
 import SharePanel from '../SharePanel';
+import AboutConcrete95Body from '../AboutConcrete95Body';
 import { useMidiClock } from '@/hooks/use-midi-clock';
 import { useAuth } from '@/hooks/use-auth';
 import {
@@ -510,44 +511,17 @@ export default function EtherealAcousticsClient() {
     if (audioEngineRef.current && !isMobile) {
       setGlobalBPM(audioEngineRef.current.getBPM());
       setIsEngineInitialized(true);
+      const seed = sessionSeedRef.current ?? randomSeed();
+      applySeed(seed);
     }
-  }, [isMobile]);
+  }, [isMobile, applySeed]);
 
   const [windows, setWindows] = useState<WindowState[]>([
     {
       id: 'about',
       title: 'About Concrete 95',
       icon: Info,
-      content: (
-        <div className='text-black space-y-2 text-sm'>
-          <p>
-            Welcome to <span className='font-bold'>Concrete 95</span>, a tool
-            for random audio explorations inspired by{' '}
-            <a
-              href='https://en.wikipedia.org/wiki/Musique_concr%C3%A8te'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='cursor-pointer text-blue-800 underline hover:text-blue-700'
-            >
-              Musique concrète
-            </a>
-            . All audio from Freesound.org and Tone.js.
-          </p>
-          <p>
-            This app was built by{' '}
-            <a
-              href='http://robysaavedra.com'
-              target='_blank'
-              rel='noopener noreferrer'
-              className='cursor-pointer text-blue-800 underline hover:text-blue-700'
-            >
-              Roby Saavedra
-            </a>
-            .
-          </p>
-          <p>Last updated: July 21, 2025</p>
-        </div>
-      ),
+      content: null,
       isOpen: false,
       position: { x: 250, y: 150 },
       zIndex: 1,
@@ -842,7 +816,12 @@ export default function EtherealAcousticsClient() {
 
   const addGrainLayer = async () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
-    const id = addLayer('grain', { volume: -12, playbackRate: 1, grainSize: 0.1, grainDrift: 0.04 });
+    const id = addLayer('grain', {
+      volume: -12,
+      playbackRate: 1,
+      grainSize: 0.1,
+      grainDrift: 0.04,
+    });
     if (!id) return;
 
     const sounds = await searchFreesound('');
@@ -859,7 +838,8 @@ export default function EtherealAcousticsClient() {
 
     const randomSound = sounds[Math.floor(Math.random() * sounds.length)];
 
-    const newGrainData = await audioEngineRef.current.startGrainLoop(randomSound);
+    const newGrainData =
+      await audioEngineRef.current.startGrainLoop(randomSound);
 
     if (!newGrainData) {
       handleRemoveLayer(id);
@@ -867,7 +847,11 @@ export default function EtherealAcousticsClient() {
     }
 
     if (driftEnabled) {
-      audioEngineRef.current.setLayerDrift(newGrainData.player, true, driftPeriod);
+      audioEngineRef.current.setLayerDrift(
+        newGrainData.player,
+        true,
+        driftPeriod,
+      );
     }
 
     setLayers((prevLayers) =>
@@ -1412,9 +1396,17 @@ export default function EtherealAcousticsClient() {
   const handlePlaybackRateChange = (id: string, rate: number) => {
     if (!audioEngineRef.current) return;
     const layer = layers.find((l) => l.id === id);
-    if (!layer || !layer.node || (layer.type !== 'freesound' && layer.type !== 'grain')) return;
+    if (
+      !layer ||
+      !layer.node ||
+      (layer.type !== 'freesound' && layer.type !== 'grain')
+    )
+      return;
 
-    audioEngineRef.current.setPlaybackRate(layer.node as Tone.Player | Tone.GrainPlayer, rate);
+    audioEngineRef.current.setPlaybackRate(
+      layer.node as Tone.Player | Tone.GrainPlayer,
+      rate,
+    );
 
     setLayers((prevLayers) =>
       prevLayers.map((l) => (l.id === id ? { ...l, playbackRate: rate } : l)),
@@ -1424,8 +1416,16 @@ export default function EtherealAcousticsClient() {
   const handleReverseChange = (id: string, reverse: boolean) => {
     if (!audioEngineRef.current) return;
     const layer = layers.find((l) => l.id === id);
-    if (!layer || !layer.node || (layer.type !== 'freesound' && layer.type !== 'grain')) return;
-    audioEngineRef.current.setReverse(layer.node as Tone.Player | Tone.GrainPlayer, reverse);
+    if (
+      !layer ||
+      !layer.node ||
+      (layer.type !== 'freesound' && layer.type !== 'grain')
+    )
+      return;
+    audioEngineRef.current.setReverse(
+      layer.node as Tone.Player | Tone.GrainPlayer,
+      reverse,
+    );
     setLayers((prev) => prev.map((l) => (l.id === id ? { ...l, reverse } : l)));
   };
 
@@ -1472,7 +1472,13 @@ export default function EtherealAcousticsClient() {
   const handleProbabilityChange = (id: string, value: number) => {
     if (!audioEngineRef.current) return;
     const layer = layers.find((l) => l.id === id);
-    if (!layer || !layer.node || layer.type === 'freesound' || layer.type === 'grain') return;
+    if (
+      !layer ||
+      !layer.node ||
+      layer.type === 'freesound' ||
+      layer.type === 'grain'
+    )
+      return;
     audioEngineRef.current.setProbability(layer.node as Tone.Sequence, value);
     setLayers((prev) =>
       prev.map((l) => (l.id === id ? { ...l, probability: value } : l)),
@@ -1484,7 +1490,9 @@ export default function EtherealAcousticsClient() {
     const layer = layers.find((l) => l.id === id);
     if (!layer || !layer.node || layer.type !== 'grain') return;
     audioEngineRef.current.setGrainSize(layer.node as Tone.GrainPlayer, size);
-    setLayers((prev) => prev.map((l) => (l.id === id ? { ...l, grainSize: size } : l)));
+    setLayers((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, grainSize: size } : l)),
+    );
   };
 
   const handleGrainDriftChange = (id: string, drift: number) => {
@@ -1492,7 +1500,9 @@ export default function EtherealAcousticsClient() {
     const layer = layers.find((l) => l.id === id);
     if (!layer || !layer.node || layer.type !== 'grain') return;
     audioEngineRef.current.setGrainDrift(layer.node as Tone.GrainPlayer, drift);
-    setLayers((prev) => prev.map((l) => (l.id === id ? { ...l, grainDrift: drift } : l)));
+    setLayers((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, grainDrift: drift } : l)),
+    );
   };
 
   // ─── Session helpers ──────────────────────────────────────────────────────
@@ -1671,15 +1681,40 @@ export default function EtherealAcousticsClient() {
             continue;
           }
           audioEngineRef.current.setVolume(grainData.player, savedLayer.volume);
-          audioEngineRef.current.setSendAmount(grainData.player, savedLayer.send);
-          audioEngineRef.current.setPlaybackRate(grainData.player, savedLayer.playbackRate);
-          audioEngineRef.current.setReverse(grainData.player, savedLayer.reverse);
-          audioEngineRef.current.setLayerFilterCutoff(grainData.player, savedLayer.filterCutoff);
-          audioEngineRef.current.setLayerFilterResonance(grainData.player, savedLayer.filterResonance);
-          audioEngineRef.current.setGrainSize(grainData.player, savedLayer.grainSize);
-          audioEngineRef.current.setGrainDrift(grainData.player, savedLayer.grainDrift);
+          audioEngineRef.current.setSendAmount(
+            grainData.player,
+            savedLayer.send,
+          );
+          audioEngineRef.current.setPlaybackRate(
+            grainData.player,
+            savedLayer.playbackRate,
+          );
+          audioEngineRef.current.setReverse(
+            grainData.player,
+            savedLayer.reverse,
+          );
+          audioEngineRef.current.setLayerFilterCutoff(
+            grainData.player,
+            savedLayer.filterCutoff,
+          );
+          audioEngineRef.current.setLayerFilterResonance(
+            grainData.player,
+            savedLayer.filterResonance,
+          );
+          audioEngineRef.current.setGrainSize(
+            grainData.player,
+            savedLayer.grainSize,
+          );
+          audioEngineRef.current.setGrainDrift(
+            grainData.player,
+            savedLayer.grainDrift,
+          );
           if (s.driftEnabled)
-            audioEngineRef.current.setLayerDrift(grainData.player, true, s.driftPeriod);
+            audioEngineRef.current.setLayerDrift(
+              grainData.player,
+              true,
+              s.driftPeriod,
+            );
 
           setLayers((prev) =>
             prev.map((l) =>
@@ -1886,8 +1921,12 @@ export default function EtherealAcousticsClient() {
               onFilterCutoffChange={handleLayerFilterCutoffChange}
               onFilterResonanceChange={handleLayerFilterResonanceChange}
               onProbabilityChange={handleProbabilityChange}
-              onGrainSizeChange={(size) => handleGrainSizeChange(layer.id, size)}
-              onGrainDriftChange={(drift) => handleGrainDriftChange(layer.id, drift)}
+              onGrainSizeChange={(size) =>
+                handleGrainSizeChange(layer.id, size)
+              }
+              onGrainDriftChange={(drift) =>
+                handleGrainDriftChange(layer.id, drift)
+              }
               onMouseDown={(e) => handleDragStart(layer.id, 'layer', e)}
               onTouchStart={(e) => handleDragStart(layer.id, 'layer', e)}
             />
@@ -1917,7 +1956,7 @@ export default function EtherealAcousticsClient() {
                 onMouseDown={(e) => handleDragStart(win.id, 'window', e)}
                 onTouchStart={(e) => handleDragStart(win.id, 'window', e)}
               >
-                {win.content}
+                {win.id === 'about' ? <AboutConcrete95Body /> : win.content}
               </InfoWindow>
             );
           })}
