@@ -51,3 +51,5 @@ next-env.d.ts
 
 # Firebase deployment cache
 .firebase/*.cache
+*.log
+firebase-debug.log

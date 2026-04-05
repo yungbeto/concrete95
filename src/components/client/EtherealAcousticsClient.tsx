@@ -7,6 +7,7 @@ import AudioEngine, {
   type FreesoundLayerInfo,
   type GrainLayerInfo,
   type SynthLayerInfo,
+  type AtmosphereLayerInfo,
   type ScaleName,
   scaleNames,
   delayTimeOptions,
@@ -22,6 +23,7 @@ import {
   Music,
   Settings,
   Waves,
+  Wind,
   Zap,
   type LucideIcon,
   Speaker,
@@ -45,8 +47,11 @@ import { useMidiClock } from '@/hooks/use-midi-clock';
 import { useAuth } from '@/hooks/use-auth';
 import {
   buildSession,
+  decodeSession,
   type SavedGlobalSettings,
   type SavedSession,
+  saveSharedSession,
+  loadSharedSession,
   saveUserSession,
 } from '@/lib/sessions';
 import { createRng, randomSeed, parseSeed } from '@/lib/prng';
@@ -61,15 +66,15 @@ import Fieldset from '../Fieldset';
 import { Slider } from '../ui/slider';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-type LayerInfo = FreesoundLayerInfo | GrainLayerInfo | SynthLayerInfo;
+type LayerInfo = FreesoundLayerInfo | GrainLayerInfo | SynthLayerInfo | AtmosphereLayerInfo;
 
 type Layer = {
   id: string;
   title: string;
   volume: number;
   send: number;
-  node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | null;
-  type: 'freesound' | 'grain' | 'synth' | 'melodic';
+  node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | Tone.Noise | null;
+  type: 'freesound' | 'grain' | 'synth' | 'melodic' | 'atmosphere';
   status: 'loading' | 'playing' | 'stopped';
   position: { x: number; y: number };
   zIndex: number;
@@ -282,7 +287,26 @@ const layerIcons: { [key in Layer['type']]: LucideIcon } = {
   freesound: Waves,
   grain: Sparkles,
   melodic: Music,
+  atmosphere: Wind,
 };
+
+function FeatureInfo({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className='mt-2'>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className='flex items-center gap-1 text-[10px] text-neutral-500 hover:text-neutral-700 select-none'
+      >
+        <Info className='w-3 h-3' />
+        {open ? 'Hide info' : 'What is this?'}
+      </button>
+      {open && (
+        <p className='text-xs mt-1 text-neutral-700'>{children}</p>
+      )}
+    </div>
+  );
+}
 
 export default function EtherealAcousticsClient() {
   const audioEngineRef = useRef<AudioEngineHandle>(null);
@@ -298,9 +322,10 @@ export default function EtherealAcousticsClient() {
   const [reverbWet, setReverbWet] = useState(0.7);
   const [reverbDiffusion, setReverbDiffusion] = useState(0.7);
   const [warmth, setWarmth] = useState(0);
+  const [shimmer, setShimmer] = useState(0);
   const [breatheEnabled, setBreatheEnabled] = useState(false);
   const [breathePeriod, setBreathePeriod] = useState(4);
-  const [discreetMode, setDiscreetMode] = useState(false);
+  const [discreetMode, setDiscreetMode] = useState(true);
   const [driftEnabled, setDriftEnabled] = useState(false);
   const [driftPeriod, setDriftPeriod] = useState(10);
   const [globalBPM, setGlobalBPM] = useState(120);
@@ -330,15 +355,34 @@ export default function EtherealAcousticsClient() {
   // ── Seed / PRNG ───────────────────────────────────────────────────────────
   const [displaySeed, setDisplaySeed] = useState<number | null>(null);
   const [sharePanelOpen, setSharePanelOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const sessionSeedRef = useRef<number | null>(null);
+  const pendingSharedSessionRef = useRef<SavedSession | null>(null);
+  const [sharedSessionReady, setSharedSessionReady] = useState(false);
+  const [pendingSharedSessionLoaded, setPendingSharedSessionLoaded] = useState(false);
 
-  // Read seed from URL on mount
+  // Read seed or shared session from URL on mount
   useEffect(() => {
-    const raw = new URLSearchParams(window.location.search).get('seed');
-    const seed = parseSeed(raw);
-    if (seed != null) {
-      sessionSeedRef.current = seed;
-      setDisplaySeed(seed);
+    const params = new URLSearchParams(window.location.search);
+    const s = params.get('s');
+    if (s) {
+      if (s.length <= 12) {
+        // Short Firestore ID — fetch async
+        loadSharedSession(s).then((session) => {
+          if (session) {
+            pendingSharedSessionRef.current = session;
+            setPendingSharedSessionLoaded(true);
+          }
+        });
+      } else {
+        // lz-string or legacy base64 encoded session
+        const session = decodeSession(s);
+        if (session) {
+          pendingSharedSessionRef.current = session;
+          setPendingSharedSessionLoaded(true);
+        }
+      }
+      return;
     }
   }, []);
 
@@ -346,18 +390,12 @@ export default function EtherealAcousticsClient() {
     sessionSeedRef.current = seed;
     setDisplaySeed(seed);
     audioEngineRef.current?.setRng(createRng(seed));
-    const url = new URL(window.location.href);
-    url.searchParams.set('seed', String(seed));
-    window.history.replaceState(null, '', url.toString());
   }, []);
 
   const clearSeed = useCallback(() => {
     sessionSeedRef.current = null;
     setDisplaySeed(null);
     audioEngineRef.current?.setRng(null);
-    const url = new URL(window.location.href);
-    url.searchParams.delete('seed');
-    window.history.replaceState(null, '', url.toString());
   }, []);
 
   // ── MIDI Clock Slave ───────────────────────────────────────────────────────
@@ -497,6 +535,7 @@ export default function EtherealAcousticsClient() {
     driftPeriod,
     globalBPM,
     warmth,
+    shimmer,
     breatheEnabled,
     breathePeriod,
     delayFeedback,
@@ -506,6 +545,32 @@ export default function EtherealAcousticsClient() {
     reverbWet,
     reverbDiffusion,
   ]);
+
+  // Auto-save dirty sessions for authenticated users (30s debounce)
+  useEffect(() => {
+    if (!isSessionDirty || !activeSession || !user) return;
+    const t = setTimeout(async () => {
+      try {
+        const updated = buildSession(activeSession.name, layers, collectSettings(), activeSession.id);
+        await saveUserSession(user.uid, updated);
+        skipNextDirtyRef.current = true;
+        setActiveSession(updated);
+        setIsSessionDirty(false);
+      } catch {
+        // Silent — manual save still available
+      }
+    }, 30_000);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSessionDirty, activeSession?.id, user?.uid]);
+
+  // Warn before navigating away with unsaved session changes
+  useEffect(() => {
+    if (!isSessionDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isSessionDirty]);
 
   useEffect(() => {
     if (audioEngineRef.current && !isMobile) {
@@ -607,6 +672,8 @@ export default function EtherealAcousticsClient() {
               currentAudioEngine.stopMelodicLoop(layer.node as Tone.Sequence);
             } else if (layer.type === 'synth') {
               currentAudioEngine.stopSynthLoop(layer.node as Tone.Sequence);
+            } else if (layer.type === 'atmosphere') {
+              currentAudioEngine.stopAtmosphereLoop(layer.node as Tone.Noise);
             }
           }
         });
@@ -642,9 +709,13 @@ export default function EtherealAcousticsClient() {
       const y = Math.min(80 + count * 40, window.innerHeight - 280);
       return { x, y };
     }
+    const cardW = 384; // w-96 (widest card)
+    const cardH = 200; // approximate card height
+    const maxX = Math.max(0, window.innerWidth - cardW - 16);
+    const maxY = Math.max(0, window.innerHeight - cardH - 48); // 48 for footer
     return {
-      x: Math.random() * (window.innerWidth / 2),
-      y: Math.random() * (window.innerHeight / 4),
+      x: Math.random() * Math.min(maxX, window.innerWidth / 2),
+      y: Math.random() * Math.min(maxY, window.innerHeight / 3),
     };
   };
 
@@ -719,6 +790,10 @@ export default function EtherealAcousticsClient() {
         audioEngineRef.current.stopSynthLoop(
           layerToRemove.node as Tone.Sequence,
         );
+      } else if (layerToRemove.type === 'atmosphere') {
+        audioEngineRef.current.stopAtmosphereLoop(
+          layerToRemove.node as Tone.Noise,
+        );
       }
     }
 
@@ -768,46 +843,74 @@ export default function EtherealAcousticsClient() {
     const id = addLayer('freesound', { volume: -12, playbackRate: 1 });
     if (!id) return;
 
-    const sounds = await searchFreesound('');
+    try {
+      const sounds = await searchFreesound('');
 
-    if ('error' in sounds || sounds.length === 0) {
-      toast({
-        variant: 'destructive',
-        title: 'Freesound Error',
-        description: 'error' in sounds ? sounds.error : `No sounds found.`,
-      });
-      handleRemoveLayer(id);
-      return;
-    }
+      if ('error' in sounds || sounds.length === 0) {
+        toast({
+          variant: 'destructive',
+          title: 'Freesound Error',
+          description: 'error' in sounds ? sounds.error : `No sounds found.`,
+        });
+        handleRemoveLayer(id);
+        return;
+      }
 
-    const randomSound = sounds[Math.floor(Math.random() * sounds.length)];
+      const randomSound = sounds[Math.floor(Math.random() * sounds.length)];
+      if (!audioEngineRef.current) { handleRemoveLayer(id); return; }
+      const newPlayerData = await audioEngineRef.current.startFreesoundLoop(randomSound);
 
-    const newPlayerData =
-      await audioEngineRef.current.startFreesoundLoop(randomSound);
+      if (!newPlayerData) {
+        handleRemoveLayer(id);
+        return;
+      }
 
-    if (!newPlayerData) {
-      handleRemoveLayer(id);
-      return;
-    }
+      if (driftEnabled) {
+        audioEngineRef.current.setLayerDrift(newPlayerData.player, true, driftPeriod);
+      }
 
-    if (driftEnabled) {
-      audioEngineRef.current.setLayerDrift(
-        newPlayerData.player,
-        true,
-        driftPeriod,
+      setLayers((prevLayers) =>
+        prevLayers.map((l) =>
+          l.id === id
+            ? {
+                ...l,
+                node: newPlayerData.player,
+                info: newPlayerData.info,
+                status: 'playing',
+                filterCutoff: newPlayerData.filterCutoff,
+                filterResonance: newPlayerData.filterResonance,
+              }
+            : l,
+        ),
       );
+    } catch (err) {
+      console.error('Failed to add freesound layer:', err);
+      toast({ variant: 'destructive', title: 'Freesound Error', description: 'Failed to load sound.' });
+      handleRemoveLayer(id);
     }
+  };
 
-    setLayers((prevLayers) =>
-      prevLayers.map((l) =>
+  const addAtmosphereLayer = () => {
+    if (!audioEngineRef.current || checkLayerLimit()) return;
+    const id = addLayer('atmosphere', { volume: -28, title: 'Atmosphere' });
+    if (!id) return;
+
+    const atmoData = audioEngineRef.current.startAtmosphereLoop();
+    if (!atmoData) { handleRemoveLayer(id); return; }
+
+    if (driftEnabled)
+      audioEngineRef.current.setLayerDrift(atmoData.node, true, driftPeriod);
+
+    setLayers((prev) =>
+      prev.map((l) =>
         l.id === id
           ? {
               ...l,
-              node: newPlayerData.player,
-              info: newPlayerData.info,
-              status: 'playing',
-              filterCutoff: newPlayerData.filterCutoff,
-              filterResonance: newPlayerData.filterResonance,
+              node: atmoData.node,
+              info: atmoData.info,
+              status: 'playing' as const,
+              filterCutoff: atmoData.filterCutoff,
+              filterResonance: atmoData.filterResonance,
             }
           : l,
       ),
@@ -820,56 +923,57 @@ export default function EtherealAcousticsClient() {
       volume: -12,
       playbackRate: 1,
       grainSize: 0.1,
-      grainDrift: 0.04,
+      grainDrift: 1.0,
     });
     if (!id) return;
 
-    const sounds = await searchFreesound('');
+    try {
+      const sounds = await searchFreesound('');
 
-    if ('error' in sounds || sounds.length === 0) {
-      toast({
-        variant: 'destructive',
-        title: 'Freesound Error',
-        description: 'error' in sounds ? sounds.error : `No sounds found.`,
-      });
-      handleRemoveLayer(id);
-      return;
-    }
+      if ('error' in sounds || sounds.length === 0) {
+        toast({
+          variant: 'destructive',
+          title: 'Freesound Error',
+          description: 'error' in sounds ? sounds.error : `No sounds found.`,
+        });
+        handleRemoveLayer(id);
+        return;
+      }
 
-    const randomSound = sounds[Math.floor(Math.random() * sounds.length)];
+      const randomSound = sounds[Math.floor(Math.random() * sounds.length)];
+      if (!audioEngineRef.current) { handleRemoveLayer(id); return; }
+      const newGrainData = await audioEngineRef.current.startGrainLoop(randomSound);
 
-    const newGrainData =
-      await audioEngineRef.current.startGrainLoop(randomSound);
+      if (!newGrainData) {
+        handleRemoveLayer(id);
+        return;
+      }
 
-    if (!newGrainData) {
-      handleRemoveLayer(id);
-      return;
-    }
+      if (driftEnabled) {
+        audioEngineRef.current.setLayerDrift(newGrainData.player, true, driftPeriod);
+      }
 
-    if (driftEnabled) {
-      audioEngineRef.current.setLayerDrift(
-        newGrainData.player,
-        true,
-        driftPeriod,
+      setLayers((prevLayers) =>
+        prevLayers.map((l) =>
+          l.id === id
+            ? {
+                ...l,
+                node: newGrainData.player,
+                info: newGrainData.info,
+                status: 'playing',
+                filterCutoff: newGrainData.filterCutoff,
+                filterResonance: newGrainData.filterResonance,
+                grainSize: newGrainData.grainSize,
+                grainDrift: newGrainData.grainDrift,
+              }
+            : l,
+        ),
       );
+    } catch (err) {
+      console.error('Failed to add grain layer:', err);
+      toast({ variant: 'destructive', title: 'Freesound Error', description: 'Failed to load sound.' });
+      handleRemoveLayer(id);
     }
-
-    setLayers((prevLayers) =>
-      prevLayers.map((l) =>
-        l.id === id
-          ? {
-              ...l,
-              node: newGrainData.player,
-              info: newGrainData.info,
-              status: 'playing',
-              filterCutoff: newGrainData.filterCutoff,
-              filterResonance: newGrainData.filterResonance,
-              grainSize: newGrainData.grainSize,
-              grainDrift: newGrainData.grainDrift,
-            }
-          : l,
-      ),
-    );
   };
 
   const addMelodicLayer = () => {
@@ -1031,6 +1135,11 @@ export default function EtherealAcousticsClient() {
     audioEngineRef.current?.setWarmth(value);
   };
 
+  const handleShimmerChange = (value: number) => {
+    setShimmer(value);
+    audioEngineRef.current?.setShimmer(value);
+  };
+
   const handleBreatheToggle = (enabled: boolean) => {
     setBreatheEnabled(enabled);
     audioEngineRef.current?.setBreatheEnabled(enabled, breathePeriod);
@@ -1126,10 +1235,10 @@ export default function EtherealAcousticsClient() {
             step={1}
             onValueChange={(value) => handleDriftPeriodChange(value[0])}
           />
-          <p className='text-xs mt-2 text-neutral-700'>
+          <FeatureInfo>
             Each layer&apos;s volume slowly rises and falls at its own pace —
             sounds drift in and out of focus over time.
-          </p>
+          </FeatureInfo>
         </Fieldset>
 
         <Fieldset label='Discreet Music Mode'>
@@ -1151,11 +1260,11 @@ export default function EtherealAcousticsClient() {
             </span>
             <span className='text-xs'>Enable Discreet Music Mode</span>
           </button>
-          <p className='text-xs mt-2 text-neutral-700'>
+          <FeatureInfo>
             New synth and melodic layers get prime-length loops (5, 7, 11, 13…
             measures) so they never re-align — inspired by Eno&apos;s tape-loop
             phase technique on <em>Discreet Music</em>.
-          </p>
+          </FeatureInfo>
         </Fieldset>
       </div>
     ),
@@ -1238,6 +1347,22 @@ export default function EtherealAcousticsClient() {
             onValueChange={(value) => handleReverbDiffusionChange(value[0])}
           />
         </Fieldset>
+
+        <Fieldset label='Shimmer'>
+          <p className='text-xs mb-2'>Amount: {shimmer.toFixed(2)}</p>
+          <Slider
+            defaultValue={[shimmer]}
+            max={1}
+            min={0}
+            step={0.01}
+            onValueChange={(value) => handleShimmerChange(value[0])}
+          />
+          <FeatureInfo>
+            Feeds a pitch-shifted copy (+1 octave) of the send bus into the
+            reverb. The reverb tail gradually accumulates octave-up energy,
+            producing a rising, crystalline halo around sounds.
+          </FeatureInfo>
+        </Fieldset>
       </div>
     ),
     [
@@ -1247,6 +1372,7 @@ export default function EtherealAcousticsClient() {
       reverbDecay,
       reverbWet,
       reverbDiffusion,
+      shimmer,
     ],
   );
 
@@ -1262,10 +1388,10 @@ export default function EtherealAcousticsClient() {
             step={0.01}
             onValueChange={(value) => handleWarmthChange(value[0])}
           />
-          <p className='text-xs mt-2 text-neutral-700'>
+          <FeatureInfo>
             Subtle harmonic saturation on the master output. Start low — a
             little goes a long way.
-          </p>
+          </FeatureInfo>
         </Fieldset>
 
         <Fieldset label='Breathe'>
@@ -1297,10 +1423,10 @@ export default function EtherealAcousticsClient() {
             step={0.5}
             onValueChange={(value) => handleBreathePeriodChange(value[0])}
           />
-          <p className='text-xs mt-2 text-neutral-700'>
+          <FeatureInfo>
             Slowly rises and falls over the selected period — the piece inhales
             and exhales.
-          </p>
+          </FeatureInfo>
         </Fieldset>
       </div>
     ),
@@ -1331,6 +1457,8 @@ export default function EtherealAcousticsClient() {
           audioEngineRef.current!.stopMelodicLoop(layer.node as Tone.Sequence);
         } else if (layer.type === 'synth') {
           audioEngineRef.current!.stopSynthLoop(layer.node as Tone.Sequence);
+        } else if (layer.type === 'atmosphere') {
+          audioEngineRef.current!.stopAtmosphereLoop(layer.node as Tone.Noise);
         }
       }
     });
@@ -1514,6 +1642,7 @@ export default function EtherealAcousticsClient() {
     driftEnabled,
     driftPeriod,
     warmth,
+    shimmer,
     breatheEnabled,
     breathePeriod,
     delayFeedback,
@@ -1527,6 +1656,25 @@ export default function EtherealAcousticsClient() {
 
   const handleBuildSession = (name: string): SavedSession => {
     return buildSession(name, layers, collectSettings());
+  };
+
+  // Once the engine is ready and a shared session is loaded, show the overlay
+  useEffect(() => {
+    if (!isEngineInitialized) return;
+    if (!pendingSharedSessionRef.current) return;
+    setSharedSessionReady(true);
+  }, [isEngineInitialized, pendingSharedSessionLoaded]);
+
+  const handleStartSharedSession = async () => {
+    const session = pendingSharedSessionRef.current;
+    if (!session) return;
+    pendingSharedSessionRef.current = null;
+    setSharedSessionReady(false);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('s');
+    window.history.replaceState(null, '', url.toString());
+    await Tone.start();
+    handleLoadSession(session, false);
   };
 
   const handleEndSession = () => {
@@ -1560,7 +1708,7 @@ export default function EtherealAcousticsClient() {
     }
   };
 
-  const handleLoadSession = async (session: SavedSession) => {
+  const handleLoadSession = async (session: SavedSession, trackAsSession = true) => {
     if (!audioEngineRef.current || !isEngineInitialized) return;
 
     // Stop and clear all current layers
@@ -1574,6 +1722,7 @@ export default function EtherealAcousticsClient() {
     setDriftPeriod(s.driftPeriod);
     handleBPMChange(s.bpm);
     handleWarmthChange(s.warmth);
+    handleShimmerChange(s.shimmer ?? 0);
     handleBreatheToggle(s.breatheEnabled);
     setBreathePeriod(s.breathePeriod);
     if (s.breatheEnabled)
@@ -1594,6 +1743,7 @@ export default function EtherealAcousticsClient() {
     }
 
     // Recreate layers serially
+    const failedLayers: string[] = [];
     for (let i = 0; i < session.layers.length; i++) {
       const savedLayer = session.layers[i];
       const id = `layer_${Date.now()}_${Math.random()}`;
@@ -1603,15 +1753,19 @@ export default function EtherealAcousticsClient() {
         volume: savedLayer.volume,
         send: savedLayer.send,
         node: null as null,
-        type: savedLayer.type as 'freesound' | 'grain' | 'synth' | 'melodic',
+        type: savedLayer.type as 'freesound' | 'grain' | 'synth' | 'melodic' | 'atmosphere',
         status: 'loading' as const,
         // On mobile use fresh clamped positions; saved positions may be off-screen
-        position: isMobile ? getNewLayerPosition(i) : savedLayer.position,
+        position: isMobile ? getNewLayerPosition(i) : {
+          x: Math.min(savedLayer.position.x, Math.max(0, window.innerWidth - 400)),
+          y: Math.min(savedLayer.position.y, Math.max(0, window.innerHeight - 200)),
+        },
         zIndex: maxZIndex + 1,
       };
       setLayers((prev) => [...prev, stub]);
 
       try {
+        if (!audioEngineRef.current) { setLayers((prev) => prev.filter((l) => l.id !== id)); break; }
         if (savedLayer.type === 'freesound') {
           const playerData = await audioEngineRef.current.startFreesoundLoop({
             id: savedLayer.freesoundId,
@@ -1734,6 +1888,23 @@ export default function EtherealAcousticsClient() {
                 : l,
             ),
           );
+        } else if (savedLayer.type === 'atmosphere') {
+          const atmoData = audioEngineRef.current.startAtmosphereLoop();
+          if (!atmoData) { setLayers((prev) => prev.filter((l) => l.id !== id)); continue; }
+
+          audioEngineRef.current.setVolume(atmoData.node, savedLayer.volume);
+          audioEngineRef.current.setSendAmount(atmoData.node, savedLayer.send);
+          audioEngineRef.current.setLayerFilterCutoff(atmoData.node, savedLayer.filterCutoff);
+          audioEngineRef.current.setLayerFilterResonance(atmoData.node, savedLayer.filterResonance);
+          if (s.driftEnabled) audioEngineRef.current.setLayerDrift(atmoData.node, true, s.driftPeriod);
+
+          setLayers((prev) =>
+            prev.map((l) =>
+              l.id === id
+                ? { ...l, node: atmoData.node, info: atmoData.info, status: 'playing', filterCutoff: savedLayer.filterCutoff, filterResonance: savedLayer.filterResonance }
+                : l,
+            ),
+          );
         } else {
           const loopData =
             savedLayer.type === 'melodic'
@@ -1744,32 +1915,13 @@ export default function EtherealAcousticsClient() {
             continue;
           }
 
-          audioEngineRef.current.setVolume(
-            loopData.sequence,
-            savedLayer.volume,
-          );
-          audioEngineRef.current.setSendAmount(
-            loopData.sequence,
-            savedLayer.send,
-          );
-          audioEngineRef.current.setLayerFilterCutoff(
-            loopData.sequence,
-            savedLayer.filterCutoff,
-          );
-          audioEngineRef.current.setLayerFilterResonance(
-            loopData.sequence,
-            savedLayer.filterResonance,
-          );
-          audioEngineRef.current.setProbability(
-            loopData.sequence,
-            savedLayer.probability,
-          );
+          audioEngineRef.current.setVolume(loopData.sequence, savedLayer.volume);
+          audioEngineRef.current.setSendAmount(loopData.sequence, savedLayer.send);
+          audioEngineRef.current.setLayerFilterCutoff(loopData.sequence, savedLayer.filterCutoff);
+          audioEngineRef.current.setLayerFilterResonance(loopData.sequence, savedLayer.filterResonance);
+          audioEngineRef.current.setProbability(loopData.sequence, savedLayer.probability);
           if (s.driftEnabled)
-            audioEngineRef.current.setLayerDrift(
-              loopData.sequence,
-              true,
-              s.driftPeriod,
-            );
+            audioEngineRef.current.setLayerDrift(loopData.sequence, true, s.driftPeriod);
 
           setLayers((prev) =>
             prev.map((l) =>
@@ -1790,13 +1942,24 @@ export default function EtherealAcousticsClient() {
       } catch (err) {
         console.error('Failed to recreate layer', savedLayer.title, err);
         setLayers((prev) => prev.filter((l) => l.id !== id));
+        failedLayers.push(savedLayer.title);
       }
+    }
+
+    if (failedLayers.length > 0) {
+      toast({
+        variant: 'destructive',
+        title: `${failedLayers.length} layer${failedLayers.length > 1 ? 's' : ''} couldn't be restored`,
+        description: `${failedLayers.join(', ')} — the audio may have been removed from Freesound.`,
+      });
     }
 
     // Set active session AFTER all layers are loaded. Skip flag prevents the
     // effect from immediately marking the freshly-loaded state as dirty.
-    skipNextDirtyRef.current = true;
-    setActiveSession(session);
+    if (trackAsSession) {
+      skipNextDirtyRef.current = true;
+      setActiveSession(session);
+    }
     setIsSessionDirty(false);
     toast({ title: 'Session loaded', description: session.name });
   };
@@ -1827,6 +1990,22 @@ export default function EtherealAcousticsClient() {
         />
       )}
       <AudioEngine ref={audioEngineRef} isMobile={isMobile} />
+
+      {sharedSessionReady && (
+        <div className='absolute inset-0 bg-black/50 z-50 flex items-center justify-center'>
+          <div className='w-72 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 font-sans'>
+            <div className='bg-blue-800 text-white flex items-center p-1'>
+              <span className='font-bold text-sm select-none'>Shared Soundscape</span>
+            </div>
+            <div className='p-4 flex flex-col items-center gap-4 text-black text-sm'>
+              <p className='text-center text-neutral-700'>Someone shared a soundscape with you. Click below to load and play it.</p>
+              <Button variant='retro' className='px-8' onClick={handleStartSharedSession}>
+                ▶ Listen
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isMobile && !isAudioReady && (
         <div className='absolute inset-0 bg-black/50 z-50 flex items-center justify-center'>
@@ -1995,6 +2174,7 @@ export default function EtherealAcousticsClient() {
           onAddFreesoundLayer={addFreesoundLayer}
           onAddGrainLayer={addGrainLayer}
           onAddMelodicLayer={addMelodicLayer}
+          onAddAtmosphereLayer={addAtmosphereLayer}
           onStopAll={handleRemoveAllLayers}
           canAddLayer={layers.length < MAX_LAYERS && isEngineInitialized}
           hasLayers={layers.length > 0}
@@ -2119,20 +2299,31 @@ export default function EtherealAcousticsClient() {
             <SlidersHorizontal className='w-4 h-4 text-black' />
           </Button>
           {/* Share button */}
-          {isEngineInitialized && displaySeed != null && (
+          {isEngineInitialized && (
             <div className='relative flex items-center gap-1'>
               <Button
                 variant='ghost'
                 size='icon'
                 className='w-5 h-5 p-0 m-0 !bg-transparent hover:!bg-neutral-300'
-                onClick={() => setSharePanelOpen((o) => !o)}
+                onClick={async () => {
+                  const opening = !sharePanelOpen;
+                  setSharePanelOpen((o) => !o);
+                  if (opening) {
+                    setShareUrl(null);
+                    const session = handleBuildSession(activeSession?.name ?? 'Shared Soundscape');
+                    const id = await saveSharedSession(session);
+                    const url = new URL(window.location.origin + window.location.pathname);
+                    url.searchParams.set('s', id);
+                    setShareUrl(url.toString());
+                  }
+                }}
                 title='Share soundscape'
               >
                 <Share2 className='w-3 h-3 text-black' />
               </Button>
               {sharePanelOpen && (
                 <SharePanel
-                  seed={displaySeed}
+                  shareUrl={shareUrl}
                   onClose={() => setSharePanelOpen(false)}
                 />
               )}

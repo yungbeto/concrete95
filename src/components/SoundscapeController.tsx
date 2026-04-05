@@ -20,6 +20,7 @@ import {
   Square,
   Trash2,
   Waves,
+  Wind,
   Zap,
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
@@ -38,6 +39,7 @@ interface SoundscapeControllerProps {
   onAddFreesoundLayer: () => void;
   onAddGrainLayer: () => void;
   onAddMelodicLayer: () => void;
+  onAddAtmosphereLayer: () => void;
   onStopAll: () => void;
   canAddLayer: boolean;
   hasLayers: boolean;
@@ -77,6 +79,7 @@ export default function SoundscapeController({
   onAddFreesoundLayer,
   onAddGrainLayer,
   onAddMelodicLayer,
+  onAddAtmosphereLayer,
   onStopAll,
   canAddLayer,
   hasLayers,
@@ -158,6 +161,10 @@ export default function SoundscapeController({
   };
   const handleAddMelodicLayer = () => {
     onAddMelodicLayer();
+    close();
+  };
+  const handleAddAtmosphereLayer = () => {
+    onAddAtmosphereLayer();
     close();
   };
   const handleStopAll = () => {
@@ -389,7 +396,7 @@ export default function SoundscapeController({
             <button
               className='shrink-0 w-4 h-4 bg-silver text-black flex items-center justify-center border border-t-white border-l-white border-r-neutral-600 border-b-neutral-600 hover:brightness-110 leading-none font-bold text-[10px]'
               title='End session'
-              onClick={() => isSessionDirty ? setShowEndConfirm(true) : onEndSession()}
+              onClick={() => isSessionDirty && user ? setShowEndConfirm(true) : onEndSession()}
             >
               ✕
             </button>
@@ -420,7 +427,7 @@ export default function SoundscapeController({
               <div className='px-2 py-1 text-neutral-600'>
                 <span>Saved: {new Date(activeSession.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
               </div>
-              {isSessionDirty && (
+              {isSessionDirty && user && (
                 <>
                   <div className='h-px bg-neutral-400' />
                   <div className='px-2 py-1 flex items-center gap-2'>
@@ -514,6 +521,15 @@ export default function SoundscapeController({
                   onMouseEnter={closeSubmenu}
                 >
                   <Music className='h-4 w-4 shrink-0' /> Add Melodic Loop
+                </Button>
+                <Button
+                  variant='ghost'
+                  className={menuItemClass}
+                  onClick={handleAddAtmosphereLayer}
+                  disabled={!canAddLayer}
+                  onMouseEnter={closeSubmenu}
+                >
+                  <Wind className='h-4 w-4 shrink-0' /> Add Atmosphere
                 </Button>
 
                 <Separator className='bg-neutral-400 my-1' />

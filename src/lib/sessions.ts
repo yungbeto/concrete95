@@ -2,6 +2,7 @@ import type { ScaleName, DelayTime } from '@/components/AudioEngine';
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   deleteDoc,
@@ -11,6 +12,27 @@ import {
 import { db } from '@/lib/firebase';
 
 export const SESSION_VERSION = 1;
+
+/**
+ * Migrate a raw session object from an older version to the current schema.
+ * Add a new `case` here whenever SESSION_VERSION is bumped.
+ */
+function migrateSession(raw: Record<string, unknown>): SavedSession {
+  let s = raw;
+  const from = typeof s.version === 'number' ? s.version : 0;
+
+  // Example future migration:
+  // if (from < 2) {
+  //   s = { ...s, version: 2, settings: { ...(s.settings as object), newField: defaultValue } };
+  // }
+
+  if (from !== SESSION_VERSION) {
+    // If no migration path exists, surface a clear error
+    throw new Error(`Unsupported session version (got ${from}, expected ${SESSION_VERSION}).`);
+  }
+
+  return s as unknown as SavedSession;
+}
 const STORAGE_KEY = 'concrete95_sessions';
 
 // ─── Serialisable layer types ─────────────────────────────────────────────────
@@ -48,7 +70,7 @@ export type SavedGrainLayer = {
 };
 
 export type SavedSynthLayer = {
-  type: 'synth' | 'melodic';
+  type: 'synth' | 'melodic' | 'atmosphere';
   title: string;
   volume: number;
   send: number;
@@ -77,6 +99,7 @@ export type SavedGlobalSettings = {
   reverbDecay: number;
   reverbWet: number;
   reverbDiffusion: number;
+  shimmer: number;
   seed?: number;
 };
 
@@ -142,7 +165,7 @@ export function deleteSession(id: string): void {
 
 type RuntimeLayer = {
   title: string;
-  type: 'freesound' | 'grain' | 'synth' | 'melodic';
+  type: 'freesound' | 'grain' | 'synth' | 'melodic' | 'atmosphere';
   volume: number;
   send: number;
   position: { x: number; y: number };
@@ -199,7 +222,7 @@ export function buildSession(
           freesoundName: info?.name ?? l.title,
           previewUrl: info?.previewUrl ?? '',
           grainSize: l.grainSize ?? 0.1,
-          grainDrift: l.grainDrift ?? 0.04,
+          grainDrift: l.grainDrift ?? 1.0,
         };
       } else {
         return {
@@ -224,6 +247,35 @@ export function buildSession(
     settings,
     layers: savedLayers,
   };
+}
+
+// ─── URL encoding ─────────────────────────────────────────────────────────────
+
+import LZString from 'lz-string';
+
+/** Encodes a session to a compressed URL-safe string for sharing via ?s= param. */
+export function encodeSession(session: SavedSession): string {
+  const json = JSON.stringify(JSON.parse(JSON.stringify(session))); // strip undefineds
+  return LZString.compressToEncodedURIComponent(json);
+}
+
+/** Decodes a ?s= URL param back to a SavedSession. Returns null on any error. */
+export function decodeSession(encoded: string): SavedSession | null {
+  try {
+    // Support both lz-string compressed (new) and raw base64 (old links)
+    const json = LZString.decompressFromEncodedURIComponent(encoded)
+      ?? (() => {
+        const base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return new TextDecoder().decode(bytes);
+      })();
+    const raw = JSON.parse(json) as Record<string, unknown>;
+    return migrateSession(raw);
+  } catch {
+    return null;
+  }
 }
 
 // ─── Export / import ──────────────────────────────────────────────────────────
@@ -255,11 +307,6 @@ export function importSessionFromString(jsonString: string): SavedSession {
 
   const session = data as Record<string, unknown>;
 
-  if (session.version !== SESSION_VERSION) {
-    throw new Error(
-      `Unsupported session version (got ${session.version}, expected ${SESSION_VERSION}).`
-    );
-  }
   if (typeof session.id !== 'string' || typeof session.name !== 'string') {
     throw new Error('Session file is missing required fields (id, name).');
   }
@@ -267,8 +314,39 @@ export function importSessionFromString(jsonString: string): SavedSession {
     throw new Error('Session file has no layers array.');
   }
 
+  const migrated = migrateSession(session);
   // Assign a fresh id to avoid collisions with existing local sessions
-  return { ...(session as unknown as SavedSession), id: crypto.randomUUID() };
+  return { ...migrated, id: crypto.randomUUID() };
+}
+
+// ─── Firestore public sharing ─────────────────────────────────────────────────
+// Collection path: shared_sessions/{shortId}
+// Rules: allow read: if true; allow create: if true; allow update, delete: if false;
+
+function generateShareId(): string {
+  // 8-char base-36 string, e.g. "k4j2m8n1"
+  return Array.from(crypto.getRandomValues(new Uint8Array(6)))
+    .map((b) => (b % 36).toString(36))
+    .join('')
+    .slice(0, 8);
+}
+
+export async function saveSharedSession(session: SavedSession): Promise<string> {
+  const id = generateShareId();
+  const data = JSON.parse(JSON.stringify(session));
+  await setDoc(doc(db, 'shared_sessions', id), { ...data, _sharedAt: new Date().toISOString() });
+  return id;
+}
+
+export async function loadSharedSession(id: string): Promise<SavedSession | null> {
+  try {
+    const docSnap = await getDoc(doc(db, 'shared_sessions', id));
+    if (!docSnap.exists()) return null;
+    const data = docSnap.data() as Record<string, unknown>;
+    return migrateSession(data);
+  } catch {
+    return null;
+  }
 }
 
 // ─── Firestore CRUD (authenticated users) ────────────────────────────────────

@@ -9,13 +9,13 @@ import {
   MenubarTrigger,
 } from "@/components/ui/menubar";
 import { Slider } from './ui/slider';
-import type { FreesoundLayerInfo, GrainLayerInfo, SynthLayerInfo } from './AudioEngine';
+import type { FreesoundLayerInfo, GrainLayerInfo, SynthLayerInfo, AtmosphereLayerInfo } from './AudioEngine';
 import { useState, useEffect } from 'react';
 
-type LayerInfo = FreesoundLayerInfo | GrainLayerInfo | SynthLayerInfo;
+type LayerInfo = FreesoundLayerInfo | GrainLayerInfo | SynthLayerInfo | AtmosphereLayerInfo;
 
 interface LayerMenuBarProps {
-  type: 'synth' | 'freesound' | 'melodic' | 'grain';
+  type: 'synth' | 'freesound' | 'melodic' | 'grain' | 'atmosphere';
   volume: number;
   send: number;
   playbackRate?: number;
@@ -63,7 +63,7 @@ export default function LayerMenuBar({
   const [localCutoff, setLocalCutoff] = useState(filterCutoff ?? 2000);
   const [localResonance, setLocalResonance] = useState(filterResonance ?? 1);
   const [localGrainSize, setLocalGrainSize] = useState(grainSize ?? 0.1);
-  const [localGrainDrift, setLocalGrainDrift] = useState(grainDrift ?? 0.04);
+  const [localGrainDrift, setLocalGrainDrift] = useState(grainDrift ?? 1.0);
 
   // Sync if initial values arrive after mount (async layer creation)
   useEffect(() => { if (filterCutoff != null) setLocalCutoff(filterCutoff); }, [filterCutoff]);
@@ -95,7 +95,7 @@ export default function LayerMenuBar({
       );
     }
 
-    if (info.type === 'synth' || info.type === 'melodic') {
+    if (info.type === 'synth' || info.type === 'melodic' || info.type === 'atmosphere') {
       return <p className="text-xs">{info.description}</p>;
     }
 
@@ -132,7 +132,7 @@ export default function LayerMenuBar({
                       onValueChange={(value) => onSendChange(value[0])}
                     />
                   </div>
-                  {type !== 'freesound' && type !== 'grain' && (
+                  {type !== 'freesound' && type !== 'grain' && type !== 'atmosphere' && (
                     <div>
                       <p className="text-xs mb-2">
                         Probability: {Math.round((probability ?? 1) * 100)}%
@@ -208,7 +208,7 @@ export default function LayerMenuBar({
               </MenubarItem>
             </MenubarContent>
           </MenubarMenu>
-          {(type === 'freesound' || type === 'grain') && (
+          {(type === 'freesound' || type === 'grain') && type !== 'atmosphere' && (
             <MenubarMenu>
                 <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto ">Speed</MenubarTrigger>
                 <MenubarContent>
@@ -265,13 +265,13 @@ export default function LayerMenuBar({
                     </div>
                     <div>
                       <p className="text-xs mb-2">
-                        Scatter: {(localGrainDrift * 1000).toFixed(0)} ms
+                        Scatter: {localGrainDrift.toFixed(2)} s
                       </p>
                       <Slider
                         value={[localGrainDrift]}
-                        max={0.2}
+                        max={3.0}
                         min={0}
-                        step={0.005}
+                        step={0.05}
                         onValueChange={(value) => {
                           setLocalGrainDrift(value[0]);
                           onGrainDriftChange(value[0]);

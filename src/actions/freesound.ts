@@ -44,11 +44,13 @@ async function fetchFromFreesound(query: string, retries = 1) {
     }
     const data = await response.json();
 
-    const sounds = data.results.map((sound: any) => ({
-      id: sound.id,
-      name: sound.name,
-      previewUrl: sound.previews['preview-hq-mp3'],
-    }));
+    const sounds = data.results
+      .filter((sound: any) => sound.previews?.['preview-hq-mp3'])
+      .map((sound: any) => ({
+        id: sound.id,
+        name: sound.name,
+        previewUrl: sound.previews['preview-hq-mp3'],
+      }));
 
     return sounds;
   } catch (error) {
