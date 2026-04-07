@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderOpen,
+  LayoutGrid,
   LogIn,
   LogOut,
   Music,
@@ -41,6 +42,7 @@ interface SoundscapeControllerProps {
   onAddMelodicLayer: () => void;
   onAddAtmosphereLayer: () => void;
   onStopAll: () => void;
+  onArrangeLayers: () => void;
   canAddLayer: boolean;
   hasLayers: boolean;
   isEngineInitialized: boolean;
@@ -52,6 +54,8 @@ interface SoundscapeControllerProps {
   isSessionDirty: boolean;
   onSaveChanges: () => Promise<void>;
   onEndSession: () => void;
+  /** When set to true, programmatically opens the Start menu */
+  openMenu?: boolean;
 }
 
 type MenuView = 'main' | 'sessions';
@@ -81,6 +85,7 @@ export default function SoundscapeController({
   onAddMelodicLayer,
   onAddAtmosphereLayer,
   onStopAll,
+  onArrangeLayers,
   canAddLayer,
   hasLayers,
   isEngineInitialized,
@@ -91,6 +96,7 @@ export default function SoundscapeController({
   isSessionDirty,
   onSaveChanges,
   onEndSession,
+  openMenu,
 }: SoundscapeControllerProps) {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
@@ -107,7 +113,10 @@ export default function SoundscapeController({
   const [isSavingChanges, setIsSavingChanges] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
 
+
   const saveInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (openMenu) setIsOpen(true); }, [openMenu]);
 
   // Dismiss the end-confirm when the session is cleared externally
   useEffect(() => {
@@ -342,13 +351,30 @@ export default function SoundscapeController({
           >
             {isSaving ? (
               <>
-                <svg className='w-3 h-3 animate-spin' viewBox='0 0 24 24' fill='none'>
-                  <circle className='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' strokeWidth='4' />
-                  <path className='opacity-75' fill='currentColor' d='M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z' />
+                <svg
+                  className='w-3 h-3 animate-spin'
+                  viewBox='0 0 24 24'
+                  fill='none'
+                >
+                  <circle
+                    className='opacity-25'
+                    cx='12'
+                    cy='12'
+                    r='10'
+                    stroke='currentColor'
+                    strokeWidth='4'
+                  />
+                  <path
+                    className='opacity-75'
+                    fill='currentColor'
+                    d='M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z'
+                  />
                 </svg>
                 Saving…
               </>
-            ) : 'OK'}
+            ) : (
+              'OK'
+            )}
           </button>
           <button
             className='text-xs px-2 py-0.5 hover:bg-neutral-200 disabled:opacity-40 disabled:cursor-not-allowed shrink-0'
@@ -392,11 +418,17 @@ export default function SoundscapeController({
         <div className='absolute bottom-full left-0 mb-1 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 text-black text-xs w-56 select-none'>
           {/* Title bar */}
           <div className='bg-blue-800 text-white flex items-center px-2 py-0.5 gap-1'>
-            <span className='font-bold text-xs flex-grow truncate'>{activeSession.name}</span>
+            <span className='font-bold text-xs flex-grow truncate'>
+              {activeSession.name}
+            </span>
             <button
               className='shrink-0 w-4 h-4 bg-silver text-black flex items-center justify-center border border-t-white border-l-white border-r-neutral-600 border-b-neutral-600 hover:brightness-110 leading-none font-bold text-[10px]'
               title='End session'
-              onClick={() => isSessionDirty && user ? setShowEndConfirm(true) : onEndSession()}
+              onClick={() =>
+                isSessionDirty && user
+                  ? setShowEndConfirm(true)
+                  : onEndSession()
+              }
             >
               ✕
             </button>
@@ -405,8 +437,12 @@ export default function SoundscapeController({
           {/* Confirm end — shown instead of body when dirty and X was clicked */}
           {showEndConfirm ? (
             <div className='px-2 py-2 flex flex-col gap-2'>
-              <p className='text-xs text-red-700 font-bold'>End session without saving?</p>
-              <p className='text-xs text-neutral-600'>Unsaved changes will be lost.</p>
+              <p className='text-xs text-red-700 font-bold'>
+                End session without saving?
+              </p>
+              <p className='text-xs text-neutral-600'>
+                Unsaved changes will be lost.
+              </p>
               <div className='flex gap-1 justify-end'>
                 <button
                   className='text-xs px-2 py-0.5 bg-red-700 text-white hover:bg-red-800'
@@ -425,13 +461,21 @@ export default function SoundscapeController({
           ) : (
             <>
               <div className='px-2 py-1 text-neutral-600'>
-                <span>Saved: {new Date(activeSession.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                <span>
+                  Saved:{' '}
+                  {new Date(activeSession.updatedAt).toLocaleDateString(
+                    undefined,
+                    { month: 'short', day: 'numeric', year: 'numeric' },
+                  )}
+                </span>
               </div>
               {isSessionDirty && user && (
                 <>
                   <div className='h-px bg-neutral-400' />
                   <div className='px-2 py-1 flex items-center gap-2'>
-                    <span className='flex-grow text-orange-700 font-bold text-xs'>Unsaved changes</span>
+                    <span className='flex-grow text-orange-700 font-bold text-xs'>
+                      Unsaved changes
+                    </span>
                     <button
                       className='text-xs px-2 py-0.5 bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1 shrink-0'
                       onClick={handleSaveChangesClick}
@@ -439,9 +483,24 @@ export default function SoundscapeController({
                     >
                       {isSavingChanges ? (
                         <>
-                          <svg className='w-3 h-3 animate-spin' viewBox='0 0 24 24' fill='none'>
-                            <circle className='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' strokeWidth='4' />
-                            <path className='opacity-75' fill='currentColor' d='M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z' />
+                          <svg
+                            className='w-3 h-3 animate-spin'
+                            viewBox='0 0 24 24'
+                            fill='none'
+                          >
+                            <circle
+                              className='opacity-25'
+                              cx='12'
+                              cy='12'
+                              r='10'
+                              stroke='currentColor'
+                              strokeWidth='4'
+                            />
+                            <path
+                              className='opacity-75'
+                              fill='currentColor'
+                              d='M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z'
+                            />
                           </svg>
                           Saving…
                         </>
@@ -485,51 +544,81 @@ export default function SoundscapeController({
             {/* ── Main panel ────────────────────────────────────────────── */}
             {/* Mobile: hidden when drilling into sessions. Desktop: always shown. */}
             {(!isMobile || menuView === 'main') && (
-              <div className='flex flex-col gap-1 text-black p-1 w-56'>
+              <div className='flex flex-col gap-1 text-black p-1 w-max'>
                 <Button
                   variant='ghost'
-                  className={menuItemClass}
+                  className={`${menuItemClass} group`}
                   onClick={handleAddFreesoundLayer}
                   disabled={!canAddLayer}
                   onMouseEnter={closeSubmenu}
                 >
-                  <Waves className='h-4 w-4 shrink-0' /> Add Sample Loop
+                  <Waves className='h-4 w-4 shrink-0' />
+                  <div className='flex flex-col items-start'>
+                    <span>Add Sample Loop</span>
+                    <span className='text-[10px] text-neutral-600 group-hover:text-blue-200 font-normal leading-tight'>
+                      Ambient field recordings from Freesound
+                    </span>
+                  </div>
                 </Button>
                 <Button
                   variant='ghost'
-                  className={menuItemClass}
+                  className={`${menuItemClass} group`}
                   onClick={handleAddGrainLayer}
                   disabled={!canAddLayer}
                   onMouseEnter={closeSubmenu}
                 >
-                  <Sparkles className='h-4 w-4 shrink-0' /> Add Grain Texture
+                  <Sparkles className='h-4 w-4 shrink-0' />
+                  <div className='flex flex-col items-start'>
+                    <span>Add Grain Texture</span>
+                    <span className='text-[10px] text-neutral-600 group-hover:text-blue-200 font-normal leading-tight'>
+                      Granular time-stretch of a Freesound sample
+                    </span>
+                  </div>
                 </Button>
                 <Button
                   variant='ghost'
-                  className={menuItemClass}
+                  className={`${menuItemClass} group`}
                   onClick={handleAddSynthLayer}
                   disabled={!canAddLayer}
                   onMouseEnter={closeSubmenu}
                 >
-                  <Zap className='h-4 w-4 shrink-0' /> Add Synth Pad
+                  <Zap className='h-4 w-4 shrink-0' />
+                  <div className='flex flex-col items-start'>
+                    <span>Add Synth Pad</span>
+                    <span className='text-[10px] text-neutral-600 group-hover:text-blue-200 font-normal leading-tight'>
+                      Generative harmonic pad layer
+                    </span>
+                  </div>
                 </Button>
                 <Button
                   variant='ghost'
-                  className={menuItemClass}
+                  className={`${menuItemClass} group`}
                   onClick={handleAddMelodicLayer}
                   disabled={!canAddLayer}
                   onMouseEnter={closeSubmenu}
                 >
-                  <Music className='h-4 w-4 shrink-0' /> Add Melodic Loop
+                  <Music className='h-4 w-4 shrink-0' />
+                  <div className='flex flex-col items-start'>
+                    <span>Add Melodic Loop</span>
+                    <span className='text-[10px] text-neutral-600 group-hover:text-blue-200 font-normal leading-tight'>
+                      Sparse phrases, bell or glass tones
+                    </span>
+                  </div>
                 </Button>
                 <Button
                   variant='ghost'
-                  className={menuItemClass}
+                  className={`${menuItemClass} group`}
                   onClick={handleAddAtmosphereLayer}
                   disabled={!canAddLayer}
                   onMouseEnter={closeSubmenu}
                 >
-                  <Wind className='h-4 w-4 shrink-0' /> Add Atmosphere
+                  <Wind className='h-4 w-4 shrink-0' />
+                  <div className='flex flex-col items-start'>
+                    <span>Add Atmosphere</span>
+                    <span className='text-[10px] text-neutral-600 group-hover:text-blue-200 font-normal leading-tight'>
+                      Pink/brown noise with slow filter sweep
+                    </span>
+                  </div>
                 </Button>
 
                 <Separator className='bg-neutral-400 my-1' />
@@ -571,11 +660,15 @@ export default function SoundscapeController({
                         <button
                           className='flex-1 text-xs px-2 py-0.5 border border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 bg-silver hover:bg-neutral-200 active:border-t-neutral-500 active:border-l-neutral-500 active:border-r-white active:border-b-white'
                           onClick={() => setShowSignOutConfirm(false)}
-                        >No</button>
+                        >
+                          No
+                        </button>
                         <button
                           className='flex-1 text-xs px-2 py-0.5 border border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 bg-silver hover:bg-neutral-200 active:border-t-neutral-500 active:border-l-neutral-500 active:border-r-white active:border-b-white'
                           onClick={handleSignOut}
-                        >Yes</button>
+                        >
+                          Yes
+                        </button>
                       </div>
                     </div>
                   ) : (
@@ -607,20 +700,27 @@ export default function SoundscapeController({
                 <Button
                   variant='ghost'
                   className={menuItemClass}
-                  onClick={handleStopAll}
+                  onClick={() => { handleStopAll(); }}
                   disabled={!hasLayers}
                   onMouseEnter={closeSubmenu}
                 >
                   <Square className='h-4 w-4 shrink-0' /> Stop All
+                </Button>
+                <Button
+                  variant='ghost'
+                  className={menuItemClass}
+                  onClick={() => { onArrangeLayers(); close(); }}
+                  disabled={!hasLayers}
+                  onMouseEnter={closeSubmenu}
+                >
+                  <LayoutGrid className='h-4 w-4 shrink-0' /> Arrange Layers
                 </Button>
               </div>
             )}
 
             {/* ── Sessions panel — mobile only (inline drill-down) ─────── */}
             {isMobile && menuView === 'sessions' && (
-              <div>
-                {renderSessionsPanel()}
-              </div>
+              <div>{renderSessionsPanel()}</div>
             )}
           </div>
         </PopoverContent>

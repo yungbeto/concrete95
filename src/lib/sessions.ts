@@ -100,6 +100,7 @@ export type SavedGlobalSettings = {
   reverbWet: number;
   reverbDiffusion: number;
   shimmer: number;
+  freqShift?: number;
   seed?: number;
 };
 

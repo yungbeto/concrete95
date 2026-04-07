@@ -9,6 +9,8 @@ interface TaskbarItemProps {
   label: string;
   isActive: boolean;
   onClick: () => void;
+  /** Fixed-width mode: item won't grow/shrink (use for scrollable zones) */
+  fixed?: boolean;
 }
 
 export default function TaskbarItem({
@@ -16,16 +18,17 @@ export default function TaskbarItem({
   label,
   isActive,
   onClick,
+  fixed = false,
 }: TaskbarItemProps) {
   return (
     <button
       onClick={onClick}
       className={cn(
         'flex items-center gap-1.5 h-8 px-2 text-sm text-black select-none truncate justify-start',
-        'flex-grow flex-shrink min-w-0 max-w-48', // <-- Allow shrinking and growing, with a max-width
+        fixed ? 'shrink-0 w-32' : 'flex-grow flex-shrink min-w-0 max-w-48',
         'border-2 !rounded-none',
-        isActive 
-          ? 'bg-neutral-300 border-t-neutral-500 border-l-neutral-500 border-r-white border-b-white' 
+        isActive
+          ? 'bg-neutral-300 border-t-neutral-500 border-l-neutral-500 border-r-white border-b-white'
           : 'bg-silver border-t-white border-l-white border-r-neutral-500 border-b-neutral-500',
         'active:border-t-neutral-500 active:border-l-neutral-500 active:border-r-white active:border-b-white'
       )}

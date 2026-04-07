@@ -2,13 +2,14 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { X, Zap, Waves, Music, Sparkles, Wind } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
+import { X, Zap, Waves, Music, Sparkles, Wind, Volume2, VolumeX, AlertTriangle } from 'lucide-react';
 import LayerMenuBar from './LayerMenuBar';
-import { type AudioEngineHandle, type FreesoundLayerInfo, type GrainLayerInfo, type SynthLayerInfo } from './AudioEngine';
+import { type AudioEngineHandle, type FreesoundLayerInfo, type GrainLayerInfo, type SynthLayerInfo, type AtmosphereLayerInfo } from './AudioEngine';
 import * as Tone from 'tone';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 
-type LayerInfo = FreesoundLayerInfo | GrainLayerInfo | SynthLayerInfo;
+type LayerInfo = FreesoundLayerInfo | GrainLayerInfo | SynthLayerInfo | AtmosphereLayerInfo;
 
 interface LayerCardProps {
   id: string;
@@ -41,6 +42,9 @@ interface LayerCardProps {
   onGrainDriftChange: (drift: number) => void;
   onMouseDown: (e: React.MouseEvent) => void;
   onTouchStart: (e: React.TouchEvent) => void;
+  isMuted: boolean;
+  onMuteToggle: () => void;
+  onRenameLayer: (newTitle: string) => void;
 }
 
 const layerIcons = {
@@ -51,6 +55,62 @@ const layerIcons = {
   atmosphere: <Wind className="w-4 h-4" />,
 };
 
+const LAYER_TYPE_COLORS: Record<string, string> = {
+  synth:       'bg-purple-800',
+  melodic:     'bg-teal-700',
+  grain:       'bg-amber-700',
+  freesound:   'bg-emerald-800',
+  atmosphere:  'bg-slate-700',
+};
+
+
+function LoadingDisplay({ timeoutSeconds = 12 }: { timeoutSeconds?: number }) {
+  const [elapsed, setElapsed] = useState(0);
+  const startRef = useRef(Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const timedOut = elapsed >= timeoutSeconds;
+
+  return (
+    <div className="flex flex-col gap-2 p-2">
+      {timedOut ? (
+        <div className="flex items-center gap-2 border-2 border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white bg-yellow-50 p-2 text-xs text-black">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-yellow-700" />
+          <span>Taking longer than expected. Check your connection or try a different sound.</span>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1">
+          <div className="flex justify-between text-[10px] text-black">
+            <span>Fetching audio…</span>
+            <span>{elapsed}s</span>
+          </div>
+          {/* Win95-style indeterminate progress bar */}
+          <div className="h-4 border-2 border-l-neutral-500 border-t-neutral-500 border-r-white border-b-white bg-silver overflow-hidden">
+            <div
+              className="h-full bg-blue-800"
+              style={{
+                width: '40%',
+                animation: 'win95-progress 1.4s ease-in-out infinite',
+              }}
+            />
+          </div>
+          <style>{`
+            @keyframes win95-progress {
+              0%   { transform: translateX(-100%); }
+              100% { transform: translateX(350%); }
+            }
+          `}</style>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function GrainVisualizerDisplay({
   node,
@@ -315,7 +375,14 @@ export default function LayerCard({
   onGrainDriftChange,
   onMouseDown,
   onTouchStart,
+  isMuted,
+  onMuteToggle,
+  onRenameLayer,
 }: LayerCardProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState(title);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   const cardStyle = {
     left: `${position.x}px`,
     top: `${position.y}px`,
@@ -329,61 +396,139 @@ export default function LayerCard({
       style={cardStyle}
     >
         {/* Title Bar */}
-        <div 
-            className="bg-blue-800 text-white flex items-center justify-between p-1 cursor-move"
+        <div
+            className={`${LAYER_TYPE_COLORS[type] ?? 'bg-blue-800'} ${isMuted ? 'opacity-60' : ''} text-white flex items-center justify-between p-1 cursor-move`}
             onMouseDown={onMouseDown}
             onTouchStart={onTouchStart}
         >
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 min-w-0 flex-1">
                 {layerIcons[type]}
-                <span className="font-bold text-sm">{isLoading ? 'Loading...' : title}</span>
+                {isEditing ? (
+                  <input
+                    autoFocus
+                    className="bg-blue-900 text-white text-sm font-bold px-0.5 outline-none border-b border-white w-32 min-w-0"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onBlur={() => { onRenameLayer(editName.trim() || title); setIsEditing(false); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { onRenameLayer(editName.trim() || title); setIsEditing(false); }
+                      if (e.key === 'Escape') { setEditName(title); setIsEditing(false); }
+                      e.stopPropagation();
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <span
+                    className="font-bold text-sm cursor-text"
+                    onDoubleClick={(e) => { e.stopPropagation(); setEditName(title); setIsEditing(true); }}
+                  >
+                    {isLoading ? 'Loading...' : title}
+                  </span>
+                )}
             </div>
-            <Button
-              variant="retro"
-              size="icon"
-              className="w-5 h-5"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove(id);
-              }}
-              aria-label="Close"
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                className={`w-5 h-5 flex items-center justify-center border text-[9px] font-bold leading-none select-none
+                  ${isMuted
+                    ? 'border-t-neutral-500 border-l-neutral-500 border-r-white border-b-white bg-neutral-200 text-neutral-600'
+                    : 'border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 bg-silver text-black hover:bg-neutral-200'
+                  }`}
+                onClick={(e) => { e.stopPropagation(); onMuteToggle(); }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                title={isMuted ? 'Unmute' : 'Mute'}
+                aria-label={isMuted ? 'Unmute layer' : 'Mute layer'}
+              >
+                {isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+              </button>
+              <button
+                className="w-5 h-5 flex items-center justify-center border border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 bg-silver text-black hover:bg-neutral-200 text-[9px] font-bold leading-none select-none"
+                onClick={(e) => { e.stopPropagation(); setIsCollapsed(c => !c); }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                title={isCollapsed ? 'Restore' : 'Minimize'}
+                aria-label={isCollapsed ? 'Restore layer' : 'Minimize layer'}
+              >
+                {isCollapsed ? '▲' : '▼'}
+              </button>
+              <Button
+                variant="retro"
+                size="icon"
+                className="w-5 h-5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(id);
+                }}
+                aria-label="Close"
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+              >
+                <X className="w-3 h-3 text-black" />
+              </Button>
+            </div>
+        </div>
+
+        {/* Body — hidden when collapsed */}
+        {!isCollapsed && (
+          <>
+            {/* Menu Bar */}
+            <div onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+                <LayerMenuBar
+                    type={type}
+                    send={send}
+                    playbackRate={playbackRate}
+                    reverse={reverse}
+                    filterCutoff={filterCutoff}
+                    filterResonance={filterResonance}
+                    probability={probability}
+                    grainSize={grainSize}
+                    grainDrift={grainDrift}
+                    info={info}
+                    onSendChange={(value) => onSendChange(id, value)}
+                    onPlaybackRateChange={(value) => onPlaybackRateChange(id, value)}
+                    onReverseChange={(value) => onReverseChange(id, value)}
+                    onFilterCutoffChange={(value) => onFilterCutoffChange(id, value)}
+                    onFilterResonanceChange={(value) => onFilterResonanceChange(id, value)}
+                    onProbabilityChange={(value) => onProbabilityChange(id, value)}
+                    onGrainSizeChange={onGrainSizeChange}
+                    onGrainDriftChange={onGrainDriftChange}
+                />
+            </div>
+
+            {/* Visualizer or loading state */}
+            {isLoading
+              ? <LoadingDisplay />
+              : type === 'grain'
+                ? <GrainVisualizerDisplay node={node as Tone.GrainPlayer | null} grainSize={grainSize} grainDrift={grainDrift} />
+                : <SoundRecorderDisplay audioEngineRef={audioEngineRef} node={node as Tone.Player | Tone.GrainPlayer | Tone.Sequence | null} />
+            }
+
+            {/* Always-visible volume strip */}
+            <div
+              className="flex items-center gap-2 px-2 pb-2"
               onMouseDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}
             >
-              <X className="w-3 h-3 text-black" />
-            </Button>
-        </div>
-
-        {/* Menu Bar */}
-        <div onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
-            <LayerMenuBar
-                type={type}
-                volume={volume}
-                send={send}
-                playbackRate={playbackRate}
-                reverse={reverse}
-                filterCutoff={filterCutoff}
-                filterResonance={filterResonance}
-                probability={probability}
-                grainSize={grainSize}
-                grainDrift={grainDrift}
-                info={info}
-                onVolumeChange={(value) => onVolumeChange(id, value)}
-                onSendChange={(value) => onSendChange(id, value)}
-                onPlaybackRateChange={(value) => onPlaybackRateChange(id, value)}
-                onReverseChange={(value) => onReverseChange(id, value)}
-                onFilterCutoffChange={(value) => onFilterCutoffChange(id, value)}
-                onFilterResonanceChange={(value) => onFilterResonanceChange(id, value)}
-                onProbabilityChange={(value) => onProbabilityChange(id, value)}
-                onGrainSizeChange={onGrainSizeChange}
-                onGrainDriftChange={onGrainDriftChange}
-            />
-        </div>
-
-      {type === 'grain'
-        ? <GrainVisualizerDisplay node={node as Tone.GrainPlayer | null} grainSize={grainSize} grainDrift={grainDrift} />
-        : <SoundRecorderDisplay audioEngineRef={audioEngineRef} node={node as Tone.Player | Tone.GrainPlayer | Tone.Sequence | null} />
-      }
+              {isMuted
+                ? <VolumeX className="w-3 h-3 shrink-0 text-neutral-500" />
+                : <Volume2 className="w-3 h-3 shrink-0 text-black" />
+              }
+              <Slider
+                min={-40}
+                max={10}
+                step={1}
+                value={[isMuted ? -40 : volume]}
+                onValueChange={(val) => onVolumeChange(id, val[0])}
+                className="flex-1"
+                aria-label="Volume"
+              />
+              <span className="text-[10px] text-black w-10 text-right tabular-nums">
+                {isMuted ? 'muted' : volume <= -40 ? '−∞' : `${volume > 0 ? '+' : ''}${volume}dB`}
+              </span>
+            </div>
+          </>
+        )}
       
     </div>
   );

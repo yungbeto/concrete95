@@ -49,6 +49,16 @@ export const scaleNames = Object.keys(scales) as ScaleName[];
 export const delayTimeOptions = ['1n', '2n', '4n', '8n', '16n', '32n', '2t', '4t', '8t', '16t'] as const;
 export type DelayTime = typeof delayTimeOptions[number];
 
+// O2: Varied LFO waveforms — sine is organic but monotonous when every layer uses it.
+// Triangle gives linear ramps (mechanical but clear), sawtooth creates ratcheting sweeps,
+// and 'random' (sample-and-hold) produces irregular stepped jumps. Applied at layer-creation
+// time so each layer gets a unique movement character baked in.
+// 'sine' weighted 3× — it's the most organic; 'triangle', 'sawtooth', 'square' add variety
+const LFO_TYPES = ['sine', 'sine', 'sine', 'triangle', 'sawtooth', 'square'] as const;
+type LFOType = typeof LFO_TYPES[number];
+const pickLFOType = (r: () => number): LFOType =>
+  LFO_TYPES[Math.floor(r() * LFO_TYPES.length)];
+
 
 export type AudioEngineHandle = {
   initialize: () => void;
@@ -86,6 +96,8 @@ export type AudioEngineHandle = {
   setLayerDrift: (node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | Tone.Noise, enabled: boolean, periodMinutes: number) => void;
   setWarmth: (value: number) => void;
   setShimmer: (value: number) => void;
+  setFreqShift: (value: number) => void;
+  setConvolverMix: (value: number) => void;
   setBreatheEnabled: (enabled: boolean, periodMinutes: number) => void;
   setDelayFeedback: (value: number) => void;
   setDelayTime: (value: DelayTime) => void;
@@ -123,7 +135,25 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
   const lissajousAnalyserR = useRef<AnalyserNode | null>(null);
   const lissajousBufferL = useRef<Float32Array | null>(null);
   const lissajousBufferR = useRef<Float32Array | null>(null);
-  const fxBus = useRef<{ fxInput: Tone.Gain, delay: Tone.PingPongDelay, delayFilter: Tone.Filter, reverb: Tone.Reverb, shimmerPitchShift: Tone.PitchShift, shimmerGain: Tone.Gain } | null>(null);
+  const masterCompressor = useRef<Tone.MultibandCompressor | null>(null);
+  const masterEQ = useRef<Tone.EQ3 | null>(null);
+  const masterMidSide = useRef<Tone.MidSideCompressor | null>(null);
+  const masterFollower = useRef<Tone.Follower | null>(null);
+  const masterFollowerScale = useRef<Tone.Scale | null>(null);
+  const fxBus = useRef<{
+    fxInput: Tone.Gain;
+    fxEQ: Tone.EQ3;
+    delay: Tone.PingPongDelay;
+    delayFilter: Tone.Filter;
+    reverb: Tone.Reverb;
+    shimmerPitchShift: Tone.PitchShift;
+    shimmerGain: Tone.Gain;
+    freqShiftGain: Tone.Gain;
+    freqShifter: Tone.FrequencyShifter;
+    convolver: Tone.Convolver;
+    crossFade: Tone.CrossFade;
+    reverbAutoGain: Tone.Gain;
+  } | null>(null);
 
   const isInitialized = useRef(false);
   const rngRef = useRef<RNG | null>(null);
@@ -135,9 +165,34 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         // never amplifies, so it's safe after the limiter.
         masterLimiter.current = new Tone.Limiter(-3);
         masterGain.current = new Tone.Gain(1);
-        masterSaturation.current = new Tone.Distortion({ distortion: 0.4, wet: 0.04 });
+        masterCompressor.current = new Tone.MultibandCompressor({
+          lowFrequency: 300,
+          highFrequency: 5000,
+          low: { threshold: -30, ratio: 2, attack: 0.1, release: 0.4, knee: 6 },
+          mid: { threshold: -24, ratio: 3, attack: 0.08, release: 0.4, knee: 6 },
+          high: { threshold: -20, ratio: 6, attack: 0.05, release: 0.3, knee: 3 },
+        });
+        masterEQ.current = new Tone.EQ3({ low: 0, mid: 0, high: -2, highFrequency: 6000 });
+        // M3: Mid-Side compression — tighter mono centre, let the sides breathe
+        masterMidSide.current = new Tone.MidSideCompressor({
+          mid:  { threshold: -24, ratio: 3,   attack: 0.08, release: 0.4, knee: 6 },
+          side: { threshold: -30, ratio: 1.5,  attack: 0.3,  release: 0.8, knee: 8 },
+        });
+        masterSaturation.current = new Tone.Distortion({ distortion: 0.08, wet: 0.02 });
         masterHPF.current = new Tone.Filter(40, 'highpass').toDestination();
-        masterLimiter.current.chain(masterGain.current, masterSaturation.current, masterHPF.current);
+        masterLimiter.current.chain(masterGain.current, masterCompressor.current, masterEQ.current, masterMidSide.current, masterSaturation.current, masterHPF.current);
+
+        // O1: Envelope follower — as the mix gets louder the reverb tail is gently ducked;
+        // as it quiets down the reverb opens back up. Gives a natural "breathing" quality
+        // where the space expands in silence. reverbAutoGain sits between crossFade and the
+        // limiter so it doesn't touch dry signal at all.
+        // Gain range [0.7, 1.0]: loud → 0.7× reverb return, quiet → 1.0× (fully open).
+        const reverbAutoGain = new Tone.Gain(1);
+        masterFollower.current = new Tone.Follower(1.5);
+        masterGain.current.connect(masterFollower.current);
+        masterFollowerScale.current = new Tone.Scale(1.0, 0.7); // inverted: loud = less reverb
+        masterFollower.current.connect(masterFollowerScale.current);
+        masterFollowerScale.current.connect(reverbAutoGain.gain);
 
         // Meter tapped in parallel off masterGain — reads the breathe-modulated
         // level without affecting the signal path
@@ -165,6 +220,11 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         // and caused the delay tails to get smeared by the reverb.
         const fxInput = new Tone.Gain(1);
 
+        // Pre-send high shelf EQ — rolls off highs before the reverb/delay to prevent
+        // harshness accumulating in the wet signal.
+        const fxEQ = new Tone.EQ3({ low: 0, mid: 0, high: -4, highFrequency: 5000 });
+        fxInput.connect(fxEQ);
+
         const delay = new Tone.PingPongDelay({
             delayTime: '4n',
             feedback: 0.4,
@@ -186,17 +246,48 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         // shimmerGain starts at 0 (off) — user controls via Shimmer slider.
         const shimmerPitchShift = new Tone.PitchShift(12);
         const shimmerGain = new Tone.Gain(0);
-        fxInput.connect(shimmerPitchShift);
+        fxEQ.connect(shimmerPitchShift);
         shimmerPitchShift.connect(shimmerGain);
         shimmerGain.connect(reverb);
 
-        fxInput.connect(delay);
+        fxEQ.connect(delay);
         delay.chain(delayFilter, masterLimiter.current);
 
-        fxInput.connect(reverb);
-        reverb.connect(masterLimiter.current);
+        fxEQ.connect(reverb);
 
-        fxBus.current = { fxInput, delay, delayFilter, reverb, shimmerPitchShift, shimmerGain };
+        // FrequencyShifter: subtle inharmonic beating distinct from octave shimmer.
+        // freqShiftGain starts at 0 (off) — user controls via Frequency Drift slider.
+        const freqShiftGain = new Tone.Gain(0);
+        const freqShifter = new Tone.FrequencyShifter({ frequency: 2, wet: 1 });
+        fxEQ.connect(freqShiftGain);
+        freqShiftGain.connect(freqShifter);
+        freqShifter.connect(reverb);
+
+        // F3 + F4: Convolver (synthetic plate IR) + CrossFade between algorithmic reverb
+        // and convolver. Default: crossFade.fade = 0 (all algorithmic, as before).
+        // User controls mix via "Space" slider — crossfade to the convolver's IR character.
+        const convolver = new Tone.Convolver();
+        const irCtx = Tone.getContext().rawContext as AudioContext;
+        const irSampleRate = irCtx.sampleRate;
+        const irLength = Math.floor(irSampleRate * 3.5); // 3.5s synthetic plate IR
+        const irBuffer = irCtx.createBuffer(2, irLength, irSampleRate);
+        for (let ch = 0; ch < 2; ch++) {
+          const data = irBuffer.getChannelData(ch);
+          for (let i = 0; i < irLength; i++) {
+            // Exponential noise decay — simulates a diffuse plate reverb tail
+            data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLength, 1.8);
+          }
+        }
+        convolver.buffer = new Tone.ToneAudioBuffer(irBuffer);
+        fxEQ.connect(convolver);
+
+        const crossFade = new Tone.CrossFade(0); // 0 = algorithmic reverb, 1 = convolver
+        reverb.connect(crossFade.a);
+        convolver.connect(crossFade.b);
+        crossFade.connect(reverbAutoGain);
+        reverbAutoGain.connect(masterLimiter.current);
+
+        fxBus.current = { fxInput, fxEQ, delay, delayFilter, reverb, shimmerPitchShift, shimmerGain, freqShiftGain, freqShifter, convolver, crossFade, reverbAutoGain };
         isInitialized.current = true;
     }
   }
@@ -239,14 +330,30 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             recordedChunks.current = [];
             masterLimiter.current?.dispose();
             masterGain.current?.dispose();
+            masterCompressor.current?.dispose();
+            masterCompressor.current = null;
+            masterEQ.current?.dispose();
+            masterEQ.current = null;
+            masterMidSide.current?.dispose();
+            masterMidSide.current = null;
+            masterFollower.current?.dispose();
+            masterFollower.current = null;
+            masterFollowerScale.current?.dispose();
+            masterFollowerScale.current = null;
             masterSaturation.current?.dispose();
             masterHPF.current?.dispose();
+            fxBus.current?.freqShiftGain.dispose();
+            fxBus.current?.freqShifter.dispose();
             fxBus.current?.shimmerPitchShift.dispose();
             fxBus.current?.shimmerGain.dispose();
+            fxBus.current?.fxEQ.dispose();
             fxBus.current?.fxInput.dispose();
             fxBus.current?.delay.dispose();
             fxBus.current?.delayFilter.dispose();
             fxBus.current?.reverb.dispose();
+            fxBus.current?.convolver.dispose();
+            fxBus.current?.crossFade.dispose();
+            fxBus.current?.reverbAutoGain.dispose();
             masterLimiter.current = null;
             masterGain.current = null;
             masterSaturation.current = null;
@@ -404,11 +511,11 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
 
       // Very slow, subtle filter LFO — barely perceptible movement
       const lfoFreq = 0.03 + r() * 0.1; // 0.03–0.13Hz
-      const lfo = new Tone.LFO(lfoFreq, filterFreq * 0.85, filterFreq * 1.15).start();
+      const lfo = new Tone.LFO({ type: pickLFOType(r), frequency: lfoFreq, min: filterFreq * 0.85, max: filterFreq * 1.15 }).start();
       lfo.connect(filter.frequency);
 
       // Slow amplitude LFO for gentle breathing
-      const ampLfo = new Tone.LFO(0.05 + r() * 0.08, 0.8, 1.0).start();
+      const ampLfo = new Tone.LFO({ type: pickLFOType(r), frequency: 0.05 + r() * 0.08, min: 0.8, max: 1.0 }).start();
       const ampGain = new Tone.Gain(1);
       ampLfo.connect(ampGain.gain);
 
@@ -439,10 +546,13 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         wet: 0.4 + r() * 0.3,
       });
 
+      // Compressor — tightens transients and keeps loud chords from clipping
+      const compressor = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.1, release: 0.5, knee: 6 });
+
       const sendGain = new Tone.Gain(0).connect(fxBus.current.fxInput);
       const waveform = new Tone.Waveform(1024);
 
-      synth.chain(chorus, highPass, filter, phaser, ampGain, panner, masterLimiter.current);
+      synth.chain(chorus, highPass, filter, compressor, phaser, ampGain, panner, masterLimiter.current);
       synth.connect(sendGain);
       synth.connect(waveform);
 
@@ -534,6 +644,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       (sequence as any).lfo = lfo;
       (sequence as any).detuneDriftInterval = detuneDriftInterval;
       (sequence as any).phaser = phaser;
+      (sequence as any).compressor = compressor;
       (sequence as any).ampLfo = ampLfo;
       (sequence as any).ampGain = ampGain;
       (sequence as any).filter = filter;
@@ -564,6 +675,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const filter = (sequence as any).filter;
       const highPass = (sequence as any).highPass;
       const phaser = (sequence as any).phaser;
+      const compressor = (sequence as any).compressor;
       const chorus = (sequence as any).chorus;
       const panner = (sequence as any).panner;
       const sendGain = (sequence as any).sendGain;
@@ -576,6 +688,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       if (filter && !filter.disposed) filter.dispose();
       if (highPass && !highPass.disposed) highPass.dispose();
       if (phaser && !phaser.disposed) phaser.dispose();
+      if (compressor && !compressor.disposed) compressor.dispose();
       if (chorus && !chorus.disposed) chorus.dispose();
       if (panner && !panner.disposed) panner.dispose();
       if (sendGain && !sendGain.disposed) sendGain.dispose();
@@ -618,7 +731,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
 
       // Symmetric LFO — gentle ±15% sweep, not the previous dark 50–100% range
       const lfoFreq = 0.03 + r() * 0.1; // 0.03–0.13Hz
-      const lfo = new Tone.LFO(lfoFreq, filterFreq * 0.85, filterFreq * 1.15).start();
+      const lfo = new Tone.LFO({ type: pickLFOType(r), frequency: lfoFreq, min: filterFreq * 0.85, max: filterFreq * 1.15 }).start();
       lfo.connect(filter.frequency);
 
       // Slow auto-pan for stereo width and movement
@@ -757,7 +870,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       filter.Q.value = r() * 1 + 0.3;
 
       const lfoFreq = 0.03 + r() * 0.1;
-      const lfo = new Tone.LFO(lfoFreq, filterFreq * 0.85, filterFreq * 1.15).start();
+      const lfo = new Tone.LFO({ type: pickLFOType(r), frequency: lfoFreq, min: filterFreq * 0.85, max: filterFreq * 1.15 }).start();
       lfo.connect(filter.frequency);
 
       const panner = new Tone.AutoPanner({
@@ -772,17 +885,32 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const exciter = new Tone.Chebyshev(chebyOrder);
       exciter.wet.value = r() < 0.3 ? 0.08 + r() * 0.12 : 0; // 8–20% wet or off
 
+      // 40% chance of a BitCrusher — lo-fi digital texture, adds character to dense grain clouds.
+      // Higher bit depths (6–10) give subtle grit rather than full destruction.
+      const bitCrusher = new Tone.BitCrusher(Math.floor(r() * 5) + 6); // bits 6–10
+      bitCrusher.wet.value = r() < 0.4 ? 0.12 + r() * 0.18 : 0; // 12–30% wet or off
+
+      // Chorus — always present, thickens grain clouds by adding detuned copies.
+      // Low frequency (0.3–1.5Hz) + moderate depth keeps it spatial rather than warbling.
+      const chorus = new Tone.Chorus({
+        frequency: 0.3 + r() * 1.2,
+        delayTime: 3.5 + r() * 2.5,
+        depth: 0.3 + r() * 0.4,
+        wet: 0.35 + r() * 0.2,
+      }).start();
+
       const sendGain = new Tone.Gain(0).connect(fxBus.current.fxInput);
       const waveform = new Tone.Waveform(1024);
 
-      player.chain(highPass, filter, exciter, panner, masterLimiter.current);
+      player.chain(highPass, filter, exciter, bitCrusher, chorus, panner, masterLimiter.current);
       player.connect(sendGain);
       player.connect(waveform);
 
       try {
         await Tone.loaded();
       } catch (err) {
-        lfo.dispose(); exciter.dispose(); panner.dispose(); filter.dispose(); highPass.dispose();
+        lfo.dispose(); exciter.dispose(); bitCrusher.dispose(); chorus.dispose();
+        panner.dispose(); filter.dispose(); highPass.dispose();
         sendGain.dispose(); waveform.dispose(); player.dispose();
         throw err;
       }
@@ -806,6 +934,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       (player as any).highPass = highPass;
       (player as any).lfo = lfo;
       (player as any).exciter = exciter;
+      (player as any).bitCrusher = bitCrusher;
+      (player as any).chorus = chorus;
       (player as any).panner = panner;
 
       const info: GrainLayerInfo = {
@@ -828,6 +958,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       clearInterval((player as any).driftInterval);
       if (lfo && !lfo.disposed) lfo.stop().dispose();
       if ((player as any).exciter && !(player as any).exciter.disposed) (player as any).exciter.dispose();
+      if ((player as any).bitCrusher && !(player as any).bitCrusher.disposed) (player as any).bitCrusher.dispose();
+      if ((player as any).chorus && !(player as any).chorus.disposed) (player as any).chorus.stop().dispose();
       if (filter && !filter.disposed) filter.dispose();
       if (highPass && !highPass.disposed) highPass.dispose();
       if (panner && !panner.disposed) panner.dispose();
@@ -860,7 +992,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       filter.Q.value = r() * 1 + 0.3; // low Q — smooth, no resonant peak
 
       const lfoFreq = 0.04 + r() * 0.1; // 0.04–0.14Hz — barely perceptible
-      const lfo = new Tone.LFO(lfoFreq, filterFreq * 0.85, filterFreq * 1.15);
+      const lfo = new Tone.LFO({ type: pickLFOType(r), frequency: lfoFreq, min: filterFreq * 0.85, max: filterFreq * 1.15 });
       lfo.connect(filter.frequency).start();
 
       // Long, spacious reverb — the defining quality of Eno's melodic sound
@@ -878,10 +1010,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const sendGain = new Tone.Gain(0).connect(fxBus.current.fxInput);
 
       // Eno-appropriate synth voices only
-      const synthTypes = ['pure', 'bell', 'mallet', 'electric', 'glass', 'duo'];
+      const synthTypes = ['pure', 'bell', 'mallet', 'electric', 'glass', 'duo', 'metal', 'membrane'];
       const randomSynthType = synthTypes[Math.floor(r() * synthTypes.length)];
 
-      let synth: Tone.PolySynth | Tone.PluckSynth;
+      let synth: Tone.PolySynth | Tone.PluckSynth | Tone.MetalSynth | Tone.MembraneSynth;
       let synthDescription = '';
       let noteDuration: string;
 
@@ -954,6 +1086,42 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
           synthDescription = `Duo (h:${duoHarmonicity.toFixed(3)})`;
           break;
         }
+        case 'metal': {
+          // MetalSynth — fully inharmonic FM partials, cymbal/tam-tam quality.
+          // Unlike bell, harmonicity is pushed into high inharmonic territory and
+          // the envelope is purely percussive (no sustain). Fires on sparse
+          // fast subdivisions with very low probability so it reads as texture
+          // rather than rhythm.
+          const metalHarmonicity = 5 + r() * 8;  // 5–13 — well into inharmonic zone
+          const metalModIndex   = 10 + r() * 20; // 10–30 — bright metallic colour
+          const metalSynth = new Tone.MetalSynth({
+            harmonicity: metalHarmonicity,
+            modulationIndex: metalModIndex,
+            resonance: 3000 + r() * 4000,
+            octaves: 0.5 + r() * 1.0,
+            envelope: { attack: 0.001, decay: 0.4 + r() * 0.8, release: 0.2 + r() * 0.5 },
+          });
+          // frequency must be set post-construction
+          metalSynth.frequency.value = Tone.Frequency(['C3', 'G3', 'D3'][Math.floor(r() * 3)]).toFrequency();
+          synth = metalSynth;
+          noteDuration = '16n'; // unused — MetalSynth triggers by duration not note
+          synthDescription = `Metal (h:${metalHarmonicity.toFixed(1)} m:${metalModIndex.toFixed(0)})`;
+          break;
+        }
+        case 'membrane': {
+          // MembraneSynth — pitched kick/tom quality. Sine carrier with fast pitch
+          // envelope drop from attack frequency down to a low resting pitch.
+          // Works best on root notes of the scale in octave 2–3.
+          const pitchDecay = 0.05 + r() * 0.15; // 50–200ms pitch drop
+          synth = new Tone.MembraneSynth({
+            pitchDecay,
+            octaves: 4 + r() * 4, // 4–8 octave pitch drop — more = punchier
+            envelope: { attack: 0.001, decay: 0.3 + r() * 0.4, sustain: 0, release: 0.5 + r() * 0.5 },
+          });
+          noteDuration = '8n';
+          synthDescription = `Membrane (pd:${(pitchDecay * 1000).toFixed(0)}ms)`;
+          break;
+        }
         default: // 'pure'
           // Sine tone — the most fundamental Eno sound
           synth = new Tone.PolySynth(Tone.Synth, {
@@ -996,38 +1164,71 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         ? basePool
         : basePool.map(note => Tone.Frequency(note).transpose(semitoneOffset).toNote());
 
-      // Weight toward root, 3rd, 5th for harmonic gravity; avoid random wandering
-      const weightedPool: string[] = [];
-      notePool.forEach((note, i) => {
-        const degree = i % 7;
-        const weight = (degree === 0 || degree === 2 || degree === 4) ? 3 : 1;
-        for (let w = 0; w < weight; w++) weightedPool.push(note);
-      });
-      const pickNote = () => weightedPool[Math.floor(r() * weightedPool.length)];
+      // Pattern-style traversal — gives each melodic layer a distinct musical character
+      // rather than always drawing randomly from the pool.
+      // Pattern types mirror Tone.Pattern's built-in modes.
+      const patternTypes = ['up', 'down', 'upDown', 'downUp', 'randomWalk', 'random'] as const;
+      type PatternType = typeof patternTypes[number];
+      const patternType: PatternType = patternTypes[Math.floor(r() * patternTypes.length)];
+
+      // Build a cursor that returns the next note according to the chosen pattern.
+      // upDown/downUp bounce at the ends; randomWalk steps ±1 from current position.
+      let cursorIdx = patternType === 'down' || patternType === 'downUp' ? notePool.length - 1 : 0;
+      let cursorDir = patternType === 'down' || patternType === 'downUp' ? -1 : 1;
+
+      const nextPatternNote = (): string => {
+        switch (patternType) {
+          case 'up':
+            cursorIdx = (cursorIdx + 1) % notePool.length;
+            break;
+          case 'down':
+            cursorIdx = (cursorIdx - 1 + notePool.length) % notePool.length;
+            break;
+          case 'upDown':
+          case 'downUp':
+            cursorIdx += cursorDir;
+            if (cursorIdx >= notePool.length - 1) { cursorIdx = notePool.length - 1; cursorDir = -1; }
+            else if (cursorIdx <= 0) { cursorIdx = 0; cursorDir = 1; }
+            break;
+          case 'randomWalk': {
+            const step = Math.random() < 0.5 ? 1 : -1;
+            cursorIdx = Math.max(0, Math.min(notePool.length - 1, cursorIdx + step));
+            break;
+          }
+          default: // 'random'
+            cursorIdx = Math.floor(Math.random() * notePool.length);
+        }
+        return notePool[cursorIdx];
+      };
+
+      // Percussive voices use fast subdivisions + low probability rather than
+      // slow melodic intervals. This makes them feel like sparse accents.
+      const isPercussive = randomSynthType === 'metal' || randomSynthType === 'membrane';
 
       // Discreet Music mode: prime-length loop so this layer never re-aligns with
       // others. Standard mode: 3–5 events at a random slow interval.
       const primeLengths = [5, 7, 11, 13, 17, 19];
-      const sequenceLength = discreetMode
-        ? primeLengths[Math.floor(r() * primeLengths.length)]
-        : Math.floor(r() * 3) + 3;
+      const sequenceLength = isPercussive
+        ? primeLengths[Math.floor(r() * primeLengths.length)] * 2  // longer loop = less repetition
+        : discreetMode
+          ? primeLengths[Math.floor(r() * primeLengths.length)]
+          : Math.floor(r() * 3) + 3;
       const intervalOptions = ['1m', '2m', '2n'];
-      const sequenceInterval = discreetMode
-        ? '1m'
-        : intervalOptions[Math.floor(r() * intervalOptions.length)];
+      const sequenceInterval = isPercussive
+        ? (['8n', '16n'] as const)[Math.floor(r() * 2)]
+        : discreetMode
+          ? '1m'
+          : intervalOptions[Math.floor(r() * intervalOptions.length)];
 
-      let lastNote: string | null = null;
+      // Percussive voices: sparse hits (5–12% chance), melodic voices: 35% rest
+      const restThreshold = isPercussive ? 1 - (0.05 + r() * 0.07) : 0.35;
+
       const sequenceEvents = Array.from({ length: sequenceLength }, () => {
         const ev = r();
-        if (ev < 0.4) { lastNote = null; return null; } // 40% rest — silence is musical
-        if (ev < 0.75 || !(synth instanceof Tone.PolySynth)) {
-          let note = pickNote();
-          if (note === lastNote) note = pickNote();
-          lastNote = note;
-          return note;
-        }
-        // Occasional gentle dyad (two notes a scale step apart)
-        lastNote = null;
+        if (isPercussive) return ev < restThreshold ? null : nextPatternNote();
+        if (ev < restThreshold) return null;
+        if (ev < 0.8 || !(synth instanceof Tone.PolySynth)) return nextPatternNote();
+        // Occasional gentle dyad (two scale-adjacent notes)
         const idx = Math.floor(r() * (notePool.length - 2));
         return [notePool[idx], notePool[idx + 2]];
       });
@@ -1039,7 +1240,11 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         (time, note) => {
           if (note && Math.random() <= state.probability) {
             const velocity = 0.3 + Math.random() * 0.7;
-            if (synth instanceof Tone.PluckSynth) {
+            if (synth instanceof Tone.MetalSynth) {
+              synth.triggerAttackRelease('16n', time, velocity);
+            } else if (synth instanceof Tone.MembraneSynth) {
+              synth.triggerAttackRelease(note as string, '8n', time, velocity);
+            } else if (synth instanceof Tone.PluckSynth) {
               synth.triggerAttack(note as string, time, velocity);
             } else if (synth instanceof Tone.PolySynth) {
               synth.triggerAttackRelease(note as Tone.Frequency | Tone.Frequency[], noteDuration, time, velocity);
@@ -1069,7 +1274,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const loopLabel = discreetMode ? ` · ${sequenceLength}m loop` : '';
       const info: SynthLayerInfo = {
         type: 'melodic',
-        description: `${synthDescription} · ${scaleName} · ${sequenceInterval} interval · delay ${delayTime} · reverb ${reverbDecay.toFixed(1)}s${loopLabel}`
+        description: `${synthDescription} · ${scaleName} · ${patternType} · ${sequenceInterval} interval · reverb ${reverbDecay.toFixed(1)}s${loopLabel}`
       };
 
       return { sequence, info, filterCutoff: filterFreq, filterResonance: filter.Q.value };
@@ -1094,9 +1299,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
       if (synth && !synth.disposed) {
-        if (synth instanceof Tone.PolySynth) {
-          synth.releaseAll();
-        }
+        if (synth instanceof Tone.PolySynth) synth.releaseAll();
         synth.dispose();
       }
       if (sequence && !sequence.disposed) {
@@ -1128,7 +1331,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
 
       // Extremely slow filter drift — the texture very gradually brightens and darkens
       const lfoFreq = 0.003 + r() * 0.015; // 0.003–0.018Hz (one sweep every 1–5 mins)
-      const lfo = new Tone.LFO(lfoFreq, filterFreq * 0.6, filterFreq * 1.4).start();
+      const lfo = new Tone.LFO({ type: pickLFOType(r), frequency: lfoFreq, min: filterFreq * 0.6, max: filterFreq * 1.4 }).start();
       lfo.connect(filter.frequency);
 
       const panner = new Tone.AutoPanner({
@@ -1297,6 +1500,16 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     setShimmer: (value) => {
       if (fxBus.current?.shimmerGain && !fxBus.current.shimmerGain.disposed) {
         fxBus.current.shimmerGain.gain.value = value;
+      }
+    },
+    setFreqShift: (value) => {
+      if (fxBus.current?.freqShiftGain && !fxBus.current.freqShiftGain.disposed) {
+        fxBus.current.freqShiftGain.gain.value = value;
+      }
+    },
+    setConvolverMix: (value) => {
+      if (fxBus.current?.crossFade && !fxBus.current.crossFade.disposed) {
+        fxBus.current.crossFade.fade.value = value;
       }
     },
     setBreatheEnabled: (enabled, periodMinutes) => {

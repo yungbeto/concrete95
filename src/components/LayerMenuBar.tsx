@@ -16,7 +16,6 @@ type LayerInfo = FreesoundLayerInfo | GrainLayerInfo | SynthLayerInfo | Atmosphe
 
 interface LayerMenuBarProps {
   type: 'synth' | 'freesound' | 'melodic' | 'grain' | 'atmosphere';
-  volume: number;
   send: number;
   playbackRate?: number;
   reverse?: boolean;
@@ -26,7 +25,6 @@ interface LayerMenuBarProps {
   grainSize?: number;
   grainDrift?: number;
   info?: LayerInfo;
-  onVolumeChange: (volume: number) => void;
   onSendChange: (send: number) => void;
   onPlaybackRateChange: (rate: number) => void;
   onReverseChange: (reverse: boolean) => void;
@@ -39,7 +37,6 @@ interface LayerMenuBarProps {
 
 export default function LayerMenuBar({
   type,
-  volume,
   send,
   playbackRate,
   reverse,
@@ -49,7 +46,6 @@ export default function LayerMenuBar({
   grainSize,
   grainDrift,
   info,
-  onVolumeChange,
   onSendChange,
   onPlaybackRateChange,
   onReverseChange,
@@ -185,25 +181,6 @@ export default function LayerMenuBar({
                       }}
                     />
                   </div>
-                </div>
-              </MenubarItem>
-            </MenubarContent>
-          </MenubarMenu>
-          <MenubarMenu>
-             <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto ">Volume</MenubarTrigger>
-            <MenubarContent>
-              <MenubarItem onSelect={(e) => e.preventDefault()}>
-                <div className="w-48 text-black">
-                  <p className="text-xs mb-2">
-                    Volume: {volume > -40 ? `${volume.toFixed(0)} dB` : 'Muted'}
-                  </p>
-                  <Slider
-                    defaultValue={[volume]}
-                    max={10}
-                    min={-40}
-                    step={1}
-                    onValueChange={(value) => onVolumeChange(value[0])}
-                  />
                 </div>
               </MenubarItem>
             </MenubarContent>
