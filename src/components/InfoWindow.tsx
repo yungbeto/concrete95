@@ -62,7 +62,7 @@ export default function InfoWindow({
 
       {/* Content */}
       <div
-        className={`p-4 ${isMobile ? 'overflow-y-auto flex-1' : ''}`}
+        className={`p-4 ${isMobile ? 'overflow-y-auto flex-1' : 'overflow-y-auto max-h-[calc(100vh-8rem)]'}`}
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
       >

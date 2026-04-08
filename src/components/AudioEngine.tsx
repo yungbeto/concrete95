@@ -59,6 +59,12 @@ type LFOType = typeof LFO_TYPES[number];
 const pickLFOType = (r: () => number): LFOType =>
   LFO_TYPES[Math.floor(r() * LFO_TYPES.length)];
 
+/**
+ * Debug A/B: when true, the master chain skips {@link Tone.MultibandCompressor} and
+ * {@link Tone.EQ3} (runs limiter → gain → saturation → HPF like the older, shorter path).
+ * Set to `false` to restore the full post-refactor master bus.
+ */
+const BYPASS_MASTER_COMP_AND_EQ = true;
 
 export type AudioEngineHandle = {
   initialize: () => void;
@@ -117,10 +123,13 @@ export type AudioEngineHandle = {
   stopRecording: () => Promise<Blob>;
   setMasterMute: (muted: boolean) => void;
   setRng: (rng: RNG | null) => void;
+  /** Short sine into the real master bus (same path as layers). For debugging only. */
+  debugPlayThroughMasterChain: () => void;
 };
 
 const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props, ref) => {
-  const masterLimiter = useRef<Tone.Limiter | null>(null);
+  /** Summing bus for layers + FX returns (plain Gain — Tone Limiter mis-routed with multiple inputs). */
+  const masterBus = useRef<Tone.Gain | null>(null);
   const masterGain = useRef<Tone.Gain | null>(null);
   const masterBreatheLFO = useRef<Tone.LFO | null>(null);
   const masterSaturation = useRef<Tone.Distortion | null>(null);
@@ -152,18 +161,18 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     freqShifter: Tone.FrequencyShifter;
     convolver: Tone.Convolver;
     crossFade: Tone.CrossFade;
-    reverbAutoGain: Tone.Gain;
   } | null>(null);
 
   const isInitialized = useRef(false);
   const rngRef = useRef<RNG | null>(null);
 
   const initializeAudio = () => {
-    if (typeof window !== 'undefined' && !isInitialized.current) {
-        // Master chain: all signals → limiter → gain (breathe LFO) → saturation → HPF → destination
+    if (typeof window !== 'undefined' && !isInitialized.current) { try {
+        // Master chain: all signals → gain bus → gain (breathe) → [optional MB comp + EQ3] → saturation → HPF → destination
+        // When BYPASS_MASTER_COMP_AND_EQ, comp + EQ are omitted (nodes still exist for disposal).
         // masterGain is the Breathe automation point — only attenuates (0.7–1.0),
-        // never amplifies, so it's safe after the limiter.
-        masterLimiter.current = new Tone.Limiter(-3);
+        // never amplifies, so it's safe after the bus.
+        masterBus.current = new Tone.Gain(1);
         masterGain.current = new Tone.Gain(1);
         masterCompressor.current = new Tone.MultibandCompressor({
           lowFrequency: 300,
@@ -173,26 +182,26 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
           high: { threshold: -20, ratio: 6, attack: 0.05, release: 0.3, knee: 3 },
         });
         masterEQ.current = new Tone.EQ3({ low: 0, mid: 0, high: -2, highFrequency: 6000 });
-        // M3: Mid-Side compression — tighter mono centre, let the sides breathe
-        masterMidSide.current = new Tone.MidSideCompressor({
-          mid:  { threshold: -24, ratio: 3,   attack: 0.08, release: 0.4, knee: 6 },
-          side: { threshold: -30, ratio: 1.5,  attack: 0.3,  release: 0.8, knee: 8 },
-        });
         masterSaturation.current = new Tone.Distortion({ distortion: 0.08, wet: 0.02 });
+        // .toDestination() on the HPF is the correct pattern — the old working code used it.
+        // Passing Tone.getDestination() as the last arg in chain() silences the entire bus.
         masterHPF.current = new Tone.Filter(40, 'highpass').toDestination();
-        masterLimiter.current.chain(masterGain.current, masterCompressor.current, masterEQ.current, masterMidSide.current, masterSaturation.current, masterHPF.current);
+        if (BYPASS_MASTER_COMP_AND_EQ) {
+          masterBus.current.chain(
+            masterGain.current,
+            masterSaturation.current,
+            masterHPF.current,
+          );
+        } else {
+          masterBus.current.chain(
+            masterGain.current,
+            masterCompressor.current,
+            masterEQ.current,
+            masterSaturation.current,
+            masterHPF.current,
+          );
+        }
 
-        // O1: Envelope follower — as the mix gets louder the reverb tail is gently ducked;
-        // as it quiets down the reverb opens back up. Gives a natural "breathing" quality
-        // where the space expands in silence. reverbAutoGain sits between crossFade and the
-        // limiter so it doesn't touch dry signal at all.
-        // Gain range [0.7, 1.0]: loud → 0.7× reverb return, quiet → 1.0× (fully open).
-        const reverbAutoGain = new Tone.Gain(1);
-        masterFollower.current = new Tone.Follower(1.5);
-        masterGain.current.connect(masterFollower.current);
-        masterFollowerScale.current = new Tone.Scale(1.0, 0.7); // inverted: loud = less reverb
-        masterFollower.current.connect(masterFollowerScale.current);
-        masterFollowerScale.current.connect(reverbAutoGain.gain);
 
         // Meter tapped in parallel off masterGain — reads the breathe-modulated
         // level without affecting the signal path
@@ -251,7 +260,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         shimmerGain.connect(reverb);
 
         fxEQ.connect(delay);
-        delay.chain(delayFilter, masterLimiter.current);
+        delay.chain(delayFilter, masterBus.current);
 
         fxEQ.connect(reverb);
 
@@ -284,12 +293,16 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         const crossFade = new Tone.CrossFade(0); // 0 = algorithmic reverb, 1 = convolver
         reverb.connect(crossFade.a);
         convolver.connect(crossFade.b);
-        crossFade.connect(reverbAutoGain);
-        reverbAutoGain.connect(masterLimiter.current);
+        crossFade.connect(masterBus.current);
 
-        fxBus.current = { fxInput, fxEQ, delay, delayFilter, reverb, shimmerPitchShift, shimmerGain, freqShiftGain, freqShifter, convolver, crossFade, reverbAutoGain };
+        fxBus.current = { fxInput, fxEQ, delay, delayFilter, reverb, shimmerPitchShift, shimmerGain, freqShiftGain, freqShifter, convolver, crossFade };
+        // Export flow mutes Tone.Destination; new graph must always be audible.
+        Tone.getDestination().volume.value = 0;
         isInitialized.current = true;
-    }
+    } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[C95-audio] initializeAudio failed:', err);
+    } }
   }
 
   useEffect(() => {
@@ -328,7 +341,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             }
             mediaStreamDestination.current = null;
             recordedChunks.current = [];
-            masterLimiter.current?.dispose();
+            masterBus.current?.dispose();
             masterGain.current?.dispose();
             masterCompressor.current?.dispose();
             masterCompressor.current = null;
@@ -353,8 +366,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             fxBus.current?.reverb.dispose();
             fxBus.current?.convolver.dispose();
             fxBus.current?.crossFade.dispose();
-            fxBus.current?.reverbAutoGain.dispose();
-            masterLimiter.current = null;
+            masterBus.current = null;
             masterGain.current = null;
             masterSaturation.current = null;
             masterHPF.current = null;
@@ -367,6 +379,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
   useImperativeHandle(ref, () => ({
     initialize: () => {
         initializeAudio();
+        // If the graph was already built (e.g. desktop mount), initializeAudio() is a no-op
+        // but the destination may still be at -∞ from a prior export-mute or hot reload.
+        Tone.getDestination().volume.value = 0;
     },
     disposeAll: () => {
         Tone.Transport.stop();
@@ -462,6 +477,31 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     setRng: (rng) => {
       rngRef.current = rng;
     },
+    debugPlayThroughMasterChain: () => {
+      if (!masterBus.current || masterBus.current.disposed) return;
+      void Tone.start();
+      // Use native nodes into the bus GainNode for a low-level signal path test.
+      const raw = Tone.getContext().rawContext as AudioContext;
+      const busNode = masterBus.current.input as GainNode;
+      const osc = raw.createOscillator();
+      const g = raw.createGain();
+      g.gain.value = 0.12;
+      osc.type = 'sine';
+      osc.frequency.value = 392;
+      osc.connect(g);
+      g.connect(busNode);
+      const t0 = raw.currentTime + 0.02;
+      osc.start(t0);
+      osc.stop(t0 + 0.2);
+      window.setTimeout(() => {
+        try {
+          g.disconnect();
+          osc.disconnect();
+        } catch {
+          /* ignore */
+        }
+      }, 350);
+    },
     getWaveform: (node) => {
         if (node && !node.disposed) {
             const waveform = (node as any).waveform;
@@ -472,7 +512,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         return null;
     },
     startSynthLoop: (scale, discreetMode = false) => {
-      if (!masterLimiter.current || !fxBus.current) return null;
+      if (!masterBus.current || !fxBus.current) return null;
       Tone.start();
       const r = rngRef.current ?? Math.random;
 
@@ -552,7 +592,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const sendGain = new Tone.Gain(0).connect(fxBus.current.fxInput);
       const waveform = new Tone.Waveform(1024);
 
-      synth.chain(chorus, highPass, filter, compressor, phaser, ampGain, panner, masterLimiter.current);
+      synth.chain(chorus, highPass, filter, compressor, phaser, ampGain, panner, masterBus.current);
       synth.connect(sendGain);
       synth.connect(waveform);
 
@@ -705,7 +745,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       }
     },
     startFreesoundLoop: async (sound) => {
-      if (!masterLimiter.current || !fxBus.current) return null;
+      if (!masterBus.current || !fxBus.current) return null;
       await Tone.start();
       const r = rngRef.current ?? Math.random;
 
@@ -760,7 +800,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const sendGain = new Tone.Gain(0).connect(fxBus.current.fxInput);
       const waveform = new Tone.Waveform(1024);
 
-      player.chain(highPass, filter, tremolo, phaser, panner, masterLimiter.current);
+      player.chain(highPass, filter, tremolo, phaser, panner, masterBus.current);
       player.connect(sendGain);
       player.connect(waveform);
 
@@ -836,7 +876,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       }
     },
     startGrainLoop: async (sound) => {
-      if (!masterLimiter.current || !fxBus.current) return null;
+      if (!masterBus.current || !fxBus.current) return null;
       await Tone.start();
       const r = rngRef.current ?? Math.random;
 
@@ -902,7 +942,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const sendGain = new Tone.Gain(0).connect(fxBus.current.fxInput);
       const waveform = new Tone.Waveform(1024);
 
-      player.chain(highPass, filter, exciter, bitCrusher, chorus, panner, masterLimiter.current);
+      player.chain(highPass, filter, exciter, bitCrusher, chorus, panner, masterBus.current);
       player.connect(sendGain);
       player.connect(waveform);
 
@@ -919,9 +959,24 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
 
       // 20% chance of a slow downward pitch drift — like a tape machine imperceptibly
       // winding down. Ramps -100 cents over 20–40s, then stays there.
+      // GrainPlayer.detune is a plain number in Tone 15 (not a Signal), so no rampTo().
       if (r() < 0.2) {
-        const driftDuration = 20 + r() * 20;
-        player.detune.rampTo(-100, driftDuration);
+        const driftDurationSec = 20 + r() * 20;
+        const startDetune = player.detune;
+        const endDetune = -100;
+        const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const detuneDriftInterval = setInterval(() => {
+          if (player.disposed) {
+            clearInterval(detuneDriftInterval);
+            return;
+          }
+          const elapsed =
+            (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
+          const u = Math.min(1, elapsed / (driftDurationSec * 1000));
+          player.detune = startDetune + (endDetune - startDetune) * u;
+          if (u >= 1) clearInterval(detuneDriftInterval);
+        }, 50);
+        (player as any).detuneDriftInterval = detuneDriftInterval;
       }
 
       if (Tone.Transport.state !== 'started') {
@@ -956,6 +1011,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const lfo = (player as any).lfo;
       const panner = (player as any).panner;
       clearInterval((player as any).driftInterval);
+      if ((player as any).detuneDriftInterval != null) {
+        clearInterval((player as any).detuneDriftInterval);
+        (player as any).detuneDriftInterval = null;
+      }
       if (lfo && !lfo.disposed) lfo.stop().dispose();
       if ((player as any).exciter && !(player as any).exciter.disposed) (player as any).exciter.dispose();
       if ((player as any).bitCrusher && !(player as any).bitCrusher.disposed) (player as any).bitCrusher.dispose();
@@ -982,7 +1041,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       }
     },
     startMelodicLoop: (scale, discreetMode = false) => {
-      if (!masterLimiter.current || !fxBus.current) return null;
+      if (!masterBus.current || !fxBus.current) return null;
       Tone.start();
       const r = rngRef.current ?? Math.random;
 
@@ -1005,7 +1064,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const delayTime = delayTimeOptions[Math.floor(r() * delayTimeOptions.length)];
       const delay = new Tone.FeedbackDelay(delayTime, r() * 0.3 + 0.3); // 0.3–0.6 feedback
       delay.wet.value = r() * 0.3 + 0.3; // 0.3–0.6 wet
-      delay.chain(filter, reverb, masterLimiter.current);
+      delay.chain(filter, reverb, masterBus.current);
 
       const sendGain = new Tone.Gain(0).connect(fxBus.current.fxInput);
 
@@ -1308,7 +1367,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       }
     },
     startAtmosphereLoop: () => {
-      if (!masterLimiter.current || !fxBus.current) return null;
+      if (!masterBus.current || !fxBus.current) return null;
       Tone.start();
       const r = rngRef.current ?? Math.random;
 
@@ -1343,7 +1402,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const sendGain = new Tone.Gain(0).connect(fxBus.current.fxInput);
       const waveform = new Tone.Waveform(1024);
 
-      noise.chain(filter, panner, masterLimiter.current);
+      noise.chain(filter, panner, masterBus.current);
       noise.connect(sendGain);
       noise.connect(waveform);
 

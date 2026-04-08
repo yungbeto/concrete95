@@ -19,12 +19,15 @@ import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import LayerCard from '@/components/LayerCard';
 import VUMeter from '@/components/VUMeter';
+import AudioDebugPanel from '@/components/AudioDebugPanel';
+import { audioDebugLog } from '@/lib/audio-debug';
 import {
   Info,
   Music,
   Settings,
   Waves,
   Wind,
+  X,
   Zap,
   type LucideIcon,
   Speaker,
@@ -263,8 +266,14 @@ export default function EtherealAcousticsClient() {
   const [layers, setLayers] = useState<Layer[]>([]);
   const { toast } = useToast();
   // Undo state — audio nodes are kept alive (muted) during the 5s window
-  const undoSingleRef = useRef<{ layer: Layer; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
-  const undoAllRef = useRef<{ layers: Layer[]; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
+  const undoSingleRef = useRef<{
+    layer: Layer;
+    timeoutId: ReturnType<typeof setTimeout>;
+  } | null>(null);
+  const undoAllRef = useRef<{
+    layers: Layer[];
+    timeoutId: ReturnType<typeof setTimeout>;
+  } | null>(null);
   const [dragState, setDragState] = useState<DragState>(null);
   const [isAlertDismissed, setIsAlertDismissed] = useState(false);
   const [openStartMenu, setOpenStartMenu] = useState(false);
@@ -547,6 +556,53 @@ export default function EtherealAcousticsClient() {
     }
   }, [isMobile, applySeed]);
 
+  /**
+   * Chromium (incl. Arc) keeps AudioContext suspended until a user gesture.
+   * Tone.start() maps to context.resume(); we also call rawContext.resume() because
+   * some builds only flip to `running` after the native promise resolves.
+   */
+  const ensureAudioUnlocked = useCallback(async () => {
+    await Tone.start();
+    const raw = Tone.getContext().rawContext as AudioContext;
+    if (raw.state === 'suspended') {
+      await raw.resume().catch(() => undefined);
+    }
+    Tone.getDestination().volume.value = 0;
+    audioDebugLog('ensureAudioUnlocked', {
+      state: raw.state,
+      destinationDb: Tone.getDestination().volume.value,
+    });
+    if (process.env.NODE_ENV === 'development' && raw.state !== 'running') {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[Concrete95] AudioContext state:',
+        raw.state,
+        '— click or press a key on the page, and check Arc site settings → Sound.',
+      );
+    }
+  }, []);
+
+  // First interaction anywhere on the window (capture): unlock before nested handlers run.
+  useEffect(() => {
+    const unlock = () => {
+      void ensureAudioUnlocked();
+    };
+    window.addEventListener('pointerdown', unlock, { capture: true });
+    window.addEventListener('keydown', unlock, { capture: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock, { capture: true });
+      window.removeEventListener('keydown', unlock, { capture: true });
+    };
+  }, [ensureAudioUnlocked]);
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'visible') void ensureAudioUnlocked();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [ensureAudioUnlocked]);
+
   const [windows, setWindows] = useState<WindowState[]>([
     {
       id: 'about',
@@ -624,7 +680,8 @@ export default function EtherealAcousticsClient() {
         target.tagName === 'INPUT' ||
         target.tagName === 'TEXTAREA' ||
         target.isContentEditable
-      ) return;
+      )
+        return;
 
       // Cmd/Ctrl+S — save session
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -638,11 +695,17 @@ export default function EtherealAcousticsClient() {
       switch (e.key) {
         case 'm':
         case 'M':
-          if (activeLayer) { e.preventDefault(); handleMuteToggle(activeLayer.id); }
+          if (activeLayer) {
+            e.preventDefault();
+            handleMuteToggle(activeLayer.id);
+          }
           break;
         case 'Delete':
         case 'Backspace':
-          if (activeLayer) { e.preventDefault(); handleRemoveLayer(activeLayer.id); }
+          if (activeLayer) {
+            e.preventDefault();
+            handleRemoveLayer(activeLayer.id);
+          }
           break;
         case ' ':
           e.preventDefault();
@@ -652,7 +715,7 @@ export default function EtherealAcousticsClient() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeItemId, layers]);
 
   useEffect(() => {
@@ -727,9 +790,9 @@ export default function EtherealAcousticsClient() {
 
   const handleArrangeLayers = () => {
     if (layers.length === 0) return;
-    const CARD_W = 320;   // w-80 default card width
+    const CARD_W = 320; // w-80 default card width
     const CARD_W_GRAIN = 384; // w-96 grain card
-    const CARD_H = 260;   // approximate card height including volume strip
+    const CARD_H = 260; // approximate card height including volume strip
     const GAP = 12;
     const FOOTER_H = 48;
     const TASKBAR_W = 220; // approximate start menu area
@@ -745,7 +808,7 @@ export default function EtherealAcousticsClient() {
         const x = TASKBAR_W + col * (cardW + GAP) + GAP;
         const y = row * (CARD_H + GAP) + GAP;
         return { ...layer, position: { x, y } };
-      })
+      }),
     );
   };
 
@@ -822,7 +885,10 @@ export default function EtherealAcousticsClient() {
 
     // Mute immediately so silence is instant — audio node stays alive for undo
     if (layerToRemove.node && audioEngineRef.current) {
-      audioEngineRef.current.setVolume(layerToRemove.node as Tone.Player, -Infinity);
+      audioEngineRef.current.setVolume(
+        layerToRemove.node as Tone.Player,
+        -Infinity,
+      );
     }
 
     // Flush any previous pending single undo
@@ -839,36 +905,11 @@ export default function EtherealAcousticsClient() {
       undoSingleRef.current = null;
     }, 5000);
     undoSingleRef.current = { layer: layerToRemove, timeoutId };
-
-    toast({
-      title: `"${layerToRemove.title}" removed`,
-      action: (
-        <ToastAction
-          altText="Undo"
-          onClick={() => {
-            if (!undoSingleRef.current) return;
-            clearTimeout(undoSingleRef.current.timeoutId);
-            const { layer } = undoSingleRef.current;
-            // Restore volume
-            if (layer.node && audioEngineRef.current) {
-              audioEngineRef.current.setVolume(
-                layer.node as Tone.Player,
-                layer.isMuted ? -Infinity : layer.volume,
-              );
-            }
-            setLayers((prev) => [...prev, layer]);
-            undoSingleRef.current = null;
-          }}
-        >
-          Undo
-        </ToastAction>
-      ),
-      duration: 5000,
-    });
   };
 
-  const addSynthLayer = () => {
+  const addSynthLayer = async () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
+    await ensureAudioUnlocked();
     const id = addLayer('synth', { volume: -18 });
     if (!id) return;
 
@@ -907,6 +948,7 @@ export default function EtherealAcousticsClient() {
 
   const addFreesoundLayer = async () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
+    await ensureAudioUnlocked();
     const id = addLayer('freesound', { volume: -12, playbackRate: 1 });
     if (!id) return;
 
@@ -969,8 +1011,9 @@ export default function EtherealAcousticsClient() {
     }
   };
 
-  const addAtmosphereLayer = () => {
+  const addAtmosphereLayer = async () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
+    await ensureAudioUnlocked();
     const id = addLayer('atmosphere', { volume: -28 });
     if (!id) return;
 
@@ -1001,6 +1044,7 @@ export default function EtherealAcousticsClient() {
 
   const addGrainLayer = async () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
+    await ensureAudioUnlocked();
     const id = addLayer('grain', {
       volume: -12,
       playbackRate: 1,
@@ -1070,8 +1114,9 @@ export default function EtherealAcousticsClient() {
     }
   };
 
-  const addMelodicLayer = () => {
+  const addMelodicLayer = async () => {
     if (!audioEngineRef.current || checkLayerLimit()) return;
+    await ensureAudioUnlocked();
     const id = addLayer('melodic', { volume: -18 });
     if (!id) return;
 
@@ -1265,7 +1310,12 @@ export default function EtherealAcousticsClient() {
 
   const handleQuickStart = () => {
     setIsAlertDismissed(true);
-    const pool: Array<() => void> = [addGrainLayer, addSynthLayer, addAtmosphereLayer, addMelodicLayer];
+    const pool: Array<() => void> = [
+      addGrainLayer,
+      addSynthLayer,
+      addAtmosphereLayer,
+      addMelodicLayer,
+    ];
     // Fisher-Yates shuffle
     for (let i = pool.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -1518,7 +1568,13 @@ export default function EtherealAcousticsClient() {
 
         <Fieldset label='Space'>
           <p className='text-xs mb-2'>
-            Mix: {convolverMix.toFixed(2)} ({convolverMix < 0.1 ? 'Algorithmic' : convolverMix > 0.9 ? 'Plate IR' : 'Blend'})
+            Mix: {convolverMix.toFixed(2)} (
+            {convolverMix < 0.1
+              ? 'Algorithmic'
+              : convolverMix > 0.9
+                ? 'Plate IR'
+                : 'Blend'}
+            )
           </p>
           <Slider
             defaultValue={[convolverMix]}
@@ -1529,7 +1585,8 @@ export default function EtherealAcousticsClient() {
           />
           <FeatureInfo>
             Crossfades between the algorithmic reverb and a synthetic plate IR.
-            The IR gives the mix a specific physical space rather than a generic wash.
+            The IR gives the mix a specific physical space rather than a generic
+            wash.
           </FeatureInfo>
         </Fieldset>
       </div>
@@ -1652,7 +1709,7 @@ export default function EtherealAcousticsClient() {
       title: 'All layers stopped',
       action: (
         <ToastAction
-          altText="Undo"
+          altText='Undo'
           onClick={() => {
             if (!undoAllRef.current) return;
             clearTimeout(undoAllRef.current.timeoutId);
@@ -1885,7 +1942,7 @@ export default function EtherealAcousticsClient() {
     const url = new URL(window.location.href);
     url.searchParams.delete('s');
     window.history.replaceState(null, '', url.toString());
-    await Tone.start();
+    await ensureAudioUnlocked();
     handleLoadSession(session, false);
   };
 
@@ -1925,6 +1982,7 @@ export default function EtherealAcousticsClient() {
     trackAsSession = true,
   ) => {
     if (!audioEngineRef.current || !isEngineInitialized) return;
+    await ensureAudioUnlocked();
 
     // Stop and clear all current layers
     handleRemoveAllLayers();
@@ -2237,7 +2295,7 @@ export default function EtherealAcousticsClient() {
   };
 
   const handleStartAudio = async () => {
-    await Tone.start();
+    await ensureAudioUnlocked();
     if (audioEngineRef.current) {
       audioEngineRef.current.initialize();
       setGlobalBPM(audioEngineRef.current.getBPM());
@@ -2250,7 +2308,12 @@ export default function EtherealAcousticsClient() {
   };
 
   return (
-    <div className='relative w-full h-dvh flex flex-col overflow-hidden'>
+    <div
+      className='relative w-full h-dvh flex flex-col overflow-hidden'
+      onPointerDownCapture={() => {
+        void ensureAudioUnlocked();
+      }}
+    >
       {/* Recording border overlay — sits above all content so the inset shadow is visible */}
       {isRecording && (
         <div
@@ -2262,6 +2325,13 @@ export default function EtherealAcousticsClient() {
         />
       )}
       <AudioEngine ref={audioEngineRef} isMobile={isMobile} />
+
+      <AudioDebugPanel
+        audioEngineRef={audioEngineRef}
+        ensureAudioUnlocked={ensureAudioUnlocked}
+        layerCount={layers.length}
+        isEngineInitialized={isEngineInitialized}
+      />
 
       {sharedSessionReady && (
         <div className='absolute inset-0 bg-black/50 z-50 flex items-center justify-center'>
@@ -2360,7 +2430,7 @@ export default function EtherealAcousticsClient() {
             isOpen={windows.find((w) => w.id === 'master')?.isOpen}
           />
           <DesktopIcon
-            icon={SlidersHorizontal}
+            imageUrl='/fxbusicon.png'
             label='FXBus.exe'
             onClick={() => openWindow('fxbus')}
             isOpen={windows.find((w) => w.id === 'fxbus')?.isOpen}
@@ -2418,8 +2488,47 @@ export default function EtherealAcousticsClient() {
               onTouchStart={(e) => handleDragStart(layer.id, 'layer', e)}
             />
           ))}
+          {/* FX Send Bus — off-canvas drawer sliding in from the right */}
+          {(() => {
+            const fxWin = windows.find((w) => w.id === 'fxbus');
+            if (!fxWin) return null;
+            return (
+              <>
+                {/* Backdrop */}
+                {fxWin.isOpen && (
+                  <div
+                    className="fixed inset-0"
+                    style={{ zIndex: fxWin.zIndex - 1 }}
+                    onClick={() => closeWindow('fxbus')}
+                  />
+                )}
+                {/* Drawer */}
+                <div
+                  className={`fixed right-0 top-0 bottom-10 w-80 flex flex-col bg-silver border-l-2 border-l-neutral-600 shadow-[-4px_0_12px_rgba(0,0,0,0.25)] transition-transform duration-200 ease-in-out ${fxWin.isOpen ? 'translate-x-0' : 'translate-x-full'}`}
+                  style={{ zIndex: fxWin.zIndex }}
+                >
+                  <div className="bg-blue-800 text-white flex items-center justify-between px-2 h-7 flex-shrink-0">
+                    <span className="font-bold text-sm select-none font-sans">FX Send Bus</span>
+                    <Button
+                      variant="retro"
+                      size="icon"
+                      className="w-5 h-5"
+                      onClick={() => closeWindow('fxbus')}
+                    >
+                      <X className="w-3 h-3 text-black" />
+                    </Button>
+                  </div>
+                  <div className="overflow-y-auto flex-1 p-4">
+                    {fxWin.content}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+
           {windows.map((win) => {
             if (!win.isOpen) return null;
+            if (win.id === 'fxbus') return null;
             if (win.id === 'scope') {
               return (
                 <LissajousWindow
@@ -2474,7 +2583,10 @@ export default function EtherealAcousticsClient() {
                     <Button
                       variant='retro'
                       className='flex-1'
-                      onClick={() => { setIsAlertDismissed(true); setOpenStartMenu(true); }}
+                      onClick={() => {
+                        setIsAlertDismissed(true);
+                        setOpenStartMenu(true);
+                      }}
                     >
                       Browse
                     </Button>
