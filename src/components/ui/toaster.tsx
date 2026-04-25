@@ -21,8 +21,11 @@ export function Toaster() {
             {/* Win95 title bar */}
             {title && (
               <div className="absolute inset-x-0 top-0 flex items-center justify-between bg-blue-800 px-1.5 h-6 flex-shrink-0">
-                <ToastTitle className="text-white font-bold text-xs select-none leading-none">{title}</ToastTitle>
-                <ToastClose className="static h-4 w-4 ml-1" />
+                {/* Destructive variant sets title to red-950 — force white on blue for WCAG contrast */}
+                <ToastTitle className="!text-white font-bold text-xs select-none leading-none group-[.destructive]:!text-white">
+                  {title}
+                </ToastTitle>
+                <ToastClose className="static h-4 w-4 ml-1 !border-white/70 !bg-blue-950/40 !text-white hover:!bg-blue-700 group-[.destructive]:!border-white/70 group-[.destructive]:!bg-blue-950/40 group-[.destructive]:!text-white" />
               </div>
             )}
 

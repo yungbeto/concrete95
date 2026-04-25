@@ -788,30 +788,6 @@ export default function EtherealAcousticsClient() {
     };
   };
 
-  const handleArrangeLayers = () => {
-    if (layers.length === 0) return;
-    const CARD_W = 320; // w-80 default card width
-    const CARD_W_GRAIN = 384; // w-96 grain card
-    const CARD_H = 260; // approximate card height including volume strip
-    const GAP = 12;
-    const FOOTER_H = 48;
-    const TASKBAR_W = 220; // approximate start menu area
-    const viewW = window.innerWidth - TASKBAR_W;
-    const viewH = window.innerHeight - FOOTER_H;
-    const cols = Math.max(1, Math.floor(viewW / (CARD_W + GAP)));
-
-    setLayers((prev) =>
-      prev.map((layer, i) => {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        const cardW = layer.type === 'grain' ? CARD_W_GRAIN : CARD_W;
-        const x = TASKBAR_W + col * (cardW + GAP) + GAP;
-        const y = row * (CARD_H + GAP) + GAP;
-        return { ...layer, position: { x, y } };
-      }),
-    );
-  };
-
   const getNewWindowPosition = () => {
     if (isMobile) {
       const x = window.innerWidth / 2 - 160;
@@ -1308,24 +1284,6 @@ export default function EtherealAcousticsClient() {
     );
   };
 
-  const handleQuickStart = () => {
-    setIsAlertDismissed(true);
-    const pool: Array<() => void> = [
-      addGrainLayer,
-      addSynthLayer,
-      addAtmosphereLayer,
-      addMelodicLayer,
-    ];
-    // Fisher-Yates shuffle
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-    pool[0]();
-    setTimeout(() => pool[1](), 150);
-    setTimeout(() => pool[2](), 300);
-  };
-
   const handleBreatheToggle = (enabled: boolean) => {
     setBreatheEnabled(enabled);
     audioEngineRef.current?.setBreatheEnabled(enabled, breathePeriod);
@@ -1706,7 +1664,8 @@ export default function EtherealAcousticsClient() {
     undoAllRef.current = { layers: snapshot, timeoutId };
 
     toast({
-      title: 'All layers stopped',
+      title: 'Alert',
+      description: 'All layers stopped.',
       action: (
         <ToastAction
           altText='Undo'
@@ -2568,27 +2527,17 @@ export default function EtherealAcousticsClient() {
                   <div className='flex items-start gap-3 self-stretch'>
                     <Info className='w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5' />
                     <p className='text-sm'>
-                      Add layers from the <strong>Start</strong> menu, or jump
-                      straight in with a starter soundscape:
+                      Add layers from the <strong>Start</strong> menu to build
+                      your soundscape.
                     </p>
                   </div>
-                  <div className='flex gap-2 self-stretch'>
+                  <div className='flex justify-end self-stretch'>
                     <Button
                       variant='retro'
-                      className='flex-1'
-                      onClick={handleQuickStart}
+                      className='min-w-[75px]'
+                      onClick={() => setIsAlertDismissed(true)}
                     >
-                      ✨ Quick Start
-                    </Button>
-                    <Button
-                      variant='retro'
-                      className='flex-1'
-                      onClick={() => {
-                        setIsAlertDismissed(true);
-                        setOpenStartMenu(true);
-                      }}
-                    >
-                      Browse
+                      Ok
                     </Button>
                   </div>
                 </div>
@@ -2606,7 +2555,6 @@ export default function EtherealAcousticsClient() {
           onAddMelodicLayer={addMelodicLayer}
           onAddAtmosphereLayer={addAtmosphereLayer}
           onStopAll={handleRemoveAllLayers}
-          onArrangeLayers={handleArrangeLayers}
           canAddLayer={layers.length < MAX_LAYERS && isEngineInitialized}
           hasLayers={layers.length > 0}
           isEngineInitialized={isEngineInitialized}

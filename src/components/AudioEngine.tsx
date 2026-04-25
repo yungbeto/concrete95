@@ -66,6 +66,15 @@ const pickLFOType = (r: () => number): LFOType =>
  */
 const BYPASS_MASTER_COMP_AND_EQ = true;
 
+const proxyAudioUrl = (url: string) => {
+  try {
+    const { pathname } = new URL(url);
+    return `/api/audio-proxy${pathname}`;
+  } catch {
+    return url;
+  }
+};
+
 export type AudioEngineHandle = {
   initialize: () => void;
   startSynthLoop: (scale?: ScaleName, discreetMode?: boolean) => {
@@ -234,9 +243,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         const fxEQ = new Tone.EQ3({ low: 0, mid: 0, high: -4, highFrequency: 5000 });
         fxInput.connect(fxEQ);
 
+        // Default maxDelay is 1s; note values at low BPM (e.g. 2n @ 60 BPM) exceed that
+        // and Chrome warns when delayTime is clamped. Use a generous max for tempo + divisions.
         const delay = new Tone.PingPongDelay({
             delayTime: '4n',
             feedback: 0.4,
+            maxDelay: 8,
         });
         delay.wet.value = 0.5;
 
@@ -753,7 +765,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const playbackRate = 0.85 + r() * 0.3; // 0.85–1.15x
 
       const player = new Tone.Player({
-        url: sound.previewUrl,
+        url: proxyAudioUrl(sound.previewUrl),
         loop: true,
         playbackRate,
         fadeIn: 1.5 + r() * 2,  // 1.5–3.5s fade in — no abrupt cuts
@@ -891,7 +903,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
 
       // Tone 15 types don't expose `drift` in GrainPlayerOptions — set after construction
       const player = new Tone.GrainPlayer({
-        url: sound.previewUrl,
+        url: proxyAudioUrl(sound.previewUrl),
         loop: true,
         grainSize,
         overlap,

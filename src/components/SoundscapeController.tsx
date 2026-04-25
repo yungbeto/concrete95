@@ -11,7 +11,6 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderOpen,
-  LayoutGrid,
   LogIn,
   LogOut,
   Music,
@@ -42,7 +41,6 @@ interface SoundscapeControllerProps {
   onAddMelodicLayer: () => void;
   onAddAtmosphereLayer: () => void;
   onStopAll: () => void;
-  onArrangeLayers: () => void;
   canAddLayer: boolean;
   hasLayers: boolean;
   isEngineInitialized: boolean;
@@ -85,7 +83,6 @@ export default function SoundscapeController({
   onAddMelodicLayer,
   onAddAtmosphereLayer,
   onStopAll,
-  onArrangeLayers,
   canAddLayer,
   hasLayers,
   isEngineInitialized,
@@ -705,15 +702,6 @@ export default function SoundscapeController({
                   onMouseEnter={closeSubmenu}
                 >
                   <Square className='h-4 w-4 shrink-0' /> Stop All
-                </Button>
-                <Button
-                  variant='ghost'
-                  className={menuItemClass}
-                  onClick={() => { onArrangeLayers(); close(); }}
-                  disabled={!hasLayers}
-                  onMouseEnter={closeSubmenu}
-                >
-                  <LayoutGrid className='h-4 w-4 shrink-0' /> Arrange Layers
                 </Button>
               </div>
             )}
