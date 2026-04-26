@@ -7,6 +7,29 @@ export type FreesoundSound = {
   previewUrl: string;
 };
 
+const DEFAULT_BLOCKED_FREESOUND_USERS = ['looplicator'];
+// Keep source files long enough to provide varied loop regions, but cap to avoid
+// pulling very long previews into memory.
+const MIN_FREESOUND_DURATION_SECONDS = 8;
+const MAX_FREESOUND_DURATION_SECONDS = 120;
+
+const BLOCKED_FREESOUND_USERS = new Set(
+  DEFAULT_BLOCKED_FREESOUND_USERS
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean)
+    .concat(
+  (process.env.FREESOUND_BLOCKED_USERS ?? '')
+    .split(',')
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean),
+    ),
+);
+
+function isBlockedUploader(username: unknown): boolean {
+  if (!username || typeof username !== 'string') return false;
+  return BLOCKED_FREESOUND_USERS.has(username.trim().toLowerCase());
+}
+
 /** User-facing / API errors we handle — avoid logging these as crashes in dev. */
 function isOperationalFreesoundMessage(message: string): boolean {
   return (
@@ -28,7 +51,7 @@ async function fetchFromFreesound(query: string, retries = 2) {
 
   const freesoundUrl = `https://freesound.org/apiv2/search/text/?query=${encodeURIComponent(
     query || ''
-  )}&filter=duration:[10%20TO%2090]%20license:"Creative%20Commons%200"&fields=id,name,previews&sort=created_desc&page_size=50&page=${page}&token=${apiKey}`;
+  )}&filter=duration:[${MIN_FREESOUND_DURATION_SECONDS}%20TO%20${MAX_FREESOUND_DURATION_SECONDS}]%20license:"Creative%20Commons%200"&fields=id,name,previews,username&sort=created_desc&page_size=50&page=${page}&token=${apiKey}`;
 
   try {
     const response = await fetch(freesoundUrl);
@@ -71,7 +94,10 @@ async function fetchFromFreesound(query: string, retries = 2) {
     const data = await response.json();
 
     const sounds = data.results
-      .filter((sound: any) => sound.previews?.['preview-hq-mp3'])
+      .filter((sound: any) =>
+        sound.previews?.['preview-hq-mp3'] &&
+        !isBlockedUploader(sound.username),
+      )
       .map((sound: any) => ({
         id: sound.id,
         name: sound.name,

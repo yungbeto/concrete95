@@ -37,12 +37,14 @@ import {
   Share2,
   Sparkles,
   Palette,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DesktopIcon from '../DesktopIcon';
 import InfoWindow from '../InfoWindow';
 import TaskbarItem from '../TaskbarItem';
 import LissajousWindow from '../LissajousWindow';
+import VisualizerWindow from '../VisualizerWindow';
 import SessionsAuthModal from '../SessionsAuthModal';
 import RecordingExportDialog from '../RecordingExportDialog';
 import MidiClockPanel from '../MidiClockPanel';
@@ -261,8 +263,15 @@ function FeatureInfo({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function EtherealAcousticsClient() {
+export default function EtherealAcousticsClient({ booted = true }: { booted?: boolean }) {
   const audioEngineRef = useRef<AudioEngineHandle>(null);
+  // Drives staggered mount animations — flips true shortly after booted
+  const [uiVisible, setUiVisible] = useState(false);
+  useEffect(() => {
+    if (!booted) return;
+    const t = setTimeout(() => setUiVisible(true), 50);
+    return () => clearTimeout(t);
+  }, [booted]);
   const [layers, setLayers] = useState<Layer[]>([]);
   const { toast } = useToast();
   // Undo state — audio nodes are kept alive (muted) during the 5s window
@@ -659,6 +668,15 @@ export default function EtherealAcousticsClient() {
       content: null,
       isOpen: false,
       position: { x: 450, y: 150 },
+      zIndex: 1,
+    },
+    {
+      id: 'visualizer',
+      title: 'Visualizer.exe',
+      icon: Eye,
+      content: null,
+      isOpen: false,
+      position: { x: 200, y: 120 },
       zIndex: 1,
     },
   ]);
@@ -1073,6 +1091,7 @@ export default function EtherealAcousticsClient() {
                 status: 'playing',
                 filterCutoff: newGrainData.filterCutoff,
                 filterResonance: newGrainData.filterResonance,
+                playbackRate: newGrainData.playbackRate,
                 grainSize: newGrainData.grainSize,
                 grainDrift: newGrainData.grainDrift,
               }
@@ -2317,7 +2336,7 @@ export default function EtherealAcousticsClient() {
         </div>
       )}
 
-      {isMobile && !isAudioReady && (
+      {isMobile && !isAudioReady && booted && (
         <div className='absolute inset-0 bg-black/50 z-50 flex items-center justify-center'>
           <div className='w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans'>
             <div className='bg-blue-800 text-white flex items-center p-1'>
@@ -2370,36 +2389,30 @@ export default function EtherealAcousticsClient() {
           className='absolute left-[max(1rem,env(safe-area-inset-left))] top-[max(1rem,env(safe-area-inset-top))] flex max-w-[calc(100dvw-2rem-env(safe-area-inset-left)-env(safe-area-inset-right))] flex-wrap gap-x-2 gap-y-2 sm:max-w-none'
           style={{ zIndex: DESKTOP_ICON_Z_INDEX }}
         >
-          <DesktopIcon
-            imageUrl='/concreteicon.png'
-            label='Readme.info'
-            onClick={() => openWindow('about')}
-            isOpen={windows.find((w) => w.id === 'about')?.isOpen}
-          />
-          <DesktopIcon
-            imageUrl='/cog.png'
-            label='Settings.exe'
-            onClick={() => openWindow('settings')}
-            isOpen={windows.find((w) => w.id === 'settings')?.isOpen}
-          />
-          <DesktopIcon
-            imageUrl='/masterfxicon.png'
-            label='MasterFX.exe'
-            onClick={() => openWindow('master')}
-            isOpen={windows.find((w) => w.id === 'master')?.isOpen}
-          />
-          <DesktopIcon
-            imageUrl='/fxbusicon.png'
-            label='FXBus.exe'
-            onClick={() => openWindow('fxbus')}
-            isOpen={windows.find((w) => w.id === 'fxbus')?.isOpen}
-          />
-          <DesktopIcon
-            imageUrl='/scopeicon.png'
-            label='Scope.exe'
-            onClick={() => openWindow('scope')}
-            isOpen={windows.find((w) => w.id === 'scope')?.isOpen}
-          />
+          {([
+            { imageUrl: '/concreteicon.png', label: 'Readme.info',    id: 'about'      },
+            { imageUrl: '/cog.png',          label: 'Settings.exe',   id: 'settings'   },
+            { imageUrl: '/masterfxicon.png', label: 'MasterFX.exe',  id: 'master'     },
+            { imageUrl: '/fxbusicon.png',    label: 'FXBus.exe',     id: 'fxbus'      },
+            { imageUrl: '/scopeicon.png',    label: 'Scope.exe',     id: 'scope'      },
+            { imageUrl: '/visualizer.png',   label: 'Visualizer.exe', id: 'visualizer' },
+          ] as const).map(({ imageUrl, label, id }, i) => (
+            <div
+              key={id}
+              style={{
+                opacity: uiVisible ? 1 : 0,
+                transform: uiVisible ? 'none' : 'translateY(10px)',
+                transition: `opacity 0.4s ease ${i * 55}ms, transform 0.4s ease ${i * 55}ms`,
+              }}
+            >
+              <DesktopIcon
+                imageUrl={imageUrl}
+                label={label}
+                onClick={() => openWindow(id)}
+                isOpen={windows.find((w) => w.id === id)?.isOpen}
+              />
+            </div>
+          ))}
         </div>
 
         <div className='absolute top-0 left-0 w-full h-full'>
@@ -2501,6 +2514,19 @@ export default function EtherealAcousticsClient() {
                 />
               );
             }
+            if (win.id === 'visualizer') {
+              return (
+                <VisualizerWindow
+                  key={win.id}
+                  audioEngineRef={audioEngineRef}
+                  position={win.position}
+                  zIndex={win.zIndex}
+                  onClose={() => closeWindow(win.id)}
+                  onMouseDown={(e) => handleDragStart(win.id, 'window', e)}
+                  onTouchStart={(e) => handleDragStart(win.id, 'window', e)}
+                />
+              );
+            }
             return (
               <InfoWindow
                 key={win.id}
@@ -2516,7 +2542,16 @@ export default function EtherealAcousticsClient() {
             );
           })}
           {layers.length === 0 && !isAlertDismissed && isEngineInitialized && (
-            <div className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2'>
+            <div
+              className='absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2'
+              style={{
+                opacity: uiVisible ? 1 : 0,
+                transform: uiVisible
+                  ? 'translate(-50%, -50%)'
+                  : 'translate(-50%, -50%) translateY(8px) scale(0.97)',
+                transition: 'opacity 0.5s ease 350ms, transform 0.5s ease 350ms',
+              }}
+            >
               <div className='w-80 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans'>
                 <div className='bg-blue-800 text-white flex items-center p-1'>
                   <span className='font-bold text-sm select-none'>
@@ -2547,7 +2582,14 @@ export default function EtherealAcousticsClient() {
         </div>
       </main>
 
-      <footer className='w-full h-10 bg-silver border-t-2 border-t-white flex items-center px-2 z-20 shrink-0'>
+      <footer
+        className='w-full h-10 bg-silver border-t-2 border-t-white flex items-center px-2 z-20 shrink-0'
+        style={{
+          opacity: uiVisible ? 1 : 0,
+          transform: uiVisible ? 'none' : 'translateY(100%)',
+          transition: 'opacity 0.4s ease 0ms, transform 0.35s ease 0ms',
+        }}
+      >
         <SoundscapeController
           onAddSynthLayer={addSynthLayer}
           onAddFreesoundLayer={addFreesoundLayer}

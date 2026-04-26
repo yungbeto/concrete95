@@ -60,6 +60,8 @@ export default function LayerMenuBar({
   const [localResonance, setLocalResonance] = useState(filterResonance ?? 1);
   const [localGrainSize, setLocalGrainSize] = useState(grainSize ?? 0.1);
   const [localGrainDrift, setLocalGrainDrift] = useState(grainDrift ?? 1.0);
+  const speedMin = type === 'grain' ? 0.05 : 0.5;
+  const speedMax = type === 'grain' ? 1.25 : 2;
 
   // Sync if initial values arrive after mount (async layer creation)
   useEffect(() => { if (filterCutoff != null) setLocalCutoff(filterCutoff); }, [filterCutoff]);
@@ -185,7 +187,7 @@ export default function LayerMenuBar({
               </MenubarItem>
             </MenubarContent>
           </MenubarMenu>
-          {(type === 'freesound' || type === 'grain') && type !== 'atmosphere' && (
+          {(type === 'freesound' || type === 'grain') && (
             <MenubarMenu>
                 <MenubarTrigger className="text-black px-2 py-0.5 text-sm h-auto ">Speed</MenubarTrigger>
                 <MenubarContent>
@@ -196,9 +198,9 @@ export default function LayerMenuBar({
                                 Speed: {playbackRate?.toFixed(2) ?? '1.00'}x
                             </p>
                             <Slider
-                                defaultValue={[playbackRate ?? 1]}
-                                max={2}
-                                min={0.5}
+                                value={[playbackRate ?? 1]}
+                                max={speedMax}
+                                min={speedMin}
                                 step={0.01}
                                 onValueChange={(value) => onPlaybackRateChange(value[0])}
                             />

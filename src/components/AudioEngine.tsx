@@ -64,7 +64,7 @@ const pickLFOType = (r: () => number): LFOType =>
  * {@link Tone.EQ3} (runs limiter → gain → saturation → HPF like the older, shorter path).
  * Set to `false` to restore the full post-refactor master bus.
  */
-const BYPASS_MASTER_COMP_AND_EQ = true;
+const BYPASS_MASTER_COMP_AND_EQ = false;
 
 const proxyAudioUrl = (url: string) => {
   try {
@@ -73,6 +73,77 @@ const proxyAudioUrl = (url: string) => {
   } catch {
     return url;
   }
+};
+
+type GrainScatterState = {
+  intervalId: ReturnType<typeof setInterval> | null;
+  drift: number;
+  grainSize: number;
+  playbackRate: number;
+  rng: () => number;
+};
+
+const GRAIN_VOICE_COUNT = 3;
+const GRAIN_VOICE_GAIN_COMPENSATION_DB = 20 * Math.log10(GRAIN_VOICE_COUNT);
+
+const wrapSeconds = (seconds: number, duration: number) => {
+  if (duration <= 0) return 0;
+  return ((seconds % duration) + duration) % duration;
+};
+
+const getGrainVoices = (player: Tone.GrainPlayer): Tone.GrainPlayer[] => {
+  const voices = (player as any).grainVoices as Tone.GrainPlayer[] | undefined;
+  return voices?.length ? voices : [player];
+};
+
+const setGrainVoiceVolumes = (player: Tone.GrainPlayer, volume: number) => {
+  getGrainVoices(player).forEach((voice) => {
+    if (!voice.disposed) {
+      voice.volume.value = volume - GRAIN_VOICE_GAIN_COMPENSATION_DB;
+    }
+  });
+};
+
+const stopGrainScatter = (player: Tone.GrainPlayer) => {
+  const scatter = (player as any).grainScatter as GrainScatterState | undefined;
+  if (scatter?.intervalId) {
+    clearInterval(scatter.intervalId);
+    scatter.intervalId = null;
+  }
+};
+
+const startGrainScatter = (player: Tone.GrainPlayer) => {
+  stopGrainScatter(player);
+
+  const scatter = (player as any).grainScatter as GrainScatterState | undefined;
+  if (!scatter || scatter.drift <= 0) return;
+
+  let voiceIndex = 0;
+  const intervalMs = Math.max(140, Math.min(520, scatter.grainSize * 1400));
+  scatter.intervalId = setInterval(() => {
+    const voices = getGrainVoices(player).filter((voice) => !voice.disposed);
+    if (!voices.length || player.disposed) {
+      stopGrainScatter(player);
+      return;
+    }
+
+    const voice = voices[voiceIndex % voices.length];
+    voiceIndex += 1;
+
+    const duration = voice.buffer?.duration ?? 0;
+    if (!duration) return;
+
+    const startedAt = (voice as any).grainStartedAt as number | undefined;
+    const startOffset = (voice as any).grainStartOffset as number | undefined;
+    const rateRatio = ((voice as any).grainRateRatio as number | undefined) ?? 1;
+    const elapsed = startedAt == null ? 0 : (Tone.now() - startedAt) * scatter.playbackRate * rateRatio;
+    const center = wrapSeconds((startOffset ?? 0) + elapsed, duration);
+    const offset = wrapSeconds(center + (scatter.rng() - 0.5) * 2 * scatter.drift, duration);
+
+    voice.restart(Tone.now(), offset);
+    (voice as any).grainStartedAt = Tone.now();
+    (voice as any).grainStartOffset = offset;
+  }, intervalMs);
 };
 
 export type AudioEngineHandle = {
@@ -90,7 +161,7 @@ export type AudioEngineHandle = {
   stopFreesoundLoop: (player: Tone.Player) => void;
   startGrainLoop: (
     sound: { id: number; name: string; previewUrl: string }
-  ) => Promise<{ player: Tone.GrainPlayer; info: GrainLayerInfo; filterCutoff: number; filterResonance: number; grainSize: number; grainDrift: number } | null>;
+  ) => Promise<{ player: Tone.GrainPlayer; info: GrainLayerInfo; filterCutoff: number; filterResonance: number; grainSize: number; grainDrift: number; playbackRate: number } | null>;
   stopGrainLoop: (player: Tone.GrainPlayer) => void;
   setGrainSize: (player: Tone.GrainPlayer, size: number) => void;
   setGrainDrift: (player: Tone.GrainPlayer, drift: number) => void;
@@ -128,6 +199,7 @@ export type AudioEngineHandle = {
   stopAtmosphereLoop: (noise: Tone.Noise) => void;
   getMasterLevel: () => number;
   getLissajousData: () => { left: Float32Array; right: Float32Array } | null;
+  getVisualizerData: () => { frequency: Uint8Array; waveform: Float32Array } | null;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<Blob>;
   setMasterMute: (muted: boolean) => void;
@@ -153,8 +225,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
   const lissajousAnalyserR = useRef<AnalyserNode | null>(null);
   const lissajousBufferL = useRef<Float32Array | null>(null);
   const lissajousBufferR = useRef<Float32Array | null>(null);
+  const vizAnalyser = useRef<AnalyserNode | null>(null);
+  const vizFrequencyBuffer = useRef<Uint8Array | null>(null);
+  const vizWaveformBuffer = useRef<Float32Array | null>(null);
   const masterCompressor = useRef<Tone.MultibandCompressor | null>(null);
   const masterEQ = useRef<Tone.EQ3 | null>(null);
+  const masterLimiter = useRef<Tone.Limiter | null>(null);
   const masterMidSide = useRef<Tone.MidSideCompressor | null>(null);
   const masterFollower = useRef<Tone.Follower | null>(null);
   const masterFollowerScale = useRef<Tone.Scale | null>(null);
@@ -177,7 +253,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
 
   const initializeAudio = () => {
     if (typeof window !== 'undefined' && !isInitialized.current) { try {
-        // Master chain: all signals → gain bus → gain (breathe) → [optional MB comp + EQ3] → saturation → HPF → destination
+        // Master chain: all signals → gain bus → gain (breathe) → [optional MB comp + EQ3] → saturation → HPF → limiter → destination
         // When BYPASS_MASTER_COMP_AND_EQ, comp + EQ are omitted (nodes still exist for disposal).
         // masterGain is the Breathe automation point — only attenuates (0.7–1.0),
         // never amplifies, so it's safe after the bus.
@@ -192,14 +268,17 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         });
         masterEQ.current = new Tone.EQ3({ low: 0, mid: 0, high: -2, highFrequency: 6000 });
         masterSaturation.current = new Tone.Distortion({ distortion: 0.08, wet: 0.02 });
-        // .toDestination() on the HPF is the correct pattern — the old working code used it.
-        // Passing Tone.getDestination() as the last arg in chain() silences the entire bus.
-        masterHPF.current = new Tone.Filter(40, 'highpass').toDestination();
+        // Safety limiter to catch occasional summed transients from many active layers/effects.
+        // Kept near 0 dB for transparent protection instead of obvious pumping.
+        masterLimiter.current = new Tone.Limiter(-1.2).toDestination();
+        // Keep destination routing on the final limiter node; intermediate nodes stay in-graph.
+        masterHPF.current = new Tone.Filter(40, 'highpass');
         if (BYPASS_MASTER_COMP_AND_EQ) {
           masterBus.current.chain(
             masterGain.current,
             masterSaturation.current,
             masterHPF.current,
+            masterLimiter.current,
           );
         } else {
           masterBus.current.chain(
@@ -208,6 +287,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             masterEQ.current,
             masterSaturation.current,
             masterHPF.current,
+            masterLimiter.current,
           );
         }
 
@@ -230,6 +310,14 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         lissajousSplitter.current.connect(lissajousAnalyserR.current, 1);
         lissajousBufferL.current = new Float32Array(1024);
         lissajousBufferR.current = new Float32Array(1024);
+
+        // Visualizer analyser — tapped off masterGain for FFT + waveform data.
+        vizAnalyser.current = rawCtx.createAnalyser();
+        vizAnalyser.current.fftSize = 2048;
+        vizAnalyser.current.smoothingTimeConstant = 0.8;
+        masterGain.current.connect(vizAnalyser.current as any);
+        vizFrequencyBuffer.current = new Uint8Array(vizAnalyser.current.frequencyBinCount);
+        vizWaveformBuffer.current = new Float32Array(vizAnalyser.current.fftSize);
 
         Tone.Transport.bpm.value = Math.floor(Math.random() * (100 - 60 + 1)) + 60;
 
@@ -336,6 +424,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             lissajousSplitter.current = null;
             lissajousBufferL.current = null;
             lissajousBufferR.current = null;
+            vizAnalyser.current?.disconnect();
+            vizAnalyser.current = null;
+            vizFrequencyBuffer.current = null;
+            vizWaveformBuffer.current = null;
             if (mediaRecorder.current && mediaRecorder.current.state !== 'inactive') {
               try {
                 mediaRecorder.current.stop();
@@ -344,9 +436,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
               }
             }
             mediaRecorder.current = null;
-            if (mediaStreamDestination.current && masterGain.current) {
+            if (mediaStreamDestination.current && masterLimiter.current) {
               try {
-                masterGain.current.disconnect(mediaStreamDestination.current as any);
+                masterLimiter.current.disconnect(mediaStreamDestination.current as any);
               } catch {
                 /* ignore */
               }
@@ -359,6 +451,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             masterCompressor.current = null;
             masterEQ.current?.dispose();
             masterEQ.current = null;
+            masterLimiter.current?.dispose();
+            masterLimiter.current = null;
             masterMidSide.current?.dispose();
             masterMidSide.current = null;
             masterFollower.current?.dispose();
@@ -410,8 +504,14 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       lissajousAnalyserR.current.getFloatTimeDomainData(lissajousBufferR.current!);
       return { left: lissajousBufferL.current!, right: lissajousBufferR.current! };
     },
+    getVisualizerData: () => {
+      if (!vizAnalyser.current || !vizFrequencyBuffer.current || !vizWaveformBuffer.current) return null;
+      vizAnalyser.current.getByteFrequencyData(vizFrequencyBuffer.current);
+      vizAnalyser.current.getFloatTimeDomainData(vizWaveformBuffer.current);
+      return { frequency: vizFrequencyBuffer.current, waveform: vizWaveformBuffer.current };
+    },
     startRecording: async () => {
-      if (!masterGain.current) return;
+      if (!masterLimiter.current) return;
       if (typeof MediaRecorder === 'undefined') {
         throw new Error(
           'Recording needs MediaRecorder (not available in this browser or context).'
@@ -425,7 +525,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       recordedChunks.current = [];
       const dest = rawCtx.createMediaStreamDestination();
       mediaStreamDestination.current = dest;
-      masterGain.current.connect(dest as any);
+      masterLimiter.current.connect(dest as any);
 
       const mimeCandidates = [
         'audio/webm;codecs=opus',
@@ -447,9 +547,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const dest = mediaStreamDestination.current;
 
       if (!recorder || recorder.state === 'inactive') {
-        if (dest && masterGain.current) {
+        if (dest && masterLimiter.current) {
           try {
-            masterGain.current.disconnect(dest as any);
+            masterLimiter.current.disconnect(dest as any);
           } catch {
             /* ignore */
           }
@@ -467,9 +567,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             const type = recorder.mimeType || 'audio/webm';
             const blob = new Blob(recordedChunks.current, { type });
             recordedChunks.current = [];
-            if (dest && masterGain.current) {
+            if (dest && masterLimiter.current) {
               try {
-                masterGain.current.disconnect(dest as any);
+                masterLimiter.current.disconnect(dest as any);
               } catch {
                 /* ignore */
               }
@@ -825,19 +925,20 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         throw err;
       }
 
-      // 25% chance of a short loop window — adds rhythmic/textural dynamism.
-      // Done post-load so we can clamp against actual buffer duration.
-      let startOffset = r() * 20; // default: random position up to 20s in
+      // Always extract and loop a short region from a random place in the source.
+      // Target loop length: 2–6s (clamped if the loaded file is shorter).
+      const bufferDuration = player.buffer?.duration ?? 0;
+      let startOffset = 0;
       let loopLabel = '';
-      if (r() < 0.25 && player.buffer?.duration) {
-        const bufDur = player.buffer.duration;
-        const loopDur = 0.5 + r() * 2.5;          // 0.5–3s loop window
-        const maxStart = Math.max(0, bufDur - loopDur - 0.05);
-        const loopStart = r() * Math.min(maxStart, bufDur * 0.7);
+      if (bufferDuration > 0) {
+        const targetLoopDur = 2 + r() * 4; // 2–6s loop window
+        const loopDur = Math.min(targetLoopDur, Math.max(0.25, bufferDuration - 0.05));
+        const maxStart = Math.max(0, bufferDuration - loopDur - 0.05);
+        const loopStart = maxStart > 0 ? r() * maxStart : 0;
         const loopEnd = loopStart + loopDur;
         player.loopStart = loopStart;
         player.loopEnd = loopEnd;
-        startOffset = loopStart; // begin playback at the loop window
+        startOffset = loopStart;
         loopLabel = ` · ${loopDur.toFixed(1)}s loop`;
       }
       player.start('+0', startOffset);
@@ -892,27 +993,41 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       await Tone.start();
       const r = rngRef.current ?? Math.random;
 
-      // Grain parameters — these are what make GrainPlayer sonically distinct from
-      // a looping Player. Small grains + scatter = texture/shimmer. Larger grains
-      // = more recognisable sample character but still time-smeared.
-      const grainSize   = 0.08 + r() * 0.22;     // 80–300ms per grain
-      const overlap     = grainSize * (0.5 + r() * 0.3); // 50–80% crossfade — denser cloud
-      const drift       = 0.5 + r() * 2.0;        // 0.5–2.5s position scatter — breaks up linearity
-      const playbackRate = 0.05 + r() * 0.2;      // 0.05–0.25x — true time-stretch, not linear read
-      const detune      = r() * 20 - 10;          // subtle ±10 cents per layer
+      // Tone.GrainPlayer scans grains linearly; the extra offset voices and
+      // staggered restarts below make the layer behave like a granular cloud.
+      const grainSize = 0.035 + r() * 0.125; // 35–160ms per grain
+      const overlap = grainSize * (0.75 + r() * 0.35); // dense crossfades prevent choppy gaps
+      const drift = 0.3 + r() * 1.7; // seconds of source-position scatter
+      const playbackRate = 0.12 + r() * 0.38; // slow scan, but not a frozen loop
+      const detune = r() * 24 - 12; // subtle ±12 cents per layer
+      const audioUrl = proxyAudioUrl(sound.previewUrl);
 
-      // Tone 15 types don't expose `drift` in GrainPlayerOptions — set after construction
-      const player = new Tone.GrainPlayer({
-        url: proxyAudioUrl(sound.previewUrl),
-        loop: true,
+      const makeGrainVoice = (voiceIndex: number) => {
+        const rateRatio = voiceIndex === 0 ? 1 : 0.94 + r() * 0.12;
+        const voice = new Tone.GrainPlayer({
+          url: audioUrl,
+          loop: true,
+          grainSize,
+          overlap,
+          playbackRate: Math.max(0.03, playbackRate * rateRatio),
+          reverse: false,
+          detune: detune + (voiceIndex === 0 ? 0 : r() * 18 - 9),
+        });
+        (voice as any).grainRateRatio = rateRatio;
+        return voice;
+      };
+
+      const player = makeGrainVoice(0);
+      const grainVoices = [player, ...Array.from({ length: GRAIN_VOICE_COUNT - 1 }, (_, index) => makeGrainVoice(index + 1))];
+      (player as any).grainVoices = grainVoices;
+      (player as any).grainScatter = {
+        intervalId: null,
+        drift,
         grainSize,
-        overlap,
         playbackRate,
-        reverse: false,
-        detune,
-      });
-      (player as any).drift = drift; // runtime property — exists in Tone 15 but omitted from types
-      player.volume.value = -12;
+        rng: r,
+      } satisfies GrainScatterState;
+      setGrainVoiceVolumes(player, -12);
 
       // Same filter + autopan chain as freesound layers
       const highPass = new Tone.Filter(60 + r() * 60, 'highpass');
@@ -956,6 +1071,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
 
       player.chain(highPass, filter, exciter, bitCrusher, chorus, panner, masterBus.current);
       player.connect(sendGain);
+      grainVoices.slice(1).forEach((voice) => {
+        voice.connect(highPass);
+        voice.connect(sendGain);
+      });
       player.connect(waveform);
 
       try {
@@ -963,11 +1082,22 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       } catch (err) {
         lfo.dispose(); exciter.dispose(); bitCrusher.dispose(); chorus.dispose();
         panner.dispose(); filter.dispose(); highPass.dispose();
-        sendGain.dispose(); waveform.dispose(); player.dispose();
+        sendGain.dispose(); waveform.dispose();
+        grainVoices.forEach((voice) => voice.dispose());
         throw err;
       }
 
-      player.start();
+      const duration = player.buffer?.duration ?? 0;
+      const centerOffset = duration > 0 ? r() * duration : 0;
+      const startTime = Tone.now();
+      grainVoices.forEach((voice) => {
+        const voiceDuration = voice.buffer?.duration ?? duration;
+        const offset = wrapSeconds(centerOffset + (r() - 0.5) * 2 * drift, voiceDuration);
+        voice.start(startTime, offset);
+        (voice as any).grainStartedAt = startTime;
+        (voice as any).grainStartOffset = offset;
+      });
+      startGrainScatter(player);
 
       // 20% chance of a slow downward pitch drift — like a tape machine imperceptibly
       // winding down. Ramps -100 cents over 20–40s, then stays there.
@@ -1009,13 +1139,15 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         type: 'grain',
         id: sound.id,
         name: sound.name,
-        description: `${sound.name} · grain ${(grainSize * 1000).toFixed(0)}ms · scatter ${drift.toFixed(2)}s · ${playbackRate.toFixed(2)}x`,
+        description: `${sound.name} · ${(grainSize * 1000).toFixed(0)}ms grains · ${GRAIN_VOICE_COUNT}-voice scatter ${drift.toFixed(2)}s · ${playbackRate.toFixed(2)}x`,
         previewUrl: sound.previewUrl,
       };
 
-      return { player, info, filterCutoff: filterFreq, filterResonance: filter.Q.value, grainSize, grainDrift: drift };
+      return { player, info, filterCutoff: filterFreq, filterResonance: filter.Q.value, grainSize, grainDrift: drift, playbackRate };
     },
     stopGrainLoop: (player) => {
+      stopGrainScatter(player);
+      const grainVoices = getGrainVoices(player);
       const sendGain = (player as any).sendGain;
       const waveform = (player as any).waveform;
       const filter = (player as any).filter;
@@ -1036,20 +1168,35 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       if (panner && !panner.disposed) panner.dispose();
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
-      if (player && !player.disposed) {
-        player.stop();
-        player.dispose();
-      }
+      grainVoices.forEach((voice) => {
+        if (voice && !voice.disposed) {
+          voice.stop();
+          voice.dispose();
+        }
+      });
     },
     setGrainSize: (player, size) => {
       if (player && !player.disposed) {
-        player.grainSize = size;
-        player.overlap = size * 0.3; // keep overlap proportional to grain size
+        getGrainVoices(player).forEach((voice) => {
+          if (!voice.disposed) {
+            voice.grainSize = size;
+            voice.overlap = size * 0.9;
+          }
+        });
+        const scatter = (player as any).grainScatter as GrainScatterState | undefined;
+        if (scatter) {
+          scatter.grainSize = size;
+          startGrainScatter(player);
+        }
       }
     },
     setGrainDrift: (player, drift) => {
       if (player && !player.disposed) {
-        (player as any).drift = drift;
+        const scatter = (player as any).grainScatter as GrainScatterState | undefined;
+        if (scatter) {
+          scatter.drift = drift;
+          startGrainScatter(player);
+        }
       }
     },
     startMelodicLoop: (scale, discreetMode = false) => {
@@ -1456,6 +1603,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
           if (synth && !synth.disposed) {
              synth.volume.value = volume;
           }
+        } else if (node instanceof Tone.GrainPlayer) {
+          setGrainVoiceVolumes(node, volume);
         } else {
             (node as Tone.Player | Tone.PolySynth | Tone.PluckSynth).volume.value = volume;
         }
@@ -1472,12 +1621,29 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     },
     setPlaybackRate: (node, rate) => {
       if ((node instanceof Tone.Player || node instanceof Tone.GrainPlayer) && !node.disposed) {
-        node.playbackRate = rate;
+        if (node instanceof Tone.GrainPlayer) {
+          getGrainVoices(node).forEach((voice) => {
+            if (!voice.disposed) {
+              const rateRatio = ((voice as any).grainRateRatio as number | undefined) ?? 1;
+              voice.playbackRate = Math.max(0.03, rate * rateRatio);
+            }
+          });
+          const scatter = (node as any).grainScatter as GrainScatterState | undefined;
+          if (scatter) scatter.playbackRate = rate;
+        } else {
+          node.playbackRate = rate;
+        }
       }
     },
     setReverse: (node, reverse) => {
       if ((node instanceof Tone.Player || node instanceof Tone.GrainPlayer) && !node.disposed) {
-        node.reverse = reverse;
+        if (node instanceof Tone.GrainPlayer) {
+          getGrainVoices(node).forEach((voice) => {
+            if (!voice.disposed) voice.reverse = reverse;
+          });
+        } else {
+          node.reverse = reverse;
+        }
       }
     },
     setLayerFilterCutoff: (node, freq) => {
