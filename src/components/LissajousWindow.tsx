@@ -47,7 +47,7 @@ export default function LissajousWindow({
       lastTime = ts;
 
       // Phosphor-style fade: semi-transparent black overlay decays the trail
-      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.fillStyle = 'rgba(0,0,0,0.10)';
       ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
       const data = audioEngineRef.current?.getLissajousData?.();

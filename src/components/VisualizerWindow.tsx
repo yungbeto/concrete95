@@ -168,16 +168,16 @@ void main(){
   float speed=u_dna.x,sc=u_dna.y,warpBase=u_dna.z;
   vec2 phase=u_phase_o1.xy,o1=u_phase_o1.zw,o2=u_o2_o3.xy,o3=u_o2_o3.zw;
   vec2 uv=(v_uv*2.0-1.0)*vec2(aspect,1.0);
-  float t=u_time*speed,pulse=1.0+bass*0.55;
+  float t=u_time*speed,pulse=1.0+bass*0.32;
   vec2 q=vec2(fbm(uv*sc+phase+t*0.28),fbm(uv*sc+o1+phase+t*0.22));
-  float wa=warpBase+mid*2.5;
+  float wa=warpBase+mid*1.6;
   vec2 r=vec2(fbm(uv*sc*0.8+wa*q+o2+t*0.20),fbm(uv*sc*0.8+wa*q+o3+t*0.16));
   float f=clamp(fbm(uv*pulse*sc*0.7+4.0*r),0.0,1.0);
   vec3 col=cospalette(f)*0.85;
   float dist=length(uv/vec2(aspect,1.0));
   col+=u_wave_color*0.5*bass*max(0.0,1.35-dist*1.9);
-  float spk=hash(floor(uv*22.0+t*6.0));
-  col+=u_wave_color*step(1.0-high*0.4,spk)*high*0.7;
+  float spk=hash(floor(uv*22.0)+vec2(floor(t*3.0)));
+  col+=u_wave_color*step(1.0-high*0.28,spk)*high*0.42;
   waveLine(uv,col);
   col*=clamp(1.0-dot(v_uv*2.0-1.0,v_uv*2.0-1.0)*0.35,0.0,1.0);
   gl_FragColor=vec4(col,1.0);
@@ -191,48 +191,49 @@ const FS_STARFIELD =
   HDR +
   `
 void main(){
-  float bass=u_audio.x,high=u_audio.z,aspect=u_audio.w;
-  float t=u_time*u_dna.x*0.5;
+  float aspect=u_audio.w;
+  float t=u_time*u_dna.x*0.42;
   vec2 uv=(v_uv*2.0-1.0)*vec2(aspect,1.0);
-  vec3 col=vec3(0.0,0.01,0.04);
+  vec3 col=vec3(0.0);
   float PI2=6.28318;
 
-  // Normalize angle to [0,1) with no seam discontinuity
   float normAng=fract(atan(uv.y,uv.x)/PI2+1.0);
 
   for(int layer=0;layer<3;layer++){
     float lf=float(layer);
-    float N=32.0+lf*20.0; // 32 / 52 / 72 angular sectors
+    // More sectors per layer = more stars, closer to Win95 density
+    float N=48.0+lf*24.0;
     float curSec=floor(normAng*N);
 
-    // Check current sector and its two neighbours
     for(int di=-1;di<=1;di++){
       float s=mod(curSec+float(di),N);
       float h1=hash(vec2(s,lf*13.7+1.0)); // angle jitter
       float h2=hash(vec2(s,lf*13.7+2.0)); // speed jitter
-      float h3=hash(vec2(s,lf*13.7+3.0)); // INDEPENDENT phase per star
+      float h3=hash(vec2(s,lf*13.7+3.0)); // phase offset
 
-      // Star direction: sector angle + small random jitter
-      float sa=(s+0.5+(h1-0.5)*0.85)/N*PI2;
+      float sa=(s+0.5+(h1-0.5)*0.7)/N*PI2;
       vec2 dir=vec2(cos(sa),sin(sa));
 
-      // Each star cycles at its own phase → never all reset at once
-      float spd=(0.04+lf*0.025+h2*0.06)*(1.0+bass*1.5);
+      // Constant speed — no audio multiplier so stars never lurch
+      float spd=0.045+lf*0.022+h2*0.055;
       float depth=fract(h3+t*spd);
 
-      vec2 sPos=dir*depth*1.8;
+      vec2 sPos=dir*depth*1.9;
       float d=length(uv-sPos);
 
-      // Size grows with depth (perspective), smooth fade in + fade out envelope
-      float sz=0.004+depth*0.03*(1.0+high*0.5);
-      float env=smoothstep(0.0,0.12,depth)*(1.0-smoothstep(0.82,1.0,depth));
-      float b=smoothstep(sz,0.0,d)*env*(0.4+depth*0.8);
-      col+=cospalette(h1)*b;
+      // Perspective: size and brightness grow as star approaches
+      float sz=0.003+depth*depth*0.028;
+      float env=smoothstep(0.0,0.10,depth)*(1.0-smoothstep(0.84,1.0,depth));
+      float b=smoothstep(sz,0.0,d)*env*(0.3+depth*depth*1.2);
+
+      // Win95-style star colours: mostly white, slight hue tint
+      vec3 starCol=mix(vec3(1.0),cospalette(h1),0.28);
+      col+=starCol*b;
     }
   }
 
-  col*=smoothstep(2.0,0.15,length(uv));
-  waveLine(uv,col);
+  // Soft radial vignette — stars thin out near edges as in the screensaver
+  col*=smoothstep(1.8,0.1,length(uv));
   gl_FragColor=vec4(col,1.0);
 }
 `;
@@ -249,26 +250,29 @@ void main(){
   vec2 uv=(v_uv*2.0-1.0)*vec2(aspect,1.0);
   float r=max(length(uv),0.001);
 
-  // fract normalises to [0,1) with no discontinuity at the atan wrap point
   float normAng=fract(atan(uv.y,uv.x)/6.28318+1.0);
 
-  float depth=fract(0.4/r-t*0.35*(1.0+bass));
+  // Constant-speed depth — bass no longer changes the speed so rings never lurch
+  float depth=fract(0.4/r-t*0.35);
 
-  // Integer stripe count → exactly N complete cycles around the circle → seamless
   float numStripes=floor(6.0+u_dna.y*12.0);
   float stripes=sin(normAng*6.28318*numStripes+t*1.5)*0.5+0.5;
-  float rings  =sin(depth*25.0+t*0.5)*0.5+0.5;
+  // Fewer rings = cleaner, less aliasing as they scroll
+  float rings=sin(depth*15.0+t*0.5)*0.5+0.5;
 
-  // Angular noise sampled on a 2-D circle path → seamless by construction
+  // Organic angular detail — fixed weight so mid never buckles the geometry
   float na=normAng*6.28318;
   vec2 angVec=vec2(cos(na),sin(na))*2.0;
-  float det=fbm(angVec+vec2(depth*1.5,t*0.1))*mid;
+  float det=fbm(angVec+vec2(depth*1.5,t*0.1))*0.38;
 
-  float f=clamp(stripes*rings+det*0.4,0.0,1.0);
-  vec3 col=cospalette(f+depth*0.3+t*0.04);
+  float f=clamp(stripes*rings+det,0.0,1.0);
+  // Mid shifts the colour phase smoothly instead of warping geometry
+  vec3 col=cospalette(f+depth*0.3+t*0.04+mid*0.18);
   col*=smoothstep(0.0,0.09,r);
   col*=1.0-smoothstep(0.75,1.5,r);
-  col+=u_wave_color*0.18*high*(1.0-smoothstep(0.0,0.5,r));
+  // Bass = additive radial glow from centre — smooth and hypnotic
+  col+=u_wave_color*bass*0.55*(1.0-smoothstep(0.0,0.38,r));
+  col+=u_wave_color*0.10*high*(1.0-smoothstep(0.0,0.5,r));
   waveLine(uv,col);
   gl_FragColor=vec4(col,1.0);
 }
@@ -328,13 +332,13 @@ void main(){
   vec3 col=cospalette(fract(f));
   col=floor(col*8.0)/8.0;
   vec2 bp=mod(floor(v_uv*res*2.0),4.0);
-  float dith=hash(bp+vec2(t*31.0))*0.13-0.065;
+  float dith=hash(bp)*0.08-0.04;
   col=clamp(col+dith,0.0,1.0);
   col=floor(col*8.0)/8.0;
   float scan=mod(floor(v_uv.y*res.y),2.0);
   col*=0.80+0.20*scan;
   vec2 spPos=floor(v_uv*res);
-  col+=u_wave_color*step(1.0-high*0.5,hash(spPos+vec2(t*17.0)))*high*0.9;
+  col+=u_wave_color*step(1.0-high*0.32,hash(spPos+vec2(floor(t*3.0))))*high*0.55;
   waveLine(uv,col);
   gl_FragColor=vec4(col,1.0);
 }
@@ -360,13 +364,98 @@ void main(){
   float sc=u_dna.y*0.9+0.3;
   vec2 ph=u_phase_o1.xy,o1=u_phase_o1.zw;
   vec2 q=vec2(fbm(p*sc+ph+t*0.22),fbm(p*sc+o1+ph+t*0.18));
-  float wa=u_dna.z+mid*1.8;
+  float wa=u_dna.z+mid*1.1;
   float f=clamp(fbm(p*sc*0.85+wa*q+t*0.12),0.0,1.0);
   vec3 col=cospalette(f+r*0.25+t*0.04);
   col*=1.0-r*0.45;
   col*=1.0+bass*0.5;
   col+=u_wave_color*0.2*high*(1.0-smoothstep(0.0,0.6,r));
   waveLine(uv,col);
+  gl_FragColor=vec4(col,1.0);
+}
+`;
+
+// ---------------------------------------------------------------------------
+// Mode 6 — Julia Set (c slowly orbits the complex plane)
+// ---------------------------------------------------------------------------
+const FS_JULIA =
+  HDR +
+  `
+void main(){
+  float bass=u_audio.x,mid=u_audio.y,aspect=u_audio.w;
+  float t=u_time*0.1;
+
+  // c traces a circle at radius 0.7885 — the boundary between connected
+  // and disconnected Julia sets, giving maximum structural variety over time
+  vec2 c=vec2(0.7885*cos(t*0.20),0.7885*sin(t*0.20));
+
+  // Bass breathes the scale by a tiny amount — never enough to lurch
+  float sc=1.5+bass*0.06;
+  vec2 uv=(v_uv*2.0-1.0)*vec2(aspect,1.0)*sc;
+  vec2 z=uv;
+
+  float iter=0.0;
+  const int MAX_ITER=96;
+  for(int i=0;i<MAX_ITER;i++){
+    if(dot(z,z)>4.0) break;
+    z=vec2(z.x*z.x-z.y*z.y+c.x,2.0*z.x*z.y+c.y);
+    iter+=1.0;
+  }
+
+  if(iter>=float(MAX_ITER)){
+    gl_FragColor=vec4(0.0,0.0,0.0,1.0);
+    return;
+  }
+
+  // Smooth colouring — log-log of escape magnitude eliminates integer banding
+  // 0.7213 = 0.5/log(2), 1.4427 = 1/log(2)
+  float nu=log(log(dot(z,z))*0.7213)*1.4427;
+  float f=(iter+1.0-nu)/float(MAX_ITER);
+
+  vec3 col=cospalette(f+t*0.05+mid*0.10);
+  // Soft screen-edge vignette
+  col*=1.0-smoothstep(0.7,1.3,length(v_uv*2.0-1.0));
+  gl_FragColor=vec4(col,1.0);
+}
+`;
+
+// ---------------------------------------------------------------------------
+// Mode 7 — Mandelbrot (slow oscillating zoom into the seahorse valley)
+// ---------------------------------------------------------------------------
+const FS_MANDELBROT =
+  HDR +
+  `
+void main(){
+  float bass=u_audio.x,mid=u_audio.y,aspect=u_audio.w;
+  float t=u_time*0.08;
+
+  // Seahorse valley — rich self-similar spirals at any depth within float range
+  vec2 target=vec2(-0.7436,0.1319);
+
+  // Smooth sine-driven zoom: 1x overview → ~270x detail → back to 1x (~25s cycle)
+  // sin starts at -pi/2 so zoom=1 at t=0 and eases in gracefully
+  float logZoom=5.6*(0.5+0.5*sin(t*0.25-1.5708));
+  float zoom=exp(logZoom);
+
+  vec2 uv=(v_uv*2.0-1.0)*vec2(aspect,1.0);
+  vec2 c=target+uv/zoom;
+  vec2 z=vec2(0.0);
+  float iter=0.0;
+  const int MAX_ITER=96;
+  for(int i=0;i<MAX_ITER;i++){
+    if(dot(z,z)>4.0) break;
+    z=vec2(z.x*z.x-z.y*z.y+c.x,2.0*z.x*z.y+c.y);
+    iter+=1.0;
+  }
+
+  vec3 col=vec3(0.0);
+  if(iter<float(MAX_ITER)){
+    float nu=log(log(dot(z,z))*0.7213)*1.4427;
+    float f=(iter+1.0-nu)/float(MAX_ITER);
+    // Mid shifts colour phase; bass adds a faint inner glow at the set boundary
+    col=cospalette(f+t*0.03+mid*0.08);
+    col+=u_wave_color*bass*0.18*(1.0-smoothstep(0.0,0.15,f));
+  }
   gl_FragColor=vec4(col,1.0);
 }
 `;
@@ -378,6 +467,8 @@ const MODES = [
   { name: 'Lava Lamp', fs: FS_LAVA },
   { name: 'CRT Dither', fs: FS_CRT },
   { name: 'Kaleidoscope', fs: FS_KALEIDO },
+  { name: 'Julia', fs: FS_JULIA },
+  { name: 'Mandelbrot', fs: FS_MANDELBROT },
 ];
 
 // ---------------------------------------------------------------------------
@@ -587,6 +678,7 @@ export default function VisualizerWindow({
   const fsGlStateRef = useRef<GLState | null>(null);
   const animIdRef = useRef<number>(0);
   const startTimeRef = useRef<number>(performance.now());
+  const smoothRef = useRef({ bass: 0, mid: 0, high: 0 });
 
   // --- Freeform resize ---
   const resizeDragRef = useRef<{
@@ -676,24 +768,34 @@ export default function VisualizerWindow({
       const t = (performance.now() - startTimeRef.current) / 1000;
       const data = audioEngineRef.current?.getVisualizerData?.();
 
-      let bass = 0,
-        mid = 0,
-        high = 0;
       let waveBytes = silentWave;
+      const sm = smoothRef.current;
+      // Attack/release envelope: fast response on transients, slow graceful decay
+      const att = 0.38, rel = 0.07;
 
       if (data) {
         const freq = data.frequency;
-        for (let i = 0; i <= 10; i++) bass += freq[i];
-        bass = bass / 11 / 255;
-        for (let i = 10; i <= 130; i++) mid += freq[i];
-        mid = mid / 121 / 255;
-        for (let i = 130; i <= 400; i++) high += freq[i];
-        high = high / 271 / 255;
+        let rawBass = 0, rawMid = 0, rawHigh = 0;
+        for (let i = 0; i <= 10; i++) rawBass += freq[i];
+        rawBass = rawBass / 11 / 255;
+        for (let i = 10; i <= 130; i++) rawMid += freq[i];
+        rawMid = rawMid / 121 / 255;
+        for (let i = 130; i <= 400; i++) rawHigh += freq[i];
+        rawHigh = rawHigh / 271 / 255;
+
+        sm.bass  = rawBass  > sm.bass  ? sm.bass  * (1 - att) + rawBass  * att : sm.bass  * (1 - rel) + rawBass  * rel;
+        sm.mid   = rawMid   > sm.mid   ? sm.mid   * (1 - att) + rawMid   * att : sm.mid   * (1 - rel) + rawMid   * rel;
+        sm.high  = rawHigh  > sm.high  ? sm.high  * (1 - att) + rawHigh  * att : sm.high  * (1 - rel) + rawHigh  * rel;
+
         const wf = data.waveform;
         const wb = new Uint8Array(Math.min(wf.length, 1024));
         for (let i = 0; i < wb.length; i++)
           wb[i] = Math.round((wf[i] * 0.5 + 0.5) * 255);
         waveBytes = wb;
+      } else {
+        sm.bass *= 0.94;
+        sm.mid  *= 0.94;
+        sm.high *= 0.94;
       }
 
       // Read actual pixel dimensions so the viewport tracks resizes automatically
@@ -702,9 +804,9 @@ export default function VisualizerWindow({
         drawFrame(
           glStateRef.current,
           t,
-          bass,
-          mid,
-          high,
+          sm.bass,
+          sm.mid,
+          sm.high,
           waveBytes,
           cw || CANVAS_W,
           ch || CANVAS_H,
@@ -716,9 +818,9 @@ export default function VisualizerWindow({
         drawFrame(
           fsGlStateRef.current,
           t,
-          bass,
-          mid,
-          high,
+          sm.bass,
+          sm.mid,
+          sm.high,
           waveBytes,
           fc.width,
           fc.height,
