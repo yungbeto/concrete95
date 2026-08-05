@@ -70,7 +70,7 @@ export type SavedGrainLayer = {
 };
 
 export type SavedSynthLayer = {
-  type: 'synth' | 'melodic' | 'atmosphere';
+  type: 'synth' | 'melodic' | 'atmosphere' | 'drone';
   title: string;
   volume: number;
   send: number;
@@ -166,7 +166,7 @@ export function deleteSession(id: string): void {
 
 type RuntimeLayer = {
   title: string;
-  type: 'freesound' | 'grain' | 'synth' | 'melodic' | 'atmosphere';
+  type: 'freesound' | 'grain' | 'synth' | 'melodic' | 'atmosphere' | 'drone';
   volume: number;
   send: number;
   position: { x: number; y: number };

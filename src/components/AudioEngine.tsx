@@ -31,6 +31,11 @@ export type GrainLayerInfo = {
   previewUrl: string;
 };
 
+export type DroneLayerInfo = {
+  type: 'drone';
+  description: string;
+};
+
 const scales = {
   random: [],
   major: ['C2', 'D2', 'E2', 'F2', 'G2', 'A2', 'B2', 'C3', 'D3', 'E3', 'F3', 'G3', 'A3', 'B3', 'C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4'],
@@ -73,6 +78,26 @@ const proxyAudioUrl = (url: string) => {
   } catch {
     return url;
   }
+};
+
+const BUFFER_LOAD_TIMEOUT_MS = 25000;
+
+/**
+ * Tone.loaded() waits on a shared FIFO queue of every buffer download in the app,
+ * not just this one — a single slow/stuck fetch elsewhere can block unrelated layers
+ * indefinitely. Race an individual load promise against a hard timeout instead.
+ */
+const withLoadTimeout = <T,>(promise: Promise<T>, label: string): Promise<T> => {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${BUFFER_LOAD_TIMEOUT_MS / 1000}s`)),
+      BUFFER_LOAD_TIMEOUT_MS,
+    );
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
 };
 
 type GrainScatterState = {
@@ -172,14 +197,14 @@ export type AudioEngineHandle = {
     filterResonance: number;
   } | null;
   stopMelodicLoop: (sequence: Tone.Sequence) => void;
-  setVolume: (node: Tone.Player | Tone.GrainPlayer | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence | Tone.Noise, volume: number) => void;
-  setSendAmount: (node: Tone.Player | Tone.GrainPlayer | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence | Tone.Noise, amount: number) => void;
+  setVolume: (node: Tone.Player | Tone.GrainPlayer | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence | Tone.Noise | Tone.Gain, volume: number) => void;
+  setSendAmount: (node: Tone.Player | Tone.GrainPlayer | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence | Tone.Noise | Tone.Gain, amount: number) => void;
   setPlaybackRate: (node: Tone.Player | Tone.GrainPlayer, rate: number) => void;
   setReverse: (node: Tone.Player | Tone.GrainPlayer, reverse: boolean) => void;
-  setLayerFilterCutoff: (node: Tone.Player | Tone.GrainPlayer | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence | Tone.Noise, freq: number) => void;
-  setLayerFilterResonance: (node: Tone.Player | Tone.GrainPlayer | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence | Tone.Noise, q: number) => void;
+  setLayerFilterCutoff: (node: Tone.Player | Tone.GrainPlayer | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence | Tone.Noise | Tone.Gain, freq: number) => void;
+  setLayerFilterResonance: (node: Tone.Player | Tone.GrainPlayer | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence | Tone.Noise | Tone.Gain, q: number) => void;
   setProbability: (node: Tone.Sequence, probability: number) => void;
-  setLayerDrift: (node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | Tone.Noise, enabled: boolean, periodMinutes: number) => void;
+  setLayerDrift: (node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | Tone.Noise | Tone.Gain, enabled: boolean, periodMinutes: number) => void;
   setWarmth: (value: number) => void;
   setShimmer: (value: number) => void;
   setFreqShift: (value: number) => void;
@@ -194,9 +219,13 @@ export type AudioEngineHandle = {
   setBPM: (bpm: number) => void;
   getBPM: () => number;
   disposeAll: () => void;
-  getWaveform: (node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | Tone.Noise) => Float32Array | null;
+  getWaveform: (node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | Tone.Noise | Tone.Gain) => Float32Array | null;
   startAtmosphereLoop: () => { node: Tone.Noise; info: AtmosphereLayerInfo; filterCutoff: number; filterResonance: number } | null;
   stopAtmosphereLoop: (noise: Tone.Noise) => void;
+  setLofi: (amount: number) => void;
+  setWarble: (amount: number) => void;
+  startDroneLoop: () => { node: Tone.Gain; info: DroneLayerInfo } | null;
+  stopDroneLoop: (node: Tone.Gain) => void;
   getMasterLevel: () => number;
   getLissajousData: () => { left: Float32Array; right: Float32Array } | null;
   getVisualizerData: () => { frequency: Uint8Array; waveform: Float32Array } | null;
@@ -234,6 +263,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
   const masterMidSide = useRef<Tone.MidSideCompressor | null>(null);
   const masterFollower = useRef<Tone.Follower | null>(null);
   const masterFollowerScale = useRef<Tone.Scale | null>(null);
+  const masterBitcrusher = useRef<Tone.BitCrusher | null>(null);
+  const masterWarble = useRef<Tone.Chorus | null>(null);
   const fxBus = useRef<{
     fxInput: Tone.Gain;
     fxEQ: Tone.EQ3;
@@ -268,6 +299,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         });
         masterEQ.current = new Tone.EQ3({ low: 0, mid: 0, high: -2, highFrequency: 6000 });
         masterSaturation.current = new Tone.Distortion({ distortion: 0.08, wet: 0.02 });
+        masterBitcrusher.current = new Tone.BitCrusher(16);
+        masterBitcrusher.current.wet.value = 0;
+        masterWarble.current = new Tone.Chorus({ frequency: 0.3, delayTime: 3, depth: 0.4, spread: 180, wet: 0 }).start();
         // Safety limiter to catch occasional summed transients from many active layers/effects.
         // Kept near 0 dB for transparent protection instead of obvious pumping.
         masterLimiter.current = new Tone.Limiter(-1.2).toDestination();
@@ -277,6 +311,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
           masterBus.current.chain(
             masterGain.current,
             masterSaturation.current,
+            masterBitcrusher.current,
+            masterWarble.current,
             masterHPF.current,
             masterLimiter.current,
           );
@@ -286,6 +322,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             masterCompressor.current,
             masterEQ.current,
             masterSaturation.current,
+            masterBitcrusher.current,
+            masterWarble.current,
             masterHPF.current,
             masterLimiter.current,
           );
@@ -414,6 +452,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         if (isInitialized.current) {
             masterBreatheLFO.current?.stop().dispose();
             masterBreatheLFO.current = null;
+            masterBitcrusher.current?.dispose();
+            masterBitcrusher.current = null;
+            masterWarble.current?.stop().dispose();
+            masterWarble.current = null;
             masterMeter.current?.dispose();
             masterMeter.current = null;
             lissajousAnalyserL.current?.disconnect();
@@ -864,8 +906,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       // Slight random pitch shift via playback rate — makes each sample feel unique
       const playbackRate = 0.85 + r() * 0.3; // 0.85–1.15x
 
+      const audioUrl = proxyAudioUrl(sound.previewUrl);
       const player = new Tone.Player({
-        url: proxyAudioUrl(sound.previewUrl),
         loop: true,
         playbackRate,
         fadeIn: 1.5 + r() * 2,  // 1.5–3.5s fade in — no abrupt cuts
@@ -917,9 +959,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       player.connect(waveform);
 
       try {
-        await Tone.loaded();
+        await withLoadTimeout(player.load(audioUrl), 'Freesound sample load');
       } catch (err) {
-        // Audio file unavailable (deleted, 404, network error) — dispose all nodes
+        // Audio file unavailable (deleted, 404, network error, or stalled fetch) — dispose all nodes
         lfo.dispose(); tremolo.dispose(); phaser.dispose(); panner.dispose(); filter.dispose(); highPass.dispose();
         sendGain.dispose(); waveform.dispose(); player.dispose();
         throw err;
@@ -1005,7 +1047,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const makeGrainVoice = (voiceIndex: number) => {
         const rateRatio = voiceIndex === 0 ? 1 : 0.94 + r() * 0.12;
         const voice = new Tone.GrainPlayer({
-          url: audioUrl,
           loop: true,
           grainSize,
           overlap,
@@ -1078,7 +1119,10 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       player.connect(waveform);
 
       try {
-        await Tone.loaded();
+        await withLoadTimeout(
+          Promise.all(grainVoices.map((voice) => voice.buffer.load(audioUrl))),
+          'Grain sample load',
+        );
       } catch (err) {
         lfo.dispose(); exciter.dispose(); bitCrusher.dispose(); chorus.dispose();
         panner.dispose(); filter.dispose(); highPass.dispose();
@@ -1605,6 +1649,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
           }
         } else if (node instanceof Tone.GrainPlayer) {
           setGrainVoiceVolumes(node, volume);
+        } else if (node instanceof Tone.Gain) {
+          // Drone layer — gain.value is linear, so convert from dB
+          node.gain.value = Tone.dbToGain(volume);
         } else {
             (node as Tone.Player | Tone.PolySynth | Tone.PluckSynth).volume.value = volume;
         }
@@ -1811,7 +1858,126 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     },
     getBPM: () => {
       return Tone.Transport?.bpm.value || 120;
-    }
+    },
+    setLofi: (amount) => {
+      if (masterBitcrusher.current && !masterBitcrusher.current.disposed) {
+        if (amount <= 0) {
+          masterBitcrusher.current.wet.value = 0;
+        } else {
+          masterBitcrusher.current.bits.value = Math.max(1, Math.round(16 - amount * 12));
+          masterBitcrusher.current.wet.value = Math.min(1, amount);
+        }
+      }
+    },
+    setWarble: (amount) => {
+      if (masterWarble.current && !masterWarble.current.disposed) {
+        masterWarble.current.wet.value = amount * 0.6;
+      }
+    },
+    startDroneLoop: () => {
+      if (!masterBus.current || !fxBus.current) return null;
+      Tone.start();
+      const r = rngRef.current ?? Math.random;
+
+      const fundamentalChoices = [30, 37, 40, 49, 55, 65, 73, 80, 110];
+      const fundamental = fundamentalChoices[Math.floor(r() * fundamentalChoices.length)];
+
+      const partialSets = [[1, 2, 3], [1, 2, 5], [1, 3, 5], [1, 2, 3, 5], [2, 3, 5]];
+      const partials = partialSets[Math.floor(r() * partialSets.length)];
+
+      const outputGain = new Tone.Gain(0);
+
+      const oscillators: Tone.Oscillator[] = [];
+      const oscGains: Tone.Gain[] = [];
+
+      partials.forEach((partial) => {
+        const freq = fundamental * partial;
+        const detuneCents = r() * 6 - 3;
+        const waveformType: Tone.ToneOscillatorType = r() < 0.5 ? 'sine' : 'triangle';
+
+        const osc = new Tone.Oscillator({ type: waveformType, frequency: freq, detune: detuneCents });
+        osc.start();
+
+        const partialWeight = 1 / Math.sqrt(partial);
+        const oscGain = new Tone.Gain(partialWeight / partials.length);
+
+        osc.connect(oscGain);
+        oscGain.connect(outputGain);
+
+        oscillators.push(osc);
+        oscGains.push(oscGain);
+      });
+
+      const filterFreq = fundamental * (3 + r() * 3);
+      const filter = new Tone.Filter(filterFreq, 'lowpass', -12);
+      filter.Q.value = 0.5 + r() * 1.5;
+
+      const lfoFreq = 0.003 + r() * 0.012;
+      const lfo = new Tone.LFO({ type: 'sine', frequency: lfoFreq, min: filterFreq * 0.5, max: filterFreq * 2 }).start();
+      lfo.connect(filter.frequency);
+
+      const ampLFO = new Tone.LFO({ frequency: 0.02 + r() * 0.06, min: 0.75, max: 1.0 }).start();
+      const ampGain = new Tone.Gain(1);
+      ampLFO.connect(ampGain.gain);
+
+      const hpf = new Tone.Filter(fundamental * 0.7, 'highpass');
+
+      const panner = new Tone.AutoPanner({ frequency: 0.02 + r() * 0.04, depth: 0.15 + r() * 0.2, wet: 0.5 }).start();
+
+      const sendGain = new Tone.Gain(0).connect(fxBus.current.fxInput);
+      const waveform = new Tone.Waveform(1024);
+
+      outputGain.chain(filter, ampGain, hpf, panner, masterBus.current);
+      outputGain.connect(sendGain);
+      outputGain.connect(waveform);
+
+      outputGain.gain.rampTo(Tone.dbToGain(-18), 6);
+
+      if (Tone.Transport.state !== 'started') Tone.Transport.start();
+
+      const partialNames = partials.map((p) => `${p}×`).join(', ');
+      const info: DroneLayerInfo = {
+        type: 'drone',
+        description: `${fundamental}Hz · partials [${partialNames}] · ${(lfoFreq * 60).toFixed(1)} cpm filter`,
+      };
+
+      (outputGain as any).oscillators = oscillators;
+      (outputGain as any).oscGains = oscGains;
+      (outputGain as any).filter = filter;
+      (outputGain as any).lfo = lfo;
+      (outputGain as any).ampLFO = ampLFO;
+      (outputGain as any).ampGain = ampGain;
+      (outputGain as any).hpf = hpf;
+      (outputGain as any).panner = panner;
+      (outputGain as any).sendGain = sendGain;
+      (outputGain as any).waveform = waveform;
+
+      return { node: outputGain, info };
+    },
+    stopDroneLoop: (node) => {
+      const oscillators = (node as any).oscillators as Tone.Oscillator[] | undefined;
+      const oscGains = (node as any).oscGains as Tone.Gain[] | undefined;
+      const filter = (node as any).filter as Tone.Filter | undefined;
+      const lfo = (node as any).lfo as Tone.LFO | undefined;
+      const ampLFO = (node as any).ampLFO as Tone.LFO | undefined;
+      const ampGain = (node as any).ampGain as Tone.Gain | undefined;
+      const hpf = (node as any).hpf as Tone.Filter | undefined;
+      const panner = (node as any).panner as Tone.AutoPanner | undefined;
+      const sendGain = (node as any).sendGain as Tone.Gain | undefined;
+      const waveform = (node as any).waveform as Tone.Waveform | undefined;
+
+      oscillators?.forEach((osc) => { if (!osc.disposed) { osc.stop(); osc.dispose(); } });
+      oscGains?.forEach((g) => { if (!g.disposed) g.dispose(); });
+      if (lfo && !lfo.disposed) { lfo.stop(); lfo.dispose(); }
+      if (ampLFO && !ampLFO.disposed) { ampLFO.stop(); ampLFO.dispose(); }
+      if (ampGain && !ampGain.disposed) ampGain.dispose();
+      if (filter && !filter.disposed) filter.dispose();
+      if (hpf && !hpf.disposed) hpf.dispose();
+      if (panner && !panner.disposed) { panner.stop(); panner.dispose(); }
+      if (sendGain && !sendGain.disposed) sendGain.dispose();
+      if (waveform && !waveform.disposed) waveform.dispose();
+      if (!node.disposed) node.dispose();
+    },
   }));
 
   return null;

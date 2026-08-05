@@ -3,13 +3,13 @@
 
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { X, Zap, Waves, Music, Sparkles, Wind, Volume2, VolumeX, AlertTriangle } from 'lucide-react';
+import { X, Zap, Waves, Music, Sparkles, Wind, Volume2, VolumeX, AlertTriangle, Radio } from 'lucide-react';
 import LayerMenuBar from './LayerMenuBar';
-import { type AudioEngineHandle, type FreesoundLayerInfo, type GrainLayerInfo, type SynthLayerInfo, type AtmosphereLayerInfo } from './AudioEngine';
+import { type AudioEngineHandle, type FreesoundLayerInfo, type GrainLayerInfo, type SynthLayerInfo, type AtmosphereLayerInfo, type DroneLayerInfo } from './AudioEngine';
 import * as Tone from 'tone';
 import { useRef, useEffect, useState } from 'react';
 
-type LayerInfo = FreesoundLayerInfo | GrainLayerInfo | SynthLayerInfo | AtmosphereLayerInfo;
+type LayerInfo = FreesoundLayerInfo | GrainLayerInfo | SynthLayerInfo | AtmosphereLayerInfo | DroneLayerInfo;
 
 interface LayerCardProps {
   id: string;
@@ -17,7 +17,7 @@ interface LayerCardProps {
   volume: number;
   send: number;
   status: 'loading' | 'playing' | 'stopped';
-  type: 'synth' | 'freesound' | 'grain' | 'melodic' | 'atmosphere';
+  type: 'synth' | 'freesound' | 'grain' | 'melodic' | 'atmosphere' | 'drone';
   position: { x: number; y: number };
   zIndex: number;
   playbackRate?: number;
@@ -28,7 +28,7 @@ interface LayerCardProps {
   grainSize?: number;
   grainDrift?: number;
   audioEngineRef: React.RefObject<AudioEngineHandle>;
-  node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | Tone.Noise | null;
+  node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | Tone.Noise | Tone.Gain | null;
   info?: LayerInfo;
   onRemove: (id: string) => void;
   onVolumeChange: (id: string, volume: number) => void;
@@ -53,6 +53,7 @@ const layerIcons = {
   grain: <Sparkles className="w-4 h-4" />,
   melodic: <Music className="w-4 h-4" />,
   atmosphere: <Wind className="w-4 h-4" />,
+  drone: <Radio className="w-4 h-4" />,
 };
 
 const LAYER_TYPE_COLORS: Record<string, string> = {
@@ -61,6 +62,7 @@ const LAYER_TYPE_COLORS: Record<string, string> = {
   grain:       'bg-amber-700',
   freesound:   'bg-emerald-800',
   atmosphere:  'bg-slate-700',
+  drone:       'bg-indigo-800',
 };
 
 
@@ -277,7 +279,7 @@ function SoundRecorderDisplay({
     node,
 }: {
     audioEngineRef: React.RefObject<AudioEngineHandle>;
-    node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | Tone.Noise | null;
+    node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | Tone.Noise | Tone.Gain | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -501,7 +503,7 @@ export default function LayerCard({
               ? <LoadingDisplay />
               : type === 'grain'
                 ? <GrainVisualizerDisplay node={node as Tone.GrainPlayer | null} grainSize={grainSize} grainDrift={grainDrift} />
-                : <SoundRecorderDisplay audioEngineRef={audioEngineRef} node={node as Tone.Player | Tone.GrainPlayer | Tone.Sequence | null} />
+                : <SoundRecorderDisplay audioEngineRef={audioEngineRef} node={node as Tone.Player | Tone.GrainPlayer | Tone.Sequence | Tone.Noise | Tone.Gain | null} />
             }
 
             {/* Always-visible volume strip */}
@@ -510,15 +512,22 @@ export default function LayerCard({
               onMouseDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}
             >
-              {isMuted
-                ? <VolumeX className="w-3 h-3 shrink-0 text-neutral-500" />
-                : <Volume2 className="w-3 h-3 shrink-0 text-black" />
-              }
+              <button
+                onClick={onMuteToggle}
+                className="shrink-0 focus:outline-none"
+                aria-label={isMuted ? 'Unmute' : 'Mute'}
+              >
+                {isMuted
+                  ? <VolumeX className="w-3 h-3 text-neutral-500" />
+                  : <Volume2 className="w-3 h-3 text-black" />
+                }
+              </button>
               <Slider
                 min={-40}
                 max={10}
                 step={1}
-                value={[isMuted ? -40 : volume]}
+                value={[volume]}
+                disabled={isMuted}
                 onValueChange={(val) => onVolumeChange(id, val[0])}
                 className="flex-1"
                 aria-label="Volume"

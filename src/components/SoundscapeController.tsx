@@ -15,6 +15,7 @@ import {
   LogOut,
   Music,
   Music2,
+  Radio,
   Save,
   Sparkles,
   Square,
@@ -40,6 +41,7 @@ interface SoundscapeControllerProps {
   onAddGrainLayer: () => void;
   onAddMelodicLayer: () => void;
   onAddAtmosphereLayer: () => void;
+  onAddDroneLayer: () => void;
   onStopAll: () => void;
   canAddLayer: boolean;
   hasLayers: boolean;
@@ -82,6 +84,7 @@ export default function SoundscapeController({
   onAddGrainLayer,
   onAddMelodicLayer,
   onAddAtmosphereLayer,
+  onAddDroneLayer,
   onStopAll,
   canAddLayer,
   hasLayers,
@@ -171,6 +174,10 @@ export default function SoundscapeController({
   };
   const handleAddAtmosphereLayer = () => {
     onAddAtmosphereLayer();
+    close();
+  };
+  const handleAddDroneLayer = () => {
+    onAddDroneLayer();
     close();
   };
   const handleStopAll = () => {
@@ -614,6 +621,21 @@ export default function SoundscapeController({
                     <span>Add Atmosphere</span>
                     <span className='text-[10px] text-neutral-600 group-hover:text-blue-200 font-normal leading-tight'>
                       Pink/brown noise with slow filter sweep
+                    </span>
+                  </div>
+                </Button>
+                <Button
+                  variant='ghost'
+                  className={`${menuItemClass} group`}
+                  onClick={handleAddDroneLayer}
+                  disabled={!canAddLayer}
+                  onMouseEnter={closeSubmenu}
+                >
+                  <Radio className='h-4 w-4 shrink-0' />
+                  <div className='flex flex-col items-start'>
+                    <span>Add Drone</span>
+                    <span className='text-[10px] text-neutral-600 group-hover:text-blue-200 font-normal leading-tight'>
+                      Sub-bass oscillators with beating harmonics
                     </span>
                   </div>
                 </Button>

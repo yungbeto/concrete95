@@ -28,7 +28,7 @@ export default function AboutConcrete95Body() {
         </a>
         .
       </p>
-      <p>Last updated: May 14, 2026</p>
+      <p>Last updated: June 9, 2026</p>
     </div>
   );
 }

@@ -3,6 +3,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 
+const ASCII_ART_DESKTOP = [
+  '  ____ ___  _   _  ____ ____  _____ _____ _____ ___  ____',
+  ' / ___/ _ \\| \\ | |/ ___|  _ \\| ____|_   _| ____/ _ \\| ___|',
+  '| |  | | | |  \\| | |   | |_) |  _|   | | |  _|| (_) |___ \\',
+  '| |__| |_| | |\\  | |___|  _ <| |___  | | | |___\\__, |___) |',
+  ' \\____\\___/|_| \\_|\\____|_| \\_\\_____| |_| |_____| /_/|____/',
+];
+
+const ASCII_ART_MOBILE = [
+  '  ___ ___  _  _  ___ ___ ___ _____ ___ ___ ___',
+  ' / __/ _ \\| \\| |/ __| _ \\ __|_   _| __/ _ \\ __|',
+  '| (_| (_) | .` | (__|   / _|  | | | _|\\_, /__ \\',
+  ' \\___\\___/|_|\\_|\\___|_|_\\___| |_| |___|/_/|___/',
+];
+
 const WIN95_MESSAGES = [
   'Initializing sound card...',
   'Tuning the synths...',
@@ -183,6 +198,30 @@ export default function BootScreen({ onComplete }: { onComplete: () => void }) {
             color: '#33ff33',
           }}
         >
+          {/* ASCII art logo — desktop */}
+          <div
+            className="mb-6 hidden md:block"
+            style={{ whiteSpace: 'pre', lineHeight: '1.3' }}
+          >
+            {ASCII_ART_DESKTOP.map((line, i) => (
+              <div key={i}>{line}</div>
+            ))}
+          </div>
+
+          {/* ASCII art logo — mobile */}
+          <div
+            className="mb-4 block md:hidden"
+            style={{
+              whiteSpace: 'pre',
+              lineHeight: '1.3',
+              fontSize: 'clamp(9px, calc((100vw - 64px) / 29), 12px)',
+            }}
+          >
+            {ASCII_ART_MOBILE.map((line, i) => (
+              <div key={i}>{line}</div>
+            ))}
+          </div>
+
           {/* Typewriter line */}
           <div>
             {DOS_COMMAND.slice(0, typedChars)}

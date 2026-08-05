@@ -9,13 +9,13 @@ import {
   MenubarTrigger,
 } from "@/components/ui/menubar";
 import { Slider } from './ui/slider';
-import type { FreesoundLayerInfo, GrainLayerInfo, SynthLayerInfo, AtmosphereLayerInfo } from './AudioEngine';
+import type { FreesoundLayerInfo, GrainLayerInfo, SynthLayerInfo, AtmosphereLayerInfo, DroneLayerInfo } from './AudioEngine';
 import { useState, useEffect } from 'react';
 
-type LayerInfo = FreesoundLayerInfo | GrainLayerInfo | SynthLayerInfo | AtmosphereLayerInfo;
+type LayerInfo = FreesoundLayerInfo | GrainLayerInfo | SynthLayerInfo | AtmosphereLayerInfo | DroneLayerInfo;
 
 interface LayerMenuBarProps {
-  type: 'synth' | 'freesound' | 'melodic' | 'grain' | 'atmosphere';
+  type: 'synth' | 'freesound' | 'melodic' | 'grain' | 'atmosphere' | 'drone';
   send: number;
   playbackRate?: number;
   reverse?: boolean;
@@ -93,7 +93,7 @@ export default function LayerMenuBar({
       );
     }
 
-    if (info.type === 'synth' || info.type === 'melodic' || info.type === 'atmosphere') {
+    if (info.type === 'synth' || info.type === 'melodic' || info.type === 'atmosphere' || info.type === 'drone') {
       return <p className="text-xs">{info.description}</p>;
     }
 
@@ -130,7 +130,7 @@ export default function LayerMenuBar({
                       onValueChange={(value) => onSendChange(value[0])}
                     />
                   </div>
-                  {type !== 'freesound' && type !== 'grain' && type !== 'atmosphere' && (
+                  {type !== 'freesound' && type !== 'grain' && type !== 'atmosphere' && type !== 'drone' && (
                     <div>
                       <p className="text-xs mb-2">
                         Probability: {Math.round((probability ?? 1) * 100)}%

@@ -7,7 +7,7 @@ export type FreesoundSound = {
   previewUrl: string;
 };
 
-const DEFAULT_BLOCKED_FREESOUND_USERS = ['looplicator'];
+const DEFAULT_BLOCKED_FREESOUND_USERS = ['looplicator', 'CAT-FOX_ALEX'];
 // Keep source files long enough to provide varied loop regions, but cap to avoid
 // pulling very long previews into memory.
 const MIN_FREESOUND_DURATION_SECONDS = 8;
@@ -54,7 +54,9 @@ async function fetchFromFreesound(query: string, retries = 2) {
   )}&filter=duration:[${MIN_FREESOUND_DURATION_SECONDS}%20TO%20${MAX_FREESOUND_DURATION_SECONDS}]%20license:"Creative%20Commons%200"&fields=id,name,previews,username&sort=created_desc&page_size=50&page=${page}&token=${apiKey}`;
 
   try {
-    const response = await fetch(freesoundUrl);
+    const response = await fetch(freesoundUrl, {
+      headers: { 'User-Agent': 'concrete95/1.0 (+https://concrete95.app)' },
+    });
 
     if (!response.ok) {
       // Retry on server errors (5xx) and gateway timeouts
@@ -70,6 +72,8 @@ async function fetchFromFreesound(query: string, retries = 2) {
           'Freesound timed out — their servers are slow or overloaded. Try again in a moment.',
         );
       }
+      const shortBody =
+        errorText.length > 120 ? `${errorText.slice(0, 120)}…` : errorText;
       try {
         const errorJson = JSON.parse(errorText);
         if (errorJson.detail) {
@@ -81,14 +85,9 @@ async function fetchFromFreesound(query: string, retries = 2) {
         }
       } catch (e) {
         if (e instanceof Error && e.message.startsWith('Freesound:')) throw e;
-        const shortBody =
-          errorText.length > 120 ? `${errorText.slice(0, 120)}…` : errorText;
-        throw new Error(
-          `Freesound request failed (${response.status} ${response.statusText}). ${shortBody}`,
-        );
       }
       throw new Error(
-        `Freesound request failed (${response.status} ${response.statusText}).`,
+        `Freesound request failed (${response.status} ${response.statusText}). ${shortBody}`,
       );
     }
     const data = await response.json();

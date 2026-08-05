@@ -8,6 +8,7 @@ import AudioEngine, {
   type GrainLayerInfo,
   type SynthLayerInfo,
   type AtmosphereLayerInfo,
+  type DroneLayerInfo,
   type ScaleName,
   scaleNames,
   delayTimeOptions,
@@ -38,6 +39,7 @@ import {
   Sparkles,
   Palette,
   Eye,
+  Radio,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DesktopIcon from '../DesktopIcon';
@@ -77,15 +79,16 @@ type LayerInfo =
   | FreesoundLayerInfo
   | GrainLayerInfo
   | SynthLayerInfo
-  | AtmosphereLayerInfo;
+  | AtmosphereLayerInfo
+  | DroneLayerInfo;
 
 type Layer = {
   id: string;
   title: string;
   volume: number;
   send: number;
-  node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | Tone.Noise | null;
-  type: 'freesound' | 'grain' | 'synth' | 'melodic' | 'atmosphere';
+  node: Tone.Player | Tone.GrainPlayer | Tone.Sequence | Tone.Noise | Tone.Gain | null;
+  type: 'freesound' | 'grain' | 'synth' | 'melodic' | 'atmosphere' | 'drone';
   status: 'loading' | 'playing' | 'stopped';
   position: { x: number; y: number };
   zIndex: number;
@@ -126,6 +129,7 @@ const LAYER_TYPE_LABELS: Record<Layer['type'], string> = {
   grain: 'Granulator',
   freesound: 'Sample',
   atmosphere: 'Atmosphere',
+  drone: 'Drone',
 };
 
 const generateSemanticName = (
@@ -245,6 +249,7 @@ const layerIcons: { [key in Layer['type']]: LucideIcon } = {
   grain: Sparkles,
   melodic: Music,
   atmosphere: Wind,
+  drone: Radio,
 };
 
 function FeatureInfo({ children }: { children: React.ReactNode }) {
@@ -299,6 +304,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
   const [convolverMix, setConvolverMix] = useState(0);
   const [breatheEnabled, setBreatheEnabled] = useState(false);
   const [breathePeriod, setBreathePeriod] = useState(4);
+  const [lofiAmount, setLofiAmount] = useState(0);
+  const [warbleAmount, setWarbleAmount] = useState(0);
   const [discreetMode, setDiscreetMode] = useState(true);
   const [driftEnabled, setDriftEnabled] = useState(false);
   const [driftPeriod, setDriftPeriod] = useState(10);
@@ -331,6 +338,12 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
   const [sharePanelOpen, setSharePanelOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [desktopPattern, setDesktopPattern] = useState<string>('grid');
+  // Randomize on mount (client-only, avoids SSR hydration mismatch) so each
+  // fresh visit gets a different desktop pattern instead of always 'grid'.
+  useEffect(() => {
+    const choices = DESKTOP_PATTERNS.filter((p) => p.id !== 'none');
+    setDesktopPattern(choices[Math.floor(Math.random() * choices.length)].id);
+  }, []);
   const [patternPickerOpen, setPatternPickerOpen] = useState(false);
   const sessionSeedRef = useRef<number | null>(null);
   const pendingSharedSessionRef = useRef<SavedSession | null>(null);
@@ -867,6 +880,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
       audioEngineRef.current.stopSynthLoop(layer.node as Tone.Sequence);
     } else if (layer.type === 'atmosphere') {
       audioEngineRef.current.stopAtmosphereLoop(layer.node as Tone.Noise);
+    } else if (layer.type === 'drone') {
+      audioEngineRef.current.stopDroneLoop(layer.node as Tone.Gain);
     }
   }, []);
 
@@ -1030,6 +1045,32 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
               status: 'playing' as const,
               filterCutoff: atmoData.filterCutoff,
               filterResonance: atmoData.filterResonance,
+            }
+          : l,
+      ),
+    );
+  };
+
+  const addDroneLayer = async () => {
+    if (!audioEngineRef.current || checkLayerLimit()) return;
+    await ensureAudioUnlocked();
+    const id = addLayer('drone', { volume: -18 });
+    if (!id) return;
+
+    const droneData = audioEngineRef.current.startDroneLoop();
+    if (!droneData) {
+      handleRemoveLayer(id);
+      return;
+    }
+
+    setLayers((prev) =>
+      prev.map((l) =>
+        l.id === id
+          ? {
+              ...l,
+              node: droneData.node,
+              info: droneData.info,
+              status: 'playing' as const,
             }
           : l,
       ),
@@ -1303,6 +1344,16 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     );
   };
 
+  const handleLofiChange = (value: number) => {
+    setLofiAmount(value);
+    audioEngineRef.current?.setLofi(value);
+  };
+
+  const handleWarbleChange = (value: number) => {
+    setWarbleAmount(value);
+    audioEngineRef.current?.setWarble(value);
+  };
+
   const handleBreatheToggle = (enabled: boolean) => {
     setBreatheEnabled(enabled);
     audioEngineRef.current?.setBreatheEnabled(enabled, breathePeriod);
@@ -1399,8 +1450,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             onValueChange={(value) => handleDriftPeriodChange(value[0])}
           />
           <FeatureInfo>
-            Each layer&apos;s volume slowly rises and falls at its own pace —
-            sounds drift in and out of focus over time.
+            Each layer fades in and out at its own rate, shifting focus across
+            the mix over time.
           </FeatureInfo>
         </Fieldset>
 
@@ -1424,9 +1475,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             <span className='text-xs'>Enable Discreet Music Mode</span>
           </button>
           <FeatureInfo>
-            New synth and melodic layers get prime-length loops (5, 7, 11, 13…
-            measures) so they never re-align — inspired by Eno&apos;s tape-loop
-            phase technique on <em>Discreet Music</em>.
+            New pad and melody layers use prime-length loops so they never
+            re-align, creating a slowly shifting phase relationship.
           </FeatureInfo>
         </Fieldset>
       </div>
@@ -1521,9 +1571,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             onValueChange={(value) => handleShimmerChange(value[0])}
           />
           <FeatureInfo>
-            Feeds a pitch-shifted copy (+1 octave) of the send bus into the
-            reverb. The reverb tail gradually accumulates octave-up energy,
-            producing a rising, crystalline halo around sounds.
+            Adds a pitch-shifted copy (+1 octave) into the reverb tail,
+            building a bright halo around sounds as they decay.
           </FeatureInfo>
         </Fieldset>
 
@@ -1537,9 +1586,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             onValueChange={(value) => handleFreqShiftChange(value[0])}
           />
           <FeatureInfo>
-            Shifts the reverb signal by 2Hz — producing slow inharmonic beating
-            distinct from the octave shimmer. At low values it&apos;s barely
-            perceptible; higher values create a metallic, ring-modulator halo.
+            Shifts the reverb signal by 2Hz, producing slow inharmonic beating.
+            Low values are subtle; higher values add a metallic quality.
           </FeatureInfo>
         </Fieldset>
 
@@ -1561,9 +1609,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             onValueChange={(value) => handleConvolverMixChange(value[0])}
           />
           <FeatureInfo>
-            Crossfades between the algorithmic reverb and a synthetic plate IR.
-            The IR gives the mix a specific physical space rather than a generic
-            wash.
+            Blends the algorithmic reverb with a synthetic plate IR for a more
+            defined sense of space.
           </FeatureInfo>
         </Fieldset>
       </div>
@@ -1594,8 +1641,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             onValueChange={(value) => handleWarmthChange(value[0])}
           />
           <FeatureInfo>
-            Subtle harmonic saturation on the master output. Start low — a
-            little goes a long way.
+            Harmonic saturation on the master output. A little goes a long way.
           </FeatureInfo>
         </Fieldset>
 
@@ -1629,13 +1675,42 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             onValueChange={(value) => handleBreathePeriodChange(value[0])}
           />
           <FeatureInfo>
-            Slowly rises and falls over the selected period — the piece inhales
-            and exhales.
+            The master volume slowly rises and falls on the selected period.
+          </FeatureInfo>
+        </Fieldset>
+
+        <Fieldset label='Lo-fi'>
+          <p className='text-xs mb-2'>Degradation: {lofiAmount.toFixed(2)}</p>
+          <Slider
+            defaultValue={[lofiAmount]}
+            max={1}
+            min={0}
+            step={0.01}
+            onValueChange={(value) => handleLofiChange(value[0])}
+          />
+          <FeatureInfo>
+            Reduces bit depth on the master output, from clean 16-bit down to
+            gritty 4-bit. Subtle amounts add texture; higher values get harsh.
+          </FeatureInfo>
+        </Fieldset>
+
+        <Fieldset label='Tape Warble'>
+          <p className='text-xs mb-2'>Wow: {warbleAmount.toFixed(2)}</p>
+          <Slider
+            defaultValue={[warbleAmount]}
+            max={1}
+            min={0}
+            step={0.01}
+            onValueChange={(value) => handleWarbleChange(value[0])}
+          />
+          <FeatureInfo>
+            A slow pitch modulation that adds subtle instability across the
+            whole mix. Low values are barely perceptible.
           </FeatureInfo>
         </Fieldset>
       </div>
     ),
-    [warmth, breatheEnabled, breathePeriod],
+    [warmth, breatheEnabled, breathePeriod, lofiAmount, warbleAmount],
   );
 
   useEffect(() => {
@@ -1748,7 +1823,9 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     const layer = layers.find((l) => l.id === id);
     if (!layer || !layer.node) return;
 
-    audioEngineRef.current.setVolume(layer.node, volume);
+    if (!layer.isMuted) {
+      audioEngineRef.current.setVolume(layer.node, volume);
+    }
 
     setLayers((prevLayers) =>
       prevLayers.map((l) => (l.id === id ? { ...l, volume } : l)),
@@ -2010,7 +2087,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
           | 'grain'
           | 'synth'
           | 'melodic'
-          | 'atmosphere',
+          | 'atmosphere'
+          | 'drone',
         status: 'loading' as const,
         // On mobile use fresh clamped positions; saved positions may be off-screen
         position: isMobile
@@ -2287,7 +2365,17 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
 
   return (
     <div
-      className='relative w-full h-dvh flex flex-col overflow-hidden'
+      className='relative w-full h-dvh flex flex-col overflow-hidden bg-background'
+      style={(() => {
+        const p =
+          DESKTOP_PATTERNS.find((x) => x.id === desktopPattern) ??
+          DESKTOP_PATTERNS[0];
+        return {
+          backgroundImage: p.backgroundImage,
+          backgroundSize: p.backgroundSize,
+          backgroundPosition: p.backgroundPosition ?? 'initial',
+        };
+      })()}
       onPointerDownCapture={() => {
         void ensureAudioUnlocked();
       }}
@@ -2372,19 +2460,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
         </div>
       )}
 
-      <main
-        className='flex-grow relative bg-background'
-        style={(() => {
-          const p =
-            DESKTOP_PATTERNS.find((x) => x.id === desktopPattern) ??
-            DESKTOP_PATTERNS[0];
-          return {
-            backgroundImage: p.backgroundImage,
-            backgroundSize: p.backgroundSize,
-            backgroundPosition: p.backgroundPosition ?? 'initial',
-          };
-        })()}
-      >
+      <main className='flex-grow relative'>
         <div
           className='absolute left-[max(1rem,env(safe-area-inset-left))] top-[max(1rem,env(safe-area-inset-top))] flex max-w-[calc(100dvw-2rem-env(safe-area-inset-left)-env(safe-area-inset-right))] flex-wrap gap-x-2 gap-y-2 sm:max-w-none'
           style={{ zIndex: DESKTOP_ICON_Z_INDEX }}
@@ -2596,6 +2672,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
           onAddGrainLayer={addGrainLayer}
           onAddMelodicLayer={addMelodicLayer}
           onAddAtmosphereLayer={addAtmosphereLayer}
+          onAddDroneLayer={addDroneLayer}
           onStopAll={handleRemoveAllLayers}
           canAddLayer={layers.length < MAX_LAYERS && isEngineInitialized}
           hasLayers={layers.length > 0}
