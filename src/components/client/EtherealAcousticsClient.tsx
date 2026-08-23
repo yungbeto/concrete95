@@ -22,6 +22,7 @@ import LayerCard from '@/components/LayerCard';
 import VUMeter from '@/components/VUMeter';
 import AudioDebugPanel from '@/components/AudioDebugPanel';
 import { audioDebugLog } from '@/lib/audio-debug';
+import { getRecordingExtension } from '@/lib/wav-encode';
 import {
   Info,
   Music,
@@ -40,6 +41,7 @@ import {
   Palette,
   Eye,
   Radio,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DesktopIcon from '../DesktopIcon';
@@ -47,6 +49,7 @@ import InfoWindow from '../InfoWindow';
 import TaskbarItem from '../TaskbarItem';
 import LissajousWindow from '../LissajousWindow';
 import VisualizerWindow from '../VisualizerWindow';
+import GuestbookWindow from '../GuestbookWindow';
 import SessionsAuthModal from '../SessionsAuthModal';
 import RecordingExportDialog from '../RecordingExportDialog';
 import MidiClockPanel from '../MidiClockPanel';
@@ -64,6 +67,7 @@ import {
   saveUserSession,
 } from '@/lib/sessions';
 import { createRng, randomSeed, parseSeed } from '@/lib/prng';
+import { hasUnreadGuestbookMessages, markGuestbookSeen } from '@/lib/guestbook';
 import {
   Select,
   SelectContent,
@@ -277,6 +281,17 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     const t = setTimeout(() => setUiVisible(true), 50);
     return () => clearTimeout(t);
   }, [booted]);
+  const [guestbookHasUnread, setGuestbookHasUnread] = useState(false);
+  useEffect(() => {
+    if (!booted) return;
+    let cancelled = false;
+    void hasUnreadGuestbookMessages().then((unread) => {
+      if (!cancelled) setGuestbookHasUnread(unread);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [booted]);
   const [layers, setLayers] = useState<Layer[]>([]);
   const { toast } = useToast();
   // Undo state — audio nodes are kept alive (muted) during the 5s window
@@ -480,13 +495,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
 
   const handleExportDownload = (name: string) => {
     if (!exportBlob) return;
-    const t = exportBlob.type.toLowerCase();
-    const ext =
-      t.includes('mp4') || t.includes('aac')
-        ? 'm4a'
-        : t.includes('ogg')
-          ? 'ogg'
-          : 'webm';
+    const ext = getRecordingExtension(exportBlob.type);
     const url = URL.createObjectURL(exportBlob);
     const a = document.createElement('a');
     a.href = url;
@@ -690,6 +699,15 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
       content: null,
       isOpen: false,
       position: { x: 200, y: 120 },
+      zIndex: 1,
+    },
+    {
+      id: 'guestbook',
+      title: 'Guestbook.aim',
+      icon: MessageSquare,
+      content: null,
+      isOpen: false,
+      position: { x: 280, y: 180 },
       zIndex: 1,
     },
   ]);
@@ -1787,6 +1805,10 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
   };
 
   const openWindow = (id: string) => {
+    if (id === 'guestbook') {
+      markGuestbookSeen();
+      setGuestbookHasUnread(false);
+    }
     setWindows((prev) => {
       const currentMaxZ = Math.max(
         DESKTOP_ICON_Z_INDEX,
@@ -2465,14 +2487,22 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
           className='absolute left-[max(1rem,env(safe-area-inset-left))] top-[max(1rem,env(safe-area-inset-top))] flex max-w-[calc(100dvw-2rem-env(safe-area-inset-left)-env(safe-area-inset-right))] flex-wrap gap-x-2 gap-y-2 sm:max-w-none'
           style={{ zIndex: DESKTOP_ICON_Z_INDEX }}
         >
-          {([
-            { imageUrl: '/concreteicon.png', label: 'Readme.info',    id: 'about'      },
-            { imageUrl: '/cog.png',          label: 'Settings.exe',   id: 'settings'   },
-            { imageUrl: '/masterfxicon.png', label: 'MasterFX.exe',  id: 'master'     },
-            { imageUrl: '/fxbusicon.png',    label: 'FXBus.exe',     id: 'fxbus'      },
-            { imageUrl: '/scopeicon.png',    label: 'Scope.exe',     id: 'scope'      },
-            { imageUrl: '/visualizer.png',   label: 'Visualizer.exe', id: 'visualizer' },
-          ] as const).map(({ imageUrl, label, id }, i) => (
+          {(
+            [
+              { imageUrl: '/concreteicon.png', label: 'Readme.info', id: 'about' },
+              { imageUrl: '/cog.png', label: 'Settings.exe', id: 'settings' },
+              { imageUrl: '/masterfxicon.png', label: 'MasterFX.exe', id: 'master' },
+              { imageUrl: '/fxbusicon.png', label: 'FXBus.exe', id: 'fxbus' },
+              { imageUrl: '/scopeicon.png', label: 'Scope.exe', id: 'scope' },
+              { imageUrl: '/visualizer.png', label: 'Visualizer.exe', id: 'visualizer' },
+              { imageUrl: '/guestbook.png', label: 'Guestbook.aim', id: 'guestbook' },
+            ] satisfies Array<{
+              label: string;
+              id: string;
+              imageUrl?: string;
+              icon?: LucideIcon;
+            }>
+          ).map(({ imageUrl, label, id }, i) => (
             <div
               key={id}
               style={{
@@ -2486,6 +2516,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
                 label={label}
                 onClick={() => openWindow(id)}
                 isOpen={windows.find((w) => w.id === id)?.isOpen}
+                badge={id === 'guestbook' && guestbookHasUnread}
               />
             </div>
           ))}
@@ -2595,6 +2626,18 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
                 <VisualizerWindow
                   key={win.id}
                   audioEngineRef={audioEngineRef}
+                  position={win.position}
+                  zIndex={win.zIndex}
+                  onClose={() => closeWindow(win.id)}
+                  onMouseDown={(e) => handleDragStart(win.id, 'window', e)}
+                  onTouchStart={(e) => handleDragStart(win.id, 'window', e)}
+                />
+              );
+            }
+            if (win.id === 'guestbook') {
+              return (
+                <GuestbookWindow
+                  key={win.id}
                   position={win.position}
                   zIndex={win.zIndex}
                   onClose={() => closeWindow(win.id)}

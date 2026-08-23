@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { getRecordingExtension, getRecordingFormatLabel } from '@/lib/wav-encode';
 
 interface RecordingExportDialogProps {
   blob: Blob;
@@ -42,7 +43,8 @@ export default function RecordingExportDialog({
     };
   }, [blob]);
 
-  const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm';
+  const ext = getRecordingExtension(blob.type);
+  const formatLabel = getRecordingFormatLabel(blob.type);
 
   return (
     <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/40'>
@@ -66,7 +68,7 @@ export default function RecordingExportDialog({
           </div>
           <div>
             <p>File size:</p>
-            <p className='pl-4'>{formatSize(blob.size)} ({ext})</p>
+            <p className='pl-4'>{formatSize(blob.size)} ({formatLabel})</p>
           </div>
 
           {/* Hairline separator */}

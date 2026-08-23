@@ -4,6 +4,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import * as Tone from 'tone';
 import { type RNG } from '@/lib/prng';
+import { encodeWavBlob, mergeFloat32Chunks } from '@/lib/wav-encode';
 
 export type SynthLayerInfo = {
   type: 'synth' | 'melodic';
@@ -245,10 +246,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
   const masterSaturation = useRef<Tone.Distortion | null>(null);
   const masterHPF = useRef<Tone.Filter | null>(null);
   const masterMeter = useRef<Tone.Meter | null>(null);
-  /** Master tap for MediaRecorder (ScriptProcessorNode / createScriptProcessor is removed in modern browsers). */
-  const mediaStreamDestination = useRef<MediaStreamAudioDestinationNode | null>(null);
-  const mediaRecorder = useRef<MediaRecorder | null>(null);
-  const recordedChunks = useRef<Blob[]>([]);
+  /** Master tap for PCM capture via AudioWorklet → WAV export. */
+  const pcmCaptureNode = useRef<AudioWorkletNode | null>(null);
+  const pcmLeftChunks = useRef<Float32Array[]>([]);
+  const pcmRightChunks = useRef<Float32Array[]>([]);
+  const pcmSampleRate = useRef(44100);
+  const pcmWorkletLoaded = useRef(false);
   const lissajousSplitter = useRef<ChannelSplitterNode | null>(null);
   const lissajousAnalyserL = useRef<AnalyserNode | null>(null);
   const lissajousAnalyserR = useRef<AnalyserNode | null>(null);
@@ -470,23 +473,21 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             vizAnalyser.current = null;
             vizFrequencyBuffer.current = null;
             vizWaveformBuffer.current = null;
-            if (mediaRecorder.current && mediaRecorder.current.state !== 'inactive') {
+            if (pcmCaptureNode.current && masterLimiter.current) {
               try {
-                mediaRecorder.current.stop();
+                masterLimiter.current.disconnect(pcmCaptureNode.current as any);
+              } catch {
+                /* ignore */
+              }
+              try {
+                pcmCaptureNode.current.disconnect();
               } catch {
                 /* ignore */
               }
             }
-            mediaRecorder.current = null;
-            if (mediaStreamDestination.current && masterLimiter.current) {
-              try {
-                masterLimiter.current.disconnect(mediaStreamDestination.current as any);
-              } catch {
-                /* ignore */
-              }
-            }
-            mediaStreamDestination.current = null;
-            recordedChunks.current = [];
+            pcmCaptureNode.current = null;
+            pcmLeftChunks.current = [];
+            pcmRightChunks.current = [];
             masterBus.current?.dispose();
             masterGain.current?.dispose();
             masterCompressor.current?.dispose();
@@ -554,76 +555,101 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     },
     startRecording: async () => {
       if (!masterLimiter.current) return;
-      if (typeof MediaRecorder === 'undefined') {
-        throw new Error(
-          'Recording needs MediaRecorder (not available in this browser or context).'
-        );
-      }
-      if (mediaRecorder.current) {
+      if (pcmCaptureNode.current) {
         throw new Error('Recording is already in progress.');
       }
-      const rawCtx = Tone.getContext().rawContext as AudioContext;
 
-      recordedChunks.current = [];
-      const dest = rawCtx.createMediaStreamDestination();
-      mediaStreamDestination.current = dest;
-      masterLimiter.current.connect(dest as any);
+      await Tone.start();
+      const toneCtx = Tone.getContext();
 
-      const mimeCandidates = [
-        'audio/webm;codecs=opus',
-        'audio/webm',
-        'audio/mp4',
-      ];
-      const mimeType =
-        mimeCandidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? '';
-
-      const recorder = new MediaRecorder(dest.stream, mimeType ? { mimeType } : undefined);
-      mediaRecorder.current = recorder;
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) recordedChunks.current.push(e.data);
-      };
-      recorder.start(250);
-    },
-    stopRecording: async () => {
-      const recorder = mediaRecorder.current;
-      const dest = mediaStreamDestination.current;
-
-      if (!recorder || recorder.state === 'inactive') {
-        if (dest && masterLimiter.current) {
-          try {
-            masterLimiter.current.disconnect(dest as any);
-          } catch {
-            /* ignore */
-          }
-        }
-        mediaRecorder.current = null;
-        mediaStreamDestination.current = null;
-        recordedChunks.current = [];
-        return new Blob([], { type: 'audio/webm' });
+      if (typeof toneCtx.addAudioWorkletModule !== 'function') {
+        throw new Error('Recording needs AudioWorklet support — not available in this browser.');
       }
 
-      return new Promise<Blob>((resolve) => {
-        recorder.addEventListener(
-          'stop',
-          () => {
-            const type = recorder.mimeType || 'audio/webm';
-            const blob = new Blob(recordedChunks.current, { type });
-            recordedChunks.current = [];
-            if (dest && masterLimiter.current) {
-              try {
-                masterLimiter.current.disconnect(dest as any);
-              } catch {
-                /* ignore */
-              }
-            }
-            mediaRecorder.current = null;
-            mediaStreamDestination.current = null;
-            resolve(blob);
-          },
-          { once: true }
+      try {
+        if (!pcmWorkletLoaded.current) {
+          await toneCtx.addAudioWorkletModule('/worklets/pcm-capture-processor.js');
+          pcmWorkletLoaded.current = true;
+        }
+
+        pcmLeftChunks.current = [];
+        pcmRightChunks.current = [];
+        pcmSampleRate.current = toneCtx.sampleRate;
+
+        const node = toneCtx.createAudioWorkletNode('pcm-capture-processor', {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [2],
+        });
+
+        node.port.onmessage = (e: MessageEvent) => {
+          const data = e.data as { left?: Float32Array; right?: Float32Array };
+          if (data.left && data.right) {
+            pcmLeftChunks.current.push(data.left);
+            pcmRightChunks.current.push(data.right);
+          }
+        };
+
+        masterLimiter.current.connect(node as any);
+        Tone.connect(node, Tone.getDestination());
+        pcmCaptureNode.current = node;
+      } catch (err) {
+        throw new Error(
+          `Recording unavailable: ${err instanceof Error ? err.message : String(err)}`
         );
-        recorder.stop();
+      }
+    },
+    stopRecording: async () => {
+      const node = pcmCaptureNode.current;
+      const limiter = masterLimiter.current;
+
+      if (!node || !limiter) {
+        pcmCaptureNode.current = null;
+        pcmLeftChunks.current = [];
+        pcmRightChunks.current = [];
+        return new Blob([], { type: 'audio/wav' });
+      }
+
+      await new Promise<void>((resolve) => {
+        const handler = (e: MessageEvent) => {
+          const data = e.data as {
+            left?: Float32Array;
+            right?: Float32Array;
+            flushed?: boolean;
+          };
+          if (data.left && data.right) {
+            pcmLeftChunks.current.push(data.left);
+            pcmRightChunks.current.push(data.right);
+          }
+          if (data.flushed) {
+            node.port.removeEventListener('message', handler);
+            resolve();
+          }
+        };
+        node.port.addEventListener('message', handler);
+        node.port.postMessage('flush');
       });
+
+      try {
+        limiter.disconnect(node as any);
+      } catch {
+        /* ignore */
+      }
+      try {
+        node.disconnect();
+      } catch {
+        /* ignore */
+      }
+      node.port.onmessage = null;
+      pcmCaptureNode.current = null;
+
+      const left = mergeFloat32Chunks(pcmLeftChunks.current);
+      const right = mergeFloat32Chunks(pcmRightChunks.current);
+      pcmLeftChunks.current = [];
+      pcmRightChunks.current = [];
+
+      if (left.length === 0) return new Blob([], { type: 'audio/wav' });
+      return encodeWavBlob(left, right, pcmSampleRate.current);
     },
     setMasterMute: (muted: boolean) => {
       Tone.getDestination().volume.value = muted ? -Infinity : 0;

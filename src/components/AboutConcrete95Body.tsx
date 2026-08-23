@@ -1,5 +1,7 @@
 'use client';
 
+import { formatBuildDate } from '@/lib/build-info';
+
 export default function AboutConcrete95Body() {
   return (
     <div className='text-black space-y-2 text-sm'>
@@ -28,7 +30,7 @@ export default function AboutConcrete95Body() {
         </a>
         .
       </p>
-      <p>Last updated: June 9, 2026</p>
+      <p>Last updated: {formatBuildDate()}</p>
     </div>
   );
 }
