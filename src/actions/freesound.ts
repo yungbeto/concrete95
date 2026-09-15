@@ -56,6 +56,8 @@ async function fetchFromFreesound(query: string, retries = 2) {
   try {
     const response = await fetch(freesoundUrl, {
       headers: { 'User-Agent': 'concrete95/1.0 (+https://concrete95.app)' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(12_000),
     });
 
     if (!response.ok) {
@@ -94,19 +96,26 @@ async function fetchFromFreesound(query: string, retries = 2) {
 
     const sounds = data.results
       .filter((sound: any) =>
-        sound.previews?.['preview-hq-mp3'] &&
+        (sound.previews?.['preview-lq-mp3'] || sound.previews?.['preview-hq-mp3']) &&
         !isBlockedUploader(sound.username),
       )
       .map((sound: any) => ({
         id: sound.id,
         name: sound.name,
-        previewUrl: sound.previews['preview-hq-mp3'],
+        // LQ is ~3× smaller; HQ often exceeds the client load timeout on this CDN.
+        previewUrl:
+          sound.previews['preview-lq-mp3'] || sound.previews['preview-hq-mp3'],
       }));
 
     return sounds;
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : 'An unknown error occurred';
+    if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      throw new Error(
+        'Freesound timed out — their servers are slow or overloaded. Try again in a moment.',
+      );
+    }
     if (error instanceof Error && isOperationalFreesoundMessage(error.message)) {
       throw error;
     }

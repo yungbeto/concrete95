@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
+const UPSTREAM_TIMEOUT_MS = 45_000;
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
@@ -13,23 +15,28 @@ export async function GET(
   try {
     upstream = await fetch(upstreamUrl, {
       headers: { 'User-Agent': 'concrete95/1.0' },
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      cache: 'no-store',
     });
-  } catch (e) {
+  } catch {
     return new NextResponse('Upstream fetch failed', { status: 502 });
   }
 
-  if (!upstream.ok) {
-    return new NextResponse('Upstream error', { status: upstream.status });
+  if (!upstream.ok || !upstream.body) {
+    return new NextResponse('Upstream error', { status: upstream.status || 502 });
   }
 
-  const buffer = await upstream.arrayBuffer();
+  const headers = new Headers({
+    'Content-Type': upstream.headers.get('Content-Type') ?? 'audio/mpeg',
+    'Cache-Control': 'public, max-age=86400, immutable',
+    'Access-Control-Allow-Origin': '*',
+  });
+  const length = upstream.headers.get('Content-Length');
+  if (length) headers.set('Content-Length', length);
 
-  return new NextResponse(buffer, {
+  // Pipe through — buffering the whole MP3 made TTFB ≈ CDN download time (~20s).
+  return new NextResponse(upstream.body, {
     status: 200,
-    headers: {
-      'Content-Type': upstream.headers.get('Content-Type') ?? 'audio/mpeg',
-      'Cache-Control': 'public, max-age=86400, immutable',
-      'Access-Control-Allow-Origin': '*',
-    },
+    headers,
   });
 }

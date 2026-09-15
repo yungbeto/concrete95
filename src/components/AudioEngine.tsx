@@ -5,6 +5,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import * as Tone from 'tone';
 import { type RNG } from '@/lib/prng';
 import { encodeWavBlob, mergeFloat32Chunks } from '@/lib/wav-encode';
+import { loadDecodedAudioBuffer } from '@/lib/load-audio-buffer';
 
 export type SynthLayerInfo = {
   type: 'synth' | 'melodic';
@@ -72,16 +73,20 @@ const pickLFOType = (r: () => number): LFOType =>
  */
 const BYPASS_MASTER_COMP_AND_EQ = false;
 
-const proxyAudioUrl = (url: string) => {
-  try {
-    const { pathname } = new URL(url);
-    return `/api/audio-proxy${pathname}`;
-  } catch {
-    return url;
-  }
-};
+const BUFFER_LOAD_TIMEOUT_MS = 45000;
 
-const BUFFER_LOAD_TIMEOUT_MS = 25000;
+const PCM_CAPTURE_WORKLET_URL = '/worklets/pcm-capture-processor.js';
+
+/** DOMException from standardized-audio-context is often `NotSupportedError` with an empty message. */
+const describeCaughtError = (err: unknown): string => {
+  if (err instanceof Error) {
+    const label = err.name && err.name !== 'Error' ? err.name : '';
+    const message = err.message.trim();
+    if (label && message) return `${label}: ${message}`;
+    return message || label || String(err);
+  }
+  return String(err);
+};
 
 /**
  * Tone.loaded() waits on a shared FIFO queue of every buffer download in the app,
@@ -561,14 +566,18 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
 
       await Tone.start();
       const toneCtx = Tone.getContext();
+      // Tone.Context.addAudioWorkletModule only loads the first URL (Tone.BitCrusher
+      // already claimed it at init). Load ours on the raw context instead.
+      // https://github.com/Tonejs/Tone.js/issues/1326
+      const rawCtx = toneCtx.rawContext as AudioContext;
 
-      if (typeof toneCtx.addAudioWorkletModule !== 'function') {
+      if (!rawCtx.audioWorklet) {
         throw new Error('Recording needs AudioWorklet support — not available in this browser.');
       }
 
       try {
         if (!pcmWorkletLoaded.current) {
-          await toneCtx.addAudioWorkletModule('/worklets/pcm-capture-processor.js');
+          await rawCtx.audioWorklet.addModule(PCM_CAPTURE_WORKLET_URL);
           pcmWorkletLoaded.current = true;
         }
 
@@ -594,9 +603,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         Tone.connect(node, Tone.getDestination());
         pcmCaptureNode.current = node;
       } catch (err) {
-        throw new Error(
-          `Recording unavailable: ${err instanceof Error ? err.message : String(err)}`
-        );
+        throw new Error(`Recording unavailable: ${describeCaughtError(err)}`);
       }
     },
     stopRecording: async () => {
@@ -932,7 +939,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       // Slight random pitch shift via playback rate — makes each sample feel unique
       const playbackRate = 0.85 + r() * 0.3; // 0.85–1.15x
 
-      const audioUrl = proxyAudioUrl(sound.previewUrl);
       const player = new Tone.Player({
         loop: true,
         playbackRate,
@@ -985,7 +991,13 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       player.connect(waveform);
 
       try {
-        await withLoadTimeout(player.load(audioUrl), 'Freesound sample load');
+        const audioBuffer = await withLoadTimeout(
+          loadDecodedAudioBuffer(sound.previewUrl, (data) =>
+            Tone.getContext().decodeAudioData(data),
+          ),
+          'Freesound sample load',
+        );
+        player.buffer.set(audioBuffer);
       } catch (err) {
         // Audio file unavailable (deleted, 404, network error, or stalled fetch) — dispose all nodes
         lfo.dispose(); tremolo.dispose(); phaser.dispose(); panner.dispose(); filter.dispose(); highPass.dispose();
@@ -1068,7 +1080,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const drift = 0.3 + r() * 1.7; // seconds of source-position scatter
       const playbackRate = 0.12 + r() * 0.38; // slow scan, but not a frozen loop
       const detune = r() * 24 - 12; // subtle ±12 cents per layer
-      const audioUrl = proxyAudioUrl(sound.previewUrl);
 
       const makeGrainVoice = (voiceIndex: number) => {
         const rateRatio = voiceIndex === 0 ? 1 : 0.94 + r() * 0.12;
@@ -1145,10 +1156,13 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       player.connect(waveform);
 
       try {
-        await withLoadTimeout(
-          Promise.all(grainVoices.map((voice) => voice.buffer.load(audioUrl))),
+        const audioBuffer = await withLoadTimeout(
+          loadDecodedAudioBuffer(sound.previewUrl, (data) =>
+            Tone.getContext().decodeAudioData(data),
+          ),
           'Grain sample load',
         );
+        grainVoices.forEach((voice) => voice.buffer.set(audioBuffer));
       } catch (err) {
         lfo.dispose(); exciter.dispose(); bitCrusher.dispose(); chorus.dispose();
         panner.dispose(); filter.dispose(); highPass.dispose();

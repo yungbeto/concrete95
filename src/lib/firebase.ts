@@ -1,23 +1,4 @@
-// Firestore security rules to deploy in Firebase Console → Firestore → Rules:
-//
-// rules_version = '2';
-// service cloud.firestore {
-//   match /databases/{database}/documents {
-//     match /users/{userId}/sessions/{sessionId} {
-//       allow read, write, delete: if request.auth != null && request.auth.uid == userId;
-//     }
-//     match /guestbook_entries/{entryId} {
-//       allow read: if true;
-//       allow create: if request.resource.data.name is string
-//         && request.resource.data.name.size() <= 50
-//         && request.resource.data.message is string
-//         && request.resource.data.message.size() > 0
-//         && request.resource.data.message.size() <= 500
-//         && request.resource.data.createdAt is string;
-//       allow update, delete: if false;
-//     }
-//   }
-// }
+// Firestore rules live in firestore.rules (deploy with `firebase deploy --only firestore:rules`).
 
 import { initializeApp, getApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';

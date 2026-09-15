@@ -1032,7 +1032,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
       toast({
         variant: 'destructive',
         title: 'Freesound Error',
-        description: 'Failed to load sound.',
+        description:
+          err instanceof Error ? err.message : 'Failed to load sound.',
       });
       handleRemoveLayer(id);
     }
@@ -1162,7 +1163,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
       toast({
         variant: 'destructive',
         title: 'Freesound Error',
-        description: 'Failed to load sound.',
+        description:
+          err instanceof Error ? err.message : 'Failed to load sound.',
       });
       handleRemoveLayer(id);
     }
