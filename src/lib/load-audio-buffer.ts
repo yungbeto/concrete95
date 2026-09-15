@@ -6,11 +6,13 @@
  * The client used to abort at 25s — layers looked stuck until another
  * request happened to finish around the same time.
  *
- * Strategy: try the low-quality CDN URL first (CORS is *), then HQ, then
- * the same paths through our streaming proxy.
+ * Strategy: same-origin LQ proxy first (no CORS, smaller file), then LQ
+ * CDN with a short timeout, then HQ as a last resort. Never wait 20s on
+ * a hung CDN fetch before trying the proxy.
  */
 
-export const AUDIO_CANDIDATE_TIMEOUT_MS = 20_000;
+export const CDN_CANDIDATE_TIMEOUT_MS = 4_000;
+export const PROXY_CANDIDATE_TIMEOUT_MS = 25_000;
 
 export function proxyAudioUrl(url: string): string {
   try {
@@ -26,14 +28,38 @@ export function lowQualityPreviewUrl(url: string): string {
   return url.replace('-hq.', '-lq.');
 }
 
+function isProxyUrl(url: string): boolean {
+  return url.includes('/api/audio-proxy');
+}
+
 export function audioLoadCandidates(previewUrl: string): string[] {
   const lq = lowQualityPreviewUrl(previewUrl);
-  const ordered = lq === previewUrl ? [previewUrl] : [lq, previewUrl];
-  const withProxy = ordered.flatMap((url) => {
-    const proxied = proxyAudioUrl(url);
-    return proxied === url ? [url] : [url, proxied];
+  const ordered = lq === previewUrl ? [lq] : [lq, previewUrl];
+  return [
+    ...new Set(
+      ordered.flatMap((url) => {
+        const proxied = proxyAudioUrl(url);
+        return proxied === url ? [url] : [proxied, url];
+      }),
+    ),
+  ];
+}
+
+async function fetchAudioArrayBuffer(url: string): Promise<ArrayBuffer> {
+  const timeoutMs = isProxyUrl(url)
+    ? PROXY_CANDIDATE_TIMEOUT_MS
+    : CDN_CANDIDATE_TIMEOUT_MS;
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(timeoutMs),
   });
-  return [...new Set(withProxy)];
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  const data = await res.arrayBuffer();
+  if (data.byteLength < 64) {
+    throw new Error('Empty audio response');
+  }
+  return data;
 }
 
 export async function loadDecodedAudioBuffer(
@@ -45,16 +71,7 @@ export async function loadDecodedAudioBuffer(
 
   for (const url of candidates) {
     try {
-      const res = await fetch(url, {
-        signal: AbortSignal.timeout(AUDIO_CANDIDATE_TIMEOUT_MS),
-      });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.arrayBuffer();
-      if (data.byteLength < 64) {
-        throw new Error('Empty audio response');
-      }
+      const data = await fetchAudioArrayBuffer(url);
       // slice() so Safari/standardized-audio-context can detach a copy.
       return await decode(data.slice(0));
     } catch (err) {

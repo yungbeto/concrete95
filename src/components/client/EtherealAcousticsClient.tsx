@@ -49,7 +49,7 @@ import InfoWindow from '../InfoWindow';
 import TaskbarItem from '../TaskbarItem';
 import LissajousWindow from '../LissajousWindow';
 import VisualizerWindow from '../VisualizerWindow';
-import GuestbookWindow from '../GuestbookWindow';
+import GuestbookWindow, { AIM_SOUNDS, playAimSound } from '../GuestbookWindow';
 import SessionsAuthModal from '../SessionsAuthModal';
 import RecordingExportDialog from '../RecordingExportDialog';
 import MidiClockPanel from '../MidiClockPanel';
@@ -1807,9 +1807,11 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
   };
 
   const openWindow = (id: string) => {
+    const alreadyOpen = windows.find((w) => w.id === id)?.isOpen;
     if (id === 'guestbook') {
       markGuestbookSeen();
       setGuestbookHasUnread(false);
+      if (!alreadyOpen) playAimSound(AIM_SOUNDS.open);
     }
     setWindows((prev) => {
       const currentMaxZ = Math.max(

@@ -183,7 +183,7 @@ export default function BootScreen({ onComplete }: { onComplete: () => void }) {
   );
 
   return (
-    <>
+    <div data-boot-screen="">
       {/* ── DOS Phase ── */}
       {phase === 'dos' && (
         <div
@@ -333,6 +333,6 @@ export default function BootScreen({ onComplete }: { onComplete: () => void }) {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

@@ -44,6 +44,12 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <AnalyticsProvider />
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{if(sessionStorage.getItem('concrete95:introSeen')==='1')document.documentElement.dataset.introSeen='1'}catch(e){}",
+          }}
+        />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link

@@ -10,6 +10,7 @@ import {
   addGuestbookEntry,
   formatGuestbookTimestamp,
   listGuestbookEntries,
+  peekLocalGuestbookEntries,
   type GuestbookEntry,
 } from '@/lib/guestbook';
 
@@ -24,10 +25,26 @@ interface GuestbookWindowProps {
 const WELCOME: GuestbookEntry = {
   id: 'welcome',
   name: 'Concrete95 System Msg',
-  message:
-    'Welcome to the guestbook! Sign your name and leave a message — it will show up here like an old-school AIM chat.',
+  message: 'Welcome to the guestbook!',
   createdAt: '1970-01-01T00:00:00.000Z',
 };
+
+export const AIM_SOUNDS = {
+  open: '/sounds/BuddyIn.wav',
+  close: '/sounds/Goodbye.wav',
+  send: '/sounds/IM.wav',
+} as const;
+
+const playingAimSounds = new Set<HTMLAudioElement>();
+
+export function playAimSound(src: string) {
+  if (typeof Audio === 'undefined') return;
+  const audio = new Audio(src);
+  playingAimSounds.add(audio);
+  const release = () => playingAimSounds.delete(audio);
+  audio.addEventListener('ended', release, { once: true });
+  void audio.play().catch(release);
+}
 
 const INPUT_CLASS =
   'w-full text-xs border-2 border-t-neutral-600 border-l-neutral-600 border-r-white border-b-white px-1.5 py-1.5 outline-none bg-white text-black placeholder:text-neutral-500';
@@ -43,9 +60,9 @@ function linkify(text: string): React.ReactNode[] {
       <a
         key={i}
         href={part}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-blue-800 underline"
+        target='_blank'
+        rel='noopener noreferrer'
+        className='text-blue-800 underline'
       >
         {part}
       </a>
@@ -64,7 +81,10 @@ export default function GuestbookWindow({
 }: GuestbookWindowProps) {
   const isMobile = useIsMobile();
   const { toast } = useToast();
-  const [entries, setEntries] = useState<GuestbookEntry[]>([WELCOME]);
+  const [entries, setEntries] = useState<GuestbookEntry[]>(() => {
+    const local = peekLocalGuestbookEntries();
+    return local.length > 0 ? local : [WELCOME];
+  });
   const [name, setName] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -101,6 +121,7 @@ export default function GuestbookWindow({
     setSending(true);
     try {
       const entry = await addGuestbookEntry(name, message);
+      playAimSound(AIM_SOUNDS.send);
       setEntries((prev) => {
         const withoutWelcome =
           prev.length === 1 && prev[0].id === 'welcome'
@@ -119,6 +140,12 @@ export default function GuestbookWindow({
     } finally {
       setSending(false);
     }
+  };
+
+  const handleClose = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    playAimSound(AIM_SOUNDS.close);
+    onClose();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -146,29 +173,26 @@ export default function GuestbookWindow({
         onMouseDown={onMouseDown}
         onTouchStart={onTouchStart}
       >
-        <div className="flex min-w-0 items-center gap-1">
+        <div className='flex min-w-0 items-center gap-1'>
           <Image
-            src="/guestbook.png"
-            alt=""
+            src='/guestbook.png'
+            alt=''
             width={16}
             height={16}
-            className="h-4 w-4 shrink-0 object-contain"
+            className='h-4 w-4 shrink-0 object-contain'
           />
-          <span className="truncate text-sm font-bold">Guestbook.aim</span>
+          <span className='truncate text-sm font-bold'>Guestbook.aim</span>
         </div>
         <Button
-          variant="retro"
-          size="icon"
-          className="h-5 w-5"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-          aria-label="Close"
+          variant='retro'
+          size='icon'
+          className='h-5 w-5'
+          onClick={handleClose}
+          aria-label='Close'
           onMouseDown={(e) => e.stopPropagation()}
           onTouchStart={(e) => e.stopPropagation()}
         >
-          <X className="h-3 w-3 text-black" />
+          <X className='h-3 w-3 text-black' />
         </Button>
       </div>
 
@@ -183,16 +207,16 @@ export default function GuestbookWindow({
           style={{ fontFamily: 'Times New Roman, Times, serif' }}
         >
           {loading ? (
-            <p className="text-xs italic text-neutral-500">Connecting…</p>
+            <p className='text-xs italic text-neutral-500'>Connecting…</p>
           ) : (
             entries.map((entry) => {
               const timestamp = formatGuestbookTimestamp(entry.createdAt);
               return (
-                <p key={entry.id} className="mb-1.5 text-sm leading-snug">
-                  <span className="font-bold text-blue-800">{entry.name}:</span>{' '}
+                <p key={entry.id} className='mb-1.5 text-sm leading-snug'>
+                  <span className='font-bold text-blue-800'>{entry.name}:</span>{' '}
                   {linkify(entry.message)}
                   {timestamp && (
-                    <span className="ml-1 text-[10px] text-neutral-500">
+                    <span className='ml-1 text-[10px] text-neutral-500'>
                       ({timestamp})
                     </span>
                   )}
@@ -202,12 +226,12 @@ export default function GuestbookWindow({
           )}
         </div>
 
-        <div className="space-y-2">
+        <div className='space-y-2'>
           <input
-            type="text"
+            type='text'
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Screen name"
+            placeholder='Screen name'
             maxLength={50}
             className={INPUT_CLASS}
           />
@@ -215,24 +239,24 @@ export default function GuestbookWindow({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type your message here…"
+            placeholder='Type your message here…'
             maxLength={500}
             rows={3}
             className={`${INPUT_CLASS} resize-none`}
           />
-          <div className="flex justify-end">
+          <div className='flex justify-end'>
             <Button
-              variant="retro"
+              variant='retro'
               disabled={sending || !message.trim()}
               onClick={() => void handleSend()}
-              className="flex items-center gap-1.5 text-xs"
+              className='flex items-center gap-1.5 text-xs'
             >
               <Image
-                src="/guestbook.png"
-                alt=""
+                src='/guestbook.png'
+                alt=''
                 width={16}
                 height={16}
-                className="h-4 w-4 object-contain"
+                className='h-4 w-4 object-contain'
               />
               {sending ? 'Sending…' : 'Send'}
             </Button>

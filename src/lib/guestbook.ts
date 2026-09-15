@@ -1,10 +1,12 @@
 import {
   addDoc,
   collection,
+  doc,
   getDocs,
   orderBy,
   query,
   limit,
+  setDoc,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/lib/firebase';
 
@@ -65,6 +67,11 @@ function readLocalEntries(): GuestbookEntry[] {
   }
 }
 
+/** Sync local cache — used so the chat doesn't flash the welcome placeholder. */
+export function peekLocalGuestbookEntries(): GuestbookEntry[] {
+  return readLocalEntries();
+}
+
 export function getGuestbookLastSeen(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem(LAST_SEEN_KEY);
@@ -94,7 +101,68 @@ function writeLocalEntries(entries: GuestbookEntry[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(-MAX_ENTRIES)));
 }
 
+function entryFingerprint(entry: Pick<GuestbookEntry, 'name' | 'message' | 'createdAt'>): string {
+  return `${entry.createdAt}\n${entry.name}\n${entry.message}`;
+}
+
+async function entryDocId(
+  entry: Pick<GuestbookEntry, 'name' | 'message' | 'createdAt'>,
+): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(entryFingerprint(entry)),
+  );
+  return Array.from(new Uint8Array(digest), (b) =>
+    b.toString(16).padStart(2, '0'),
+  )
+    .join('')
+    .slice(0, 40);
+}
+
+function mergeGuestbookEntries(
+  remote: GuestbookEntry[],
+  local: GuestbookEntry[],
+): GuestbookEntry[] {
+  const seen = new Set(remote.map(entryFingerprint));
+  const merged = [...remote];
+  for (const entry of local) {
+    if (entry.id === 'welcome') continue;
+    const key = entryFingerprint(entry);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(entry);
+  }
+  return merged
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .slice(-MAX_ENTRIES);
+}
+
+async function migrateLocalEntries(
+  local: GuestbookEntry[],
+  remote: GuestbookEntry[],
+): Promise<void> {
+  if (!isFirebaseConfigured || typeof crypto === 'undefined' || !crypto.subtle) {
+    return;
+  }
+  const remoteKeys = new Set(remote.map(entryFingerprint));
+  for (const entry of local) {
+    if (entry.id === 'welcome') continue;
+    if (remoteKeys.has(entryFingerprint(entry))) continue;
+    try {
+      const id = await entryDocId(entry);
+      await setDoc(doc(db, COLLECTION, id), {
+        name: entry.name,
+        message: entry.message,
+        createdAt: entry.createdAt,
+      });
+    } catch {
+      // Rules, network, or duplicate create — keep the local copy either way.
+    }
+  }
+}
+
 export async function listGuestbookEntries(): Promise<GuestbookEntry[]> {
+  const local = readLocalEntries();
   if (isFirebaseConfigured) {
     try {
       const q = query(
@@ -103,17 +171,21 @@ export async function listGuestbookEntries(): Promise<GuestbookEntry[]> {
         limit(MAX_ENTRIES),
       );
       const snap = await getDocs(q);
-      return snap.docs
+      const remote = snap.docs
         .map((d) => ({
           id: d.id,
           ...(d.data() as Omit<GuestbookEntry, 'id'>),
         }))
         .reverse();
+      const merged = mergeGuestbookEntries(remote, local);
+      writeLocalEntries(merged);
+      void migrateLocalEntries(local, remote);
+      return merged;
     } catch {
-      return readLocalEntries();
+      return local;
     }
   }
-  return readLocalEntries();
+  return local;
 }
 
 export async function addGuestbookEntry(
@@ -139,7 +211,9 @@ export async function addGuestbookEntry(
         message: entry.message,
         createdAt: entry.createdAt,
       });
-      return { ...entry, id: ref.id };
+      const saved = { ...entry, id: ref.id };
+      writeLocalEntries(mergeGuestbookEntries(readLocalEntries(), [saved]));
+      return saved;
     } catch {
       // Fall through to localStorage when Firestore rules or network fail.
     }

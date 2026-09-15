@@ -11,6 +11,11 @@ html, body {
   width: 100%;
 }
 
+/* Hide the SSR boot screen on refresh before React hydrates. */
+html[data-intro-seen] [data-boot-screen] {
+  display: none !important;
+}
+
 body {
   font-family: Arial, Helvetica, sans-serif;
 }
