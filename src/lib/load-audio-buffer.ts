@@ -1,18 +1,16 @@
 /**
  * Load + decode a Freesound preview without Tone's shared download list.
  *
- * HQ MP3s are often 1–2MB and Freesound's CDN sits around 70KB/s, so a
- * proxy that buffers the whole file before responding has TTFB ≈ 20s+.
- * The client used to abort at 25s — layers looked stuck until another
- * request happened to finish around the same time.
- *
- * Strategy: same-origin LQ proxy first (no CORS, smaller file), then LQ
- * CDN with a short timeout, then HQ as a last resort. Never wait 20s on
- * a hung CDN fetch before trying the proxy.
+ * cdn.freesound.org is blocked from the server's egress IP (same edge
+ * block as the search API — see project notes), so the same-origin proxy
+ * now fails fast every time in prod. The user's own browser isn't
+ * affected, so try the direct CDN URL first with a generous timeout
+ * (Freesound's CDN sits around 70KB/s) and keep the proxy only as a
+ * short-timeout backup (useful locally, or if the block ever lifts).
  */
 
-export const CDN_CANDIDATE_TIMEOUT_MS = 4_000;
-export const PROXY_CANDIDATE_TIMEOUT_MS = 25_000;
+export const DIRECT_CANDIDATE_TIMEOUT_MS = 20_000;
+export const PROXY_CANDIDATE_TIMEOUT_MS = 4_000;
 
 export function proxyAudioUrl(url: string): string {
   try {
@@ -39,7 +37,7 @@ export function audioLoadCandidates(previewUrl: string): string[] {
     ...new Set(
       ordered.flatMap((url) => {
         const proxied = proxyAudioUrl(url);
-        return proxied === url ? [url] : [proxied, url];
+        return proxied === url ? [url] : [url, proxied];
       }),
     ),
   ];
@@ -48,7 +46,7 @@ export function audioLoadCandidates(previewUrl: string): string[] {
 async function fetchAudioArrayBuffer(url: string): Promise<ArrayBuffer> {
   const timeoutMs = isProxyUrl(url)
     ? PROXY_CANDIDATE_TIMEOUT_MS
-    : CDN_CANDIDATE_TIMEOUT_MS;
+    : DIRECT_CANDIDATE_TIMEOUT_MS;
   const res = await fetch(url, {
     signal: AbortSignal.timeout(timeoutMs),
   });
