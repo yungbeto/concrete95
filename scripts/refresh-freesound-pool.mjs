@@ -26,7 +26,14 @@ function loadEnvLocal() {
     for (const line of raw.split('\n')) {
       const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
       if (match && !process.env[match[1]]) {
-        process.env[match[1]] = match[2].trim().replace(/^["']|["']$/g, '');
+        // Mirrors src/lib/firebase.ts's trimEnv — .env.local values pasted from the
+        // firebaseConfig JSON snippet often carry a stray trailing comma/semicolon.
+        let value = match[2].trim();
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1).trim();
+        }
+        value = value.replace(/^[,;\s]+|[,;\s]+$/g, '').trim();
+        process.env[match[1]] = value;
       }
     }
   } catch {
