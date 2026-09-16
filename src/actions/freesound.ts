@@ -1,6 +1,9 @@
 
 'use server';
 
+import { collection, getDocs, limit, query as fsQuery } from 'firebase/firestore';
+import { db, isFirebaseConfigured } from '@/lib/firebase';
+
 export type FreesoundSound = {
   id: number;
   name: string;
@@ -125,13 +128,40 @@ async function fetchFromFreesound(query: string, retries = 2) {
 }
 
 
+const POOL_COLLECTION = 'freesound_pool';
+const POOL_FETCH_LIMIT = 200;
+
+/**
+ * Fallback used when the live Freesound API is unreachable (e.g. the
+ * server's egress IP is edge-blocked — see project notes). Reads a cache
+ * refreshed offline by scripts/refresh-freesound-pool.mjs, which runs from
+ * a machine that isn't blocked.
+ */
+async function fetchFromPool(): Promise<FreesoundSound[]> {
+  if (!isFirebaseConfigured) return [];
+  try {
+    const snap = await getDocs(
+      fsQuery(collection(db, POOL_COLLECTION), limit(POOL_FETCH_LIMIT)),
+    );
+    return snap.docs
+      .map((d) => d.data() as { id: number; name: string; previewUrl: string; username?: string })
+      .filter((sound) => sound.previewUrl && !isBlockedUploader(sound.username))
+      .map(({ id, name, previewUrl }) => ({ id, name, previewUrl }));
+  } catch (error) {
+    console.error('Failed to read Freesound pool fallback:', error);
+    return [];
+  }
+}
+
 export async function searchFreesound(
   query: string
 ): Promise<FreesoundSound[] | {error: string}> {
   try {
     const data = await fetchFromFreesound(query);
-    if (!data) {
-        return { error: 'Failed to fetch from Freesound after retries.' };
+    if (!data || data.length === 0) {
+      const pooled = await fetchFromPool();
+      if (pooled.length > 0) return pooled;
+      return { error: 'Failed to fetch from Freesound after retries.' };
     }
     return data;
   } catch (error) {
@@ -142,6 +172,10 @@ export async function searchFreesound(
     ) {
       console.error('Error in searchFreesound:', error);
     }
+
+    const pooled = await fetchFromPool();
+    if (pooled.length > 0) return pooled;
+
     return { error: errorMessage };
   }
 }

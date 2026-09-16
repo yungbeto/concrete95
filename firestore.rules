@@ -14,5 +14,12 @@ service cloud.firestore {
         && request.resource.data.createdAt is string;
       allow update, delete: if false;
     }
+    // Cached Freesound results, refreshed offline by scripts/refresh-freesound-pool.mjs
+    // (via firebase-admin, which bypasses these rules). Used as a fallback when the
+    // live Freesound API is unreachable from the server's egress IP.
+    match /freesound_pool/{soundId} {
+      allow read: if true;
+      allow write: if false;
+    }
   }
 }
