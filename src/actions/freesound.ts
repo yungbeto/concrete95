@@ -61,6 +61,13 @@ async function fetchFromFreesound(query: string, retries = 2) {
     });
 
     if (!response.ok) {
+      // TEMP DIAGNOSTIC — remove after confirming the cause of the prod 403.
+      console.error('[freesound-diag]', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+      });
+
       // Retry on server errors (5xx) and gateway timeouts
       if (response.status >= 500 && retries > 0) {
         console.warn(`Freesound API returned status ${response.status}. Retrying...`);
@@ -69,6 +76,7 @@ async function fetchFromFreesound(query: string, retries = 2) {
       }
 
       const errorText = await response.text();
+      console.error('[freesound-diag] body:', errorText.slice(0, 500));
       if (response.status === 504 || /gateway\s*timeout/i.test(errorText)) {
         throw new Error(
           'Freesound timed out — their servers are slow or overloaded. Try again in a moment.',
