@@ -241,6 +241,8 @@ export type AudioEngineHandle = {
   setRng: (rng: RNG | null) => void;
   /** Short sine into the real master bus (same path as layers). For debugging only. */
   debugPlayThroughMasterChain: () => void;
+  /** Debug only: RMS dB at the output of each master-chain stage (NaN = poisoned). */
+  getMasterStageLevels: () => { stage: string; db: number }[];
 };
 
 const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props, ref) => {
@@ -251,6 +253,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
   const masterSaturation = useRef<Tone.Distortion | null>(null);
   const masterHPF = useRef<Tone.Filter | null>(null);
   const masterMeter = useRef<Tone.Meter | null>(null);
+  /** Debug taps after each master stage — created lazily by getMasterStageLevels. */
+  const masterStageTaps = useRef<{ owner: Tone.Gain; taps: { stage: string; analyser: AnalyserNode; buf: Float32Array }[] } | null>(null);
   /** Master tap for PCM capture via AudioWorklet → WAV export. */
   const pcmCaptureNode = useRef<AudioWorkletNode | null>(null);
   const pcmLeftChunks = useRef<Float32Array[]>([]);
@@ -560,6 +564,38 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       if (!masterMeter.current || masterMeter.current.disposed) return -Infinity;
       const val = masterMeter.current.getValue();
       return typeof val === 'number' ? val : -Infinity;
+    },
+    getMasterStageLevels: () => {
+      if (!masterGain.current || masterGain.current.disposed) return [];
+      if (masterStageTaps.current?.owner !== masterGain.current) {
+        const raw = Tone.getContext().rawContext as AudioContext;
+        const stages: [string, Tone.ToneAudioNode | null][] = [
+          ['gain', masterGain.current],
+          ['comp', BYPASS_MASTER_COMP_AND_EQ ? null : masterCompressor.current],
+          ['eq', BYPASS_MASTER_COMP_AND_EQ ? null : masterEQ.current],
+          ['sat', masterSaturation.current],
+          ['crush', masterBitcrusher.current],
+          ['warble', masterWarble.current],
+          ['hpf', masterHPF.current],
+          ['limiter', masterLimiter.current],
+        ];
+        const taps = stages
+          .filter((entry): entry is [string, Tone.ToneAudioNode] => !!entry[1] && !entry[1].disposed)
+          .map(([stage, node]) => {
+            const analyser = raw.createAnalyser();
+            analyser.fftSize = 2048;
+            node.connect(analyser as any);
+            return { stage, analyser, buf: new Float32Array(analyser.fftSize) };
+          });
+        masterStageTaps.current = { owner: masterGain.current, taps };
+      }
+      return masterStageTaps.current!.taps.map(({ stage, analyser, buf }) => {
+        analyser.getFloatTimeDomainData(buf as Float32Array<ArrayBuffer>);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+        const rms = Math.sqrt(sum / buf.length);
+        return { stage, db: Number.isNaN(rms) ? NaN : 20 * Math.log10(rms) };
+      });
     },
     getLissajousData: () => {
       if (!lissajousAnalyserL.current || !lissajousAnalyserR.current) return null;

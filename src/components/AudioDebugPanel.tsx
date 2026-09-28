@@ -129,6 +129,7 @@ export default function AudioDebugPanel({
       ? volParam.value
       : NaN;
   const masterDb = audioEngineRef.current?.getMasterLevel?.() ?? null;
+  const stageLevels = audioEngineRef.current?.getMasterStageLevels?.() ?? [];
 
   return (
     <div
@@ -152,6 +153,11 @@ export default function AudioDebugPanel({
             ? '—'
             : `${masterDb.toFixed(1)} dB`}
         </div>
+        {stageLevels.map(({ stage, db }) => (
+          <div key={stage} className={Number.isNaN(db) || db === -Infinity ? 'text-red-400' : undefined}>
+            · {stage}: {Number.isNaN(db) ? 'NaN' : db === -Infinity ? '-∞ dB' : `${db.toFixed(1)} dB`}
+          </div>
+        ))}
         <div>layers: {layerCount}</div>
         <div>engine: {isEngineInitialized ? 'init' : 'no'}</div>
         <div className="text-[9px] text-neutral-400">tick {tick}</div>
