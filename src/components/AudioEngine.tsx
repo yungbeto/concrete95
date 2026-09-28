@@ -287,6 +287,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     crossFade: Tone.CrossFade;
   } | null>(null);
 
+  /**
+   * One long reverb shared by every melodic layer (created on first use). A
+   * per-layer Tone.Reverb is a 5–11s stereo convolver each — several of them
+   * overloaded the audio thread (output dropouts, then a frozen tab).
+   */
+  const melodicReverb = useRef<Tone.Reverb | null>(null);
   const isInitialized = useRef(false);
   const rngRef = useRef<RNG | null>(null);
 
@@ -451,15 +457,24 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     } }
   }
 
+  // Desktop auto-init. useIsMobile() is undefined on first render, so wait for an
+  // explicit false; initializeAudio() is idempotent, so later isMobile changes
+  // (e.g. resizing across the breakpoint) never rebuild the graph.
   useEffect(() => {
-    if (!props.isMobile) {
+    if (props.isMobile === false) {
         initializeAudio();
     }
+  }, [props.isMobile]);
 
+  // Teardown on unmount only — tearing down on isMobile changes orphaned live layers
+  // on the disposed master bus.
+  useEffect(() => {
     return () => {
         if (isInitialized.current) {
             masterBreatheLFO.current?.stop().dispose();
             masterBreatheLFO.current = null;
+            melodicReverb.current?.dispose();
+            melodicReverb.current = null;
             masterBitcrusher.current?.dispose();
             masterBitcrusher.current = null;
             masterWarble.current?.stop().dispose();
@@ -528,7 +543,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             isInitialized.current = false;
         }
     };
-  }, [props.isMobile]);
+  }, []);
 
   useImperativeHandle(ref, () => ({
     initialize: () => {
@@ -1297,17 +1312,24 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const lfo = new Tone.LFO({ type: pickLFOType(r), frequency: lfoFreq, min: filterFreq * 0.85, max: filterFreq * 1.15 });
       lfo.connect(filter.frequency).start();
 
-      // Long, spacious reverb — the defining quality of Eno's melodic sound
-      const reverbDecay = r() * 6 + 5; // 5–11s
-      const reverb = new Tone.Reverb(reverbDecay);
-      reverb.wet.value = r() * 0.3 + 0.5; // 0.5–0.8 wet
+      // Long, spacious reverb — the defining quality of Eno's melodic sound.
+      // Shared across melodic layers; each layer sets its own wet/dry balance.
+      if (!melodicReverb.current || melodicReverb.current.disposed) {
+        melodicReverb.current = new Tone.Reverb({ decay: 8, preDelay: 0.03, wet: 1 }).connect(masterBus.current);
+      }
+      const reverbMix = r() * 0.3 + 0.5; // 0.5–0.8 wet
+      // Equal-power split, matching Tone's own dry/wet CrossFade
+      const reverbDry = new Tone.Gain(Math.cos(reverbMix * Math.PI / 2)).connect(masterBus.current);
+      const reverbWet = new Tone.Gain(Math.sin(reverbMix * Math.PI / 2)).connect(melodicReverb.current);
 
       // Tape-style quarter or half-note delay with moderate feedback
       const delayTimeOptions = ['4n', '2n', '4n.'];
       const delayTime = delayTimeOptions[Math.floor(r() * delayTimeOptions.length)];
-      const delay = new Tone.FeedbackDelay(delayTime, r() * 0.3 + 0.3); // 0.3–0.6 feedback
+      // maxDelay: default is 1s, but 2n / 4n. exceed that below ~120 BPM and get clamped.
+      const delay = new Tone.FeedbackDelay({ delayTime, feedback: r() * 0.3 + 0.3, maxDelay: 8 }); // 0.3–0.6 feedback
       delay.wet.value = r() * 0.3 + 0.3; // 0.3–0.6 wet
-      delay.chain(filter, reverb, masterBus.current);
+      delay.connect(filter);
+      filter.fan(reverbDry, reverbWet);
 
       const sendGain = new Tone.Gain(0).connect(fxBus.current.fxInput);
 
@@ -1435,6 +1457,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
           break;
       }
       synth.volume.value = -16;
+      // Long releases (up to 10s) overlap voices; uncapped, voice count (DuoSynth
+      // especially, two synths + LFO per voice) grows until the audio thread chokes.
+      if (synth instanceof Tone.PolySynth) synth.maxPolyphony = 8;
 
       // Vibrato — pitch modulation gives bells and mallets an expressive, bowed quality
       const vibrato = new Tone.Vibrato({
@@ -1564,7 +1589,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       (sequence as any).lfo = lfo;
       (sequence as any).filter = filter;
       (sequence as any).vibrato = vibrato;
-      (sequence as any).effects = { delay, reverb };
+      (sequence as any).effects = { delay, reverbDry, reverbWet };
       (sequence as any).sendGain = sendGain;
       (sequence as any).waveform = waveform;
       (sequence as any).gateState = state;
@@ -1576,7 +1601,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const loopLabel = discreetMode ? ` · ${sequenceLength}m loop` : '';
       const info: SynthLayerInfo = {
         type: 'melodic',
-        description: `${synthDescription} · ${scaleName} · ${patternType} · ${sequenceInterval} interval · reverb ${reverbDecay.toFixed(1)}s${loopLabel}`
+        description: `${synthDescription} · ${scaleName} · ${patternType} · ${sequenceInterval} interval · reverb ${Math.round(reverbMix * 100)}% wet${loopLabel}`
       };
 
       return { sequence, info, filterCutoff: filterFreq, filterResonance: filter.Q.value };
@@ -1596,7 +1621,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       if (vibrato && !vibrato.disposed) vibrato.dispose();
       if (effects) {
         if (effects.delay && !effects.delay.disposed) effects.delay.dispose();
-        if (effects.reverb && !effects.reverb.disposed) effects.reverb.dispose();
+        if (effects.reverbDry && !effects.reverbDry.disposed) effects.reverbDry.dispose();
+        if (effects.reverbWet && !effects.reverbWet.disposed) effects.reverbWet.dispose();
       }
       if (sendGain && !sendGain.disposed) sendGain.dispose();
       if (waveform && !waveform.disposed) waveform.dispose();
