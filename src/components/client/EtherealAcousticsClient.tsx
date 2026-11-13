@@ -37,6 +37,7 @@ import {
   type LucideIcon,
   Speaker,
   SlidersHorizontal,
+  SlidersVertical,
   Cpu,
   Activity,
   Share2,
@@ -51,6 +52,7 @@ import {
 import { Button } from '@/components/ui/button';
 import DesktopIcon from '../DesktopIcon';
 import InfoWindow from '../InfoWindow';
+import MixerWindowContent from '../MixerWindowContent';
 import TaskbarItem from '../TaskbarItem';
 import LissajousWindow from '../LissajousWindow';
 import VisualizerWindow from '../VisualizerWindow';
@@ -111,6 +113,8 @@ type Layer = {
   grainSize?: number;
   grainDrift?: number;
   isMuted?: boolean;
+  /** Grain layers: spectral freeze (scan position held). */
+  isFrozen?: boolean;
 };
 
 type WindowState = {
@@ -133,6 +137,8 @@ type DragState = {
 const MAX_LAYERS = 8;
 /** Fade applied when a layer is removed / Stop All, before the undo window. */
 const REMOVE_FADE_SECONDS = 0.4;
+/** Gap between layers when re-rolling all of them. */
+const REROLL_ALL_STAGGER_MS = 400;
 /** Taskbar (footer h-10) — windows and cards must stay grabbable above it. */
 const TASKBAR_HEIGHT = 40;
 /** How much of a window/card (px) must stay on screen horizontally and above the taskbar. */
@@ -886,6 +892,15 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
       ),
       isOpen: false,
       position: { x: 400, y: 300 },
+      zIndex: 1,
+    },
+    {
+      id: 'mixer',
+      title: 'Mixer.exe',
+      icon: SlidersVertical,
+      content: null,
+      isOpen: false,
+      position: { x: 320, y: 140 },
       zIndex: 1,
     },
     {
@@ -2402,6 +2417,14 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     );
   };
 
+  const handleFreezeToggle = (id: string) => {
+    const layer = layersRef.current.find((l) => l.id === id);
+    if (!audioEngineRef.current || !layer?.node || layer.type !== 'grain') return;
+    const next = !layer.isFrozen;
+    audioEngineRef.current.setGrainFreeze(layer.node as Tone.GrainPlayer, next);
+    setLayers((prev) => prev.map((l) => (l.id === id ? { ...l, isFrozen: next } : l)));
+  };
+
   // ─── Session helpers ──────────────────────────────────────────────────────
 
   const collectSettings = (): SavedGlobalSettings => ({
@@ -3003,7 +3026,9 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
 
       setLayers((prev) =>
         prev.map((l) =>
-          l.id === id ? { ...l, ...fresh.patch, node: fresh.node, probability: current.probability } : l,
+          l.id === id
+            ? { ...l, ...fresh.patch, node: fresh.node, probability: current.probability, isFrozen: false }
+            : l,
         ),
       );
     } catch (err) {
@@ -3070,6 +3095,19 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     return () => clearTimeout(timer);
   }, [evolveEnabled, isEngineInitialized]);
 
+  /**
+   * Re-roll every playing layer. Staggered so the crossfades overlap without
+   * every new node (and sample download) landing on the audio thread at once.
+   */
+  const handleRerollAll = () => {
+    const ids = layersRef.current.filter((l) => l.status === 'playing').map((l) => l.id);
+    if (!ids.length) return;
+    ids.forEach((id, i) => {
+      setTimeout(() => void layerHandlersRef.current.handleRerollLayer(id), i * REROLL_ALL_STAGGER_MS);
+    });
+    toast({ title: `Re-rolling ${ids.length} layer${ids.length === 1 ? '' : 's'}` });
+  };
+
   // Stable identities for LayerCard (memoized): each delegates to this render's
   // handler via a ref, so cards don't re-render just because the parent did.
   const layerHandlersRef = useRef({
@@ -3087,6 +3125,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     handleRenameLayer,
     handleDragStart,
     handleRerollLayer,
+    handleFreezeToggle,
   });
   layerHandlersRef.current = {
     handleRemoveLayer,
@@ -3103,6 +3142,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     handleRenameLayer,
     handleDragStart,
     handleRerollLayer,
+    handleFreezeToggle,
   };
   const stableLayerHandlers = useMemo(() => {
     const h = () => layerHandlersRef.current;
@@ -3122,6 +3162,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
       onDragStart: (id: string, e: React.MouseEvent | React.TouchEvent) =>
         h().handleDragStart(id, 'layer', e),
       onReroll: (id: string) => void h().handleRerollLayer(id),
+      onFreezeToggle: (id: string) => h().handleFreezeToggle(id),
     };
   }, []);
 
@@ -3247,6 +3288,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
               { imageUrl: '/cog.png', label: 'Settings.exe', id: 'settings' },
               { imageUrl: '/masterfxicon.png', label: 'MasterFX.exe', id: 'master' },
               { imageUrl: '/fxbusicon.png', label: 'FXBus.exe', id: 'fxbus' },
+              { imageUrl: '/mixericon.svg', label: 'Mixer.exe', id: 'mixer' },
               { imageUrl: '/scopeicon.png', label: 'Scope.exe', id: 'scope' },
               { imageUrl: '/visualizer.png', label: 'Visualizer.exe', id: 'visualizer' },
               { imageUrl: '/guestbook.png', label: 'Guestbook.aim', id: 'guestbook' },
@@ -3299,6 +3341,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
               grainSize={layer.grainSize}
               grainDrift={layer.grainDrift}
               isMuted={layer.isMuted ?? false}
+              isFrozen={layer.isFrozen ?? false}
               {...stableLayerHandlers}
             />
           ))}
@@ -3390,8 +3433,21 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
                 onClose={() => closeWindow(win.id)}
                 onMouseDown={(e) => handleDragStart(win.id, 'window', e)}
                 onTouchStart={(e) => handleDragStart(win.id, 'window', e)}
+                widthClassName={win.id === 'mixer' ? 'w-max min-w-80 max-w-[calc(100vw-2rem)]' : undefined}
               >
-                {win.id === 'about' ? <AboutConcrete95Body /> : win.content}
+                {win.id === 'about' ? (
+                  <AboutConcrete95Body />
+                ) : win.id === 'mixer' ? (
+                  <MixerWindowContent
+                    layers={layers}
+                    onVolumeChange={stableLayerHandlers.onVolumeChange}
+                    onSendChange={stableLayerHandlers.onSendChange}
+                    onMuteToggle={stableLayerHandlers.onMuteToggle}
+                    onFocusLayer={(id) => bringToFront(id, 'layer')}
+                  />
+                ) : (
+                  win.content
+                )}
               </InfoWindow>
             );
           })}
@@ -3452,6 +3508,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
           onAddAtmosphereLayer={addAtmosphereLayer}
           onAddDroneLayer={addDroneLayer}
           onStopAll={handleRemoveAllLayers}
+          onRerollAll={handleRerollAll}
           canAddLayer={layers.length < MAX_LAYERS && isEngineInitialized}
           hasLayers={layers.length > 0}
           isEngineInitialized={isEngineInitialized}

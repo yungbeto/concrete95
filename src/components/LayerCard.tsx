@@ -3,7 +3,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { X, Zap, Waves, Music, Sparkles, Wind, Volume2, VolumeX, AlertTriangle, Radio } from 'lucide-react';
+import { X, Zap, Waves, Music, Sparkles, Wind, Volume2, VolumeX, AlertTriangle, Radio, Snowflake } from 'lucide-react';
 import LayerMenuBar from './LayerMenuBar';
 import { seekGrainPlayer, type AudioEngineHandle, type FreesoundLayerInfo, type GrainLayerInfo, type SynthLayerInfo, type AtmosphereLayerInfo, type DroneLayerInfo } from './AudioEngine';
 import * as Tone from 'tone';
@@ -48,6 +48,9 @@ interface LayerCardProps {
   onRenameLayer: (id: string, newTitle: string) => void;
   /** Regenerate this layer's sound (same type) keeping volume/send/position. */
   onReroll: (id: string) => void;
+  /** Grain layers: hold the current spectrum as a sustained tone. */
+  isFrozen?: boolean;
+  onFreezeToggle: (id: string) => void;
 }
 
 const layerIcons = {
@@ -59,7 +62,7 @@ const layerIcons = {
   drone: <Radio className="w-4 h-4" />,
 };
 
-const LAYER_TYPE_COLORS: Record<string, string> = {
+export const LAYER_TYPE_COLORS: Record<string, string> = {
   synth:       'bg-purple-800',
   melodic:     'bg-teal-700',
   grain:       'bg-amber-700',
@@ -397,6 +400,8 @@ function LayerCard({
   onMuteToggle,
   onRenameLayer,
   onReroll,
+  isFrozen = false,
+  onFreezeToggle,
 }: LayerCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(title);
@@ -563,6 +568,22 @@ function LayerCard({
               <span className="text-[10px] text-black w-10 text-right tabular-nums">
                 {isMuted ? 'muted' : volume <= -40 ? '−∞' : `${volume > 0 ? '+' : ''}${volume}dB`}
               </span>
+              {type === 'grain' && (
+                <button
+                  onClick={() => onFreezeToggle(id)}
+                  disabled={isLoading}
+                  className={`shrink-0 w-5 h-5 flex items-center justify-center border-2 focus:outline-none disabled:opacity-40 ${
+                    isFrozen
+                      ? 'bg-sky-200 border-t-neutral-500 border-l-neutral-500 border-r-white border-b-white'
+                      : 'bg-silver border-t-white border-l-white border-r-neutral-500 border-b-neutral-500'
+                  }`}
+                  aria-label={isFrozen ? 'Release freeze' : 'Freeze'}
+                  aria-pressed={isFrozen}
+                  title={isFrozen ? 'Release freeze' : 'Freeze: hold this moment as a sustained tone'}
+                >
+                  <Snowflake className={`w-3 h-3 ${isFrozen ? 'text-sky-700' : 'text-black'}`} />
+                </button>
+              )}
             </div>
           </>
         )}

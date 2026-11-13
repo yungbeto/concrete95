@@ -130,6 +130,35 @@ type GrainScatterState = {
   grainSize: number;
   playbackRate: number;
   rng: () => number;
+  /** Spectral freeze: scan position pinned here (seconds); null = scanning. */
+  frozenAt?: number | null;
+};
+
+/**
+ * Freeze. GrainPlayer can't hold a point: slowing its rate only lengthens
+ * grains (grain = grainSize / rate), and its clock fires the first grain at the
+ * next whole-grain tick, so rapid restart()s mostly produce nothing. While
+ * frozen the voices stop scanning and we schedule our own grains at the held
+ * point, slightly ahead on the audio clock, into each voice's output (so its
+ * volume / mute still apply). Grains overlap 50% with equal fades.
+ */
+const FREEZE_JITTER_SEC = 0.02;
+const FREEZE_MIN_HOP_SEC = 0.03; // ≤ ~33 grains/s per voice
+const FREEZE_LOOKAHEAD_SEC = 0.12;
+const FREEZE_SCHEDULER_MS = 40;
+
+const scheduleFrozenGrain = (voice: Tone.GrainPlayer, time: number, offset: number, length: number) => {
+  const buffer = voice.buffer;
+  if (!buffer?.loaded) return;
+  const source = new Tone.ToneBufferSource({
+    url: buffer,
+    fadeIn: length / 2,
+    fadeOut: length / 2,
+    playbackRate: Tone.intervalToFrequencyRatio(voice.detune / 100),
+  }).connect(voice.output as any);
+  source.onended = () => source.dispose();
+  source.start(time, offset);
+  source.stop(time + length);
 };
 
 const GRAIN_VOICE_COUNT = 3;
@@ -186,9 +215,36 @@ const startGrainScatter = (player: Tone.GrainPlayer) => {
   stopGrainScatter(player);
 
   const scatter = (player as any).grainScatter as GrainScatterState | undefined;
-  if (!scatter || scatter.drift <= 0) return;
+  if (!scatter) return;
+  const frozen = scatter.frozenAt != null;
+  if (!frozen && scatter.drift <= 0) return;
 
   let voiceIndex = 0;
+  if (frozen) {
+    const length = Math.max(FREEZE_MIN_HOP_SEC * 2, scatter.grainSize);
+    const hop = length / 2;
+    let nextTime = Tone.now() + 0.02;
+    scatter.intervalId = setInterval(() => {
+      const voices = getGrainVoices(player).filter((voice) => !voice.disposed);
+      if (!voices.length || player.disposed || scatter.frozenAt == null) {
+        stopGrainScatter(player);
+        return;
+      }
+      const now = Tone.now();
+      if (nextTime < now) nextTime = now + 0.01; // tab was throttled; don't burst-catch-up
+      while (nextTime < now + FREEZE_LOOKAHEAD_SEC) {
+        voices.forEach((voice, i) => {
+          const duration = voice.buffer?.duration ?? 0;
+          if (!duration) return;
+          const offset = wrapSeconds(scatter.frozenAt! + (scatter.rng() - 0.5) * 2 * FREEZE_JITTER_SEC, duration);
+          scheduleFrozenGrain(voice, nextTime + (i * hop) / voices.length, offset, length);
+        });
+        nextTime += hop;
+      }
+    }, FREEZE_SCHEDULER_MS);
+    return;
+  }
+
   const intervalMs = Math.max(140, Math.min(520, scatter.grainSize * 1400));
   scatter.intervalId = setInterval(() => {
     const voices = getGrainVoices(player).filter((voice) => !voice.disposed);
@@ -224,7 +280,8 @@ const startGrainScatter = (player: Tone.GrainPlayer) => {
 export const seekGrainPlayer = (player: Tone.GrainPlayer, offsetSec: number) => {
   if (player.disposed) return;
   const scatter = (player as any).grainScatter as GrainScatterState | undefined;
-  const drift = scatter?.drift ?? 0;
+  if (scatter?.frozenAt != null) scatter.frozenAt = offsetSec;
+  const drift = scatter?.frozenAt != null ? FREEZE_JITTER_SEC : scatter?.drift ?? 0;
   const rng = scatter?.rng ?? Math.random;
   const now = Tone.now();
   getGrainVoices(player).forEach((voice, i) => {
@@ -259,6 +316,8 @@ export type AudioEngineHandle = {
   stopGrainLoop: (player: Tone.GrainPlayer) => void;
   setGrainSize: (player: Tone.GrainPlayer, size: number) => void;
   setGrainDrift: (player: Tone.GrainPlayer, drift: number) => void;
+  /** Spectral freeze: hold the grain cloud on its current scan position, or release it. */
+  setGrainFreeze: (player: Tone.GrainPlayer, frozen: boolean) => void;
   startMelodicLoop: (scale?: ScaleName, discreetMode?: boolean, keyRoot?: KeyRoot) => {
     sequence: Tone.Sequence;
     info: SynthLayerInfo;
@@ -1626,6 +1685,39 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         }
       }
     },
+    setGrainFreeze: (player, frozen) => {
+      if (!player || player.disposed) return;
+      const scatter = (player as any).grainScatter as GrainScatterState | undefined;
+      if (!scatter) return;
+      const duration = player.buffer?.duration ?? 0;
+      if (!duration) return;
+      const now = Tone.now();
+      if (frozen) {
+        if (scatter.frozenAt != null) return;
+        // Current scan position of the primary voice.
+        const startedAt = (player as any).grainStartedAt as number | undefined;
+        const startOffset = ((player as any).grainStartOffset as number | undefined) ?? 0;
+        const elapsed = startedAt == null ? 0 : (now - startedAt) * scatter.playbackRate;
+        scatter.frozenAt = wrapSeconds(startOffset + elapsed, duration);
+        // Stop scanning; grains already sounding play out under the frozen ones.
+        getGrainVoices(player).forEach((voice) => { if (!voice.disposed && voice.state === 'started') voice.stop(now); });
+      } else {
+        if (scatter.frozenAt == null) return;
+        const from = scatter.frozenAt;
+        scatter.frozenAt = null;
+        // Resume scanning from the held point rather than jumping to where it would have been.
+        // Resume scanning from the held point rather than where it would have been.
+        getGrainVoices(player).forEach((voice, i) => {
+          if (voice.disposed) return;
+          const duration = voice.buffer?.duration ?? 0;
+          const offset = wrapSeconds(from + (i === 0 ? 0 : (scatter.rng() - 0.5) * 2 * scatter.drift), duration);
+          voice.start(now + 0.01, offset);
+          (voice as any).grainStartedAt = now;
+          (voice as any).grainStartOffset = offset;
+        });
+      }
+      startGrainScatter(player);
+    },
     startMelodicLoop: (scale, discreetMode = false, keyRoot = null) => {
       if (!masterBus.current || !fxBus.current) return null;
       Tone.start();
@@ -2073,7 +2165,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             }
           });
           const scatter = (node as any).grainScatter as GrainScatterState | undefined;
-          if (scatter) scatter.playbackRate = rate;
+          if (scatter) {
+            scatter.playbackRate = rate;
+          }
         } else {
           node.playbackRate = rate;
         }

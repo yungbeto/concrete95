@@ -13,6 +13,8 @@ interface InfoWindowProps {
   onMouseDown: (e: React.MouseEvent) => void;
   onTouchStart: (e: React.TouchEvent) => void;
   children: React.ReactNode;
+  /** Desktop width classes (default w-80). */
+  widthClassName?: string;
 }
 
 export default function InfoWindow({
@@ -23,6 +25,7 @@ export default function InfoWindow({
   onMouseDown,
   onTouchStart,
   children,
+  widthClassName = 'w-80',
 }: InfoWindowProps) {
   const isMobile = useIsMobile();
 
@@ -35,7 +38,7 @@ export default function InfoWindow({
       className={
         isMobile
           ? 'fixed inset-0 w-full h-dvh bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans flex flex-col'
-          : 'w-80 h-auto bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute flex flex-col'
+          : `${widthClassName} h-auto bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 p-0 font-sans absolute flex flex-col`
       }
       style={windowStyle}
       onMouseDown={isMobile ? undefined : onMouseDown}

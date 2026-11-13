@@ -10,6 +10,7 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
+  Dices,
   FolderOpen,
   LogIn,
   LogOut,
@@ -43,6 +44,8 @@ interface SoundscapeControllerProps {
   onAddAtmosphereLayer: () => void;
   onAddDroneLayer: () => void;
   onStopAll: () => void;
+  /** Re-roll every layer in place (same types, new sounds). */
+  onRerollAll?: () => void;
   canAddLayer: boolean;
   hasLayers: boolean;
   isEngineInitialized: boolean;
@@ -88,6 +91,7 @@ export default function SoundscapeController({
   onAddAtmosphereLayer,
   onAddDroneLayer,
   onStopAll,
+  onRerollAll,
   canAddLayer,
   hasLayers,
   isEngineInitialized,
@@ -185,6 +189,10 @@ export default function SoundscapeController({
   };
   const handleStopAll = () => {
     onStopAll();
+    close();
+  };
+  const handleRerollAll = () => {
+    onRerollAll?.();
     close();
   };
 
@@ -732,6 +740,17 @@ export default function SoundscapeController({
 
                 <Separator className='bg-neutral-400 my-1' />
 
+                {onRerollAll && (
+                  <Button
+                    variant='ghost'
+                    className={menuItemClass}
+                    onClick={handleRerollAll}
+                    disabled={!hasLayers}
+                    onMouseEnter={closeSubmenu}
+                  >
+                    <Dices className='h-4 w-4 shrink-0' /> Re-roll All
+                  </Button>
+                )}
                 <Button
                   variant='ghost'
                   className={menuItemClass}
