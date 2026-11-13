@@ -15,6 +15,7 @@ import AudioEngine, {
   scaleNames,
   delayTimeOptions,
   type DelayTime,
+  RETRO_SECONDS,
 } from '@/components/AudioEngine';
 import SoundscapeController from '@/components/SoundscapeController';
 import { searchFreesound, type FreesoundSound } from '@/actions/freesound';
@@ -45,6 +46,7 @@ import {
   Radio,
   MessageSquare,
   Moon,
+  History,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DesktopIcon from '../DesktopIcon';
@@ -373,7 +375,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
   const recordingSecondsRef = useRef(0);
 
   // Export dialog state
-  const [exportBlob, setExportBlob] = useState<Blob | null>(null);
+  const [exportBlobs, setExportBlobs] = useState<{ wav: Blob; compressed: Blob | null } | null>(null);
+  const [exportTitle, setExportTitle] = useState('Export Recording');
   const [exportDuration, setExportDuration] = useState(0);
 
   // ── Seed / PRNG ───────────────────────────────────────────────────────────
@@ -488,15 +491,16 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     setRecordingSeconds(0);
     recordingSecondsRef.current = 0;
     if (!audioEngineRef.current) return;
-    const blob = await audioEngineRef.current.stopRecording();
-    if (blob.size === 0) {
+    const blobs = await audioEngineRef.current.stopRecording();
+    if (blobs.wav.size <= 44) {
       toast({ variant: 'destructive', title: 'Recording was empty' });
       return;
     }
     // Pause master output while user reviews the export dialog
     audioEngineRef.current.setMasterMute(true);
     setExportDuration(duration);
-    setExportBlob(blob);
+    setExportTitle('Export Recording');
+    setExportBlobs(blobs);
     if (autoStopped) {
       toast({
         title: 'Recording stopped',
@@ -533,20 +537,45 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
 
   const handleStopRecording = () => void stopAndCollect(false);
 
-  const handleExportDownload = (name: string) => {
-    if (!exportBlob) return;
-    const ext = getRecordingExtension(exportBlob.type);
-    const url = URL.createObjectURL(exportBlob);
+  /** "Save what just happened" — export the rolling buffer without having pressed REC. */
+  const handleSaveLastSeconds = async () => {
+    const engine = audioEngineRef.current;
+    if (!engine) return;
+    const seconds = Math.floor(engine.getRetroSeconds());
+    if (seconds < 2) {
+      toast({ title: 'Nothing to save yet', description: 'The last-minute buffer fills as audio plays.' });
+      return;
+    }
+    const wav = await engine.captureLastSeconds(RETRO_SECONDS);
+    engine.setMasterMute(true);
+    setExportDuration(seconds);
+    setExportTitle(`Save Last ${seconds}s`);
+    setExportBlobs({ wav, compressed: null });
+  };
+
+  // Start the capture tap once audio is live so the rolling buffer is always
+  // filling — "save the last minute" only works if it was already listening.
+  useEffect(() => {
+    if (!isEngineInitialized) return;
+    void audioEngineRef.current?.startCapture().catch(() => {
+      // No AudioWorklet (very old browser) — recording reports its own error.
+    });
+  }, [isEngineInitialized]);
+
+  const handleExportDownload = (name: string, blob: Blob) => {
+    const ext = getRecordingExtension(blob.type);
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${name.trim() || 'concrete95'}.${ext}`;
     a.click();
-    URL.revokeObjectURL(url);
+    // Revoking synchronously can cancel the download in Safari/Firefox.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
     handleExportClose();
   };
 
   const handleExportClose = () => {
-    setExportBlob(null);
+    setExportBlobs(null);
     audioEngineRef.current?.setMasterMute(false);
   };
 
@@ -3201,6 +3230,17 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
                     : 'REC'}
                 </span>
               </button>
+              {!isRecording && (
+                <button
+                  className='flex items-center justify-center gap-1 text-xs w-6 h-6 sm:w-auto sm:h-auto sm:px-1.5 sm:py-0.5 border border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 hover:bg-neutral-200 text-black'
+                  onClick={() => void handleSaveLastSeconds()}
+                  title={`Save the last ${RETRO_SECONDS} seconds`}
+                  aria-label={`Save the last ${RETRO_SECONDS} seconds`}
+                >
+                  <History className='w-3 h-3' />
+                  <span className='hidden sm:inline'>{RETRO_SECONDS}s</span>
+                </button>
+              )}
               <div className='w-px h-4 bg-neutral-400 shrink-0' />
             </>
           )}
@@ -3458,9 +3498,11 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
         onSignedIn={() => setSessionsAuthOpen(false)}
       />
 
-      {exportBlob && (
+      {exportBlobs && (
         <RecordingExportDialog
-          blob={exportBlob}
+          title={exportTitle}
+          wav={exportBlobs.wav}
+          compressed={exportBlobs.compressed}
           durationSeconds={exportDuration}
           defaultName={`concrete95-${new Date().toISOString().slice(0, 10)}`}
           onDownload={handleExportDownload}

@@ -4,10 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { getRecordingExtension, getRecordingFormatLabel } from '@/lib/wav-encode';
 
 interface RecordingExportDialogProps {
-  blob: Blob;
+  title?: string;
+  wav: Blob;
+  /** Opus/AAC copy recorded alongside, when the browser supports MediaRecorder. */
+  compressed?: Blob | null;
   durationSeconds: number;
   defaultName: string;
-  onDownload: (name: string) => void;
+  onDownload: (name: string, blob: Blob) => void;
   onCancel: () => void;
 }
 
@@ -25,13 +28,17 @@ function formatSize(bytes: number): string {
 const btn = 'text-sm px-6 py-0.5 border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 bg-silver active:border-t-neutral-500 active:border-l-neutral-500 active:border-r-white active:border-b-white disabled:opacity-50';
 
 export default function RecordingExportDialog({
-  blob,
+  title = 'Export Recording',
+  wav,
+  compressed = null,
   durationSeconds,
   defaultName,
   onDownload,
   onCancel,
 }: RecordingExportDialogProps) {
   const [name, setName] = useState(defaultName);
+  const [format, setFormat] = useState<'wav' | 'compressed'>('wav');
+  const blob = format === 'compressed' && compressed ? compressed : wav;
   const blobUrl = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -52,7 +59,7 @@ export default function RecordingExportDialog({
 
         {/* Title bar */}
         <div className='bg-blue-800 text-white flex items-center justify-between px-2 py-1'>
-          <span className='font-bold text-sm'>Export Recording</span>
+          <span className='font-bold text-sm'>{title}</span>
           <button
             className='w-4 h-4 bg-silver text-black text-[10px] font-bold flex items-center justify-center border border-t-white border-l-white border-r-neutral-600 border-b-neutral-600 leading-none'
             onClick={onCancel}
@@ -70,6 +77,28 @@ export default function RecordingExportDialog({
             <p>File size:</p>
             <p className='pl-4'>{formatSize(blob.size)} ({formatLabel})</p>
           </div>
+          {compressed && (
+            <div role='radiogroup' aria-label='Format'>
+              <p>Format:</p>
+              {([
+                ['wav', wav, 'Lossless'],
+                ['compressed', compressed, 'Smaller'],
+              ] as const).map(([value, b, hint]) => (
+                <label key={value} className='pl-4 flex items-center gap-2 cursor-pointer'>
+                  <input
+                    type='radio'
+                    name='format'
+                    checked={format === value}
+                    onChange={() => setFormat(value)}
+                  />
+                  <span>
+                    {getRecordingFormatLabel(b.type)} — {formatSize(b.size)}{' '}
+                    <span className='text-neutral-500'>({hint})</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
 
           {/* Hairline separator */}
           <div className='border-t border-t-neutral-400 border-b border-b-white' />
@@ -95,7 +124,7 @@ export default function RecordingExportDialog({
                 type='text'
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onDownload(name); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onDownload(name, blob); }}
                 className='flex-grow text-sm px-1.5 py-0.5 outline-none bg-transparent text-black'
                 autoFocus
               />
@@ -106,7 +135,7 @@ export default function RecordingExportDialog({
           {/* Buttons */}
           <div className='flex justify-center gap-2 pt-1'>
             <button className={btn} onClick={onCancel}>Cancel</button>
-            <button className={btn} onClick={() => onDownload(name)} disabled={!name.trim()}>
+            <button className={btn} onClick={() => onDownload(name, blob)} disabled={!name.trim()}>
               Download
             </button>
           </div>

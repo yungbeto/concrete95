@@ -36,7 +36,7 @@ Findings from a full read of the audio engine, client, sessions/share, Freesound
 - [x] **P2 Always-on FX at 0:** FX-bus convolver (3.5s stereo), shimmer PitchShift, FrequencyShifter, master BitCrusher + Chorus at wet 0, per-grain BitCrusher at wet 0 (~60% of grain layers). Connect only when amount > 0 / create lazily. *Done: FX-bus branches fed only when > 0, Lo-fi/Warble spliced out of the master chain at 0 (`rewireMasterTail`), grain BitCrusher only built when it rolls on. Dry routing verified headless; the CPU win and wet-path sound still need a real-device listen.*
 - [x] **P3 Dragging re-renders everything.** Each mousemove calls `setLayers` → whole client + all LayerCards re-render, and the session is marked dirty. rAF-throttle (or transform via ref, commit on mouseup) + `React.memo(LayerCard)`; don't mark dirty until drop. *Done: rAF-coalesced drag, `React.memo(LayerCard)` with stable id-based handlers, dirty marked once on drop (and not for a plain title-bar click).*
 - [x] **P4 Freesound round-trip per layer.** A server action searches Freesound every add; the fallback reads 200 Firestore docs each call. Prefetch the list at boot and cache it client-side and server-side (TTL). *Done: client pool cache (10 min TTL, stale-while-revalidate, prefetched at engine init, avoids sounds already playing) + server-side 15 min cache of the Firestore fallback.*
-- [ ] **P5 Recording memory.** Float32 chunks: ~230MB for 10 min, doubled at merge. Convert to Int16 incrementally.
+- [x] **P5 Recording memory.** Float32 chunks: ~230MB for 10 min, doubled at merge. Convert to Int16 incrementally. *Done: capture batches convert to interleaved Int16 on arrival; the WAV Blob wraps the chunks behind a 44-byte header (no merge copy). 10 min ≈ 115 MB, down from ~460 MB at peak.*
 - [x] **P6 Visualizer:** both canvases render in fullscreen; new `Uint8Array` allocated per frame; GL resources not freed on shuffle. *Done: GL program/shader/texture/buffer freed on shuffle and unmount, wave buffer reused per frame, windowed canvas skipped while fullscreen is open.*
 - [x] **P7 Layer waveform canvas** has no width/height (blurry, no DPR handling). *Done: layer waveform canvas sized to CSS × devicePixelRatio via ResizeObserver.*
 - [x] **P8 Pad detune** uses a 50ms `setInterval` + `synth.set()` per layer. Slow it down / ramp. *Done: 250ms steps (< 0.5 cent per step).*
@@ -49,8 +49,8 @@ Findings from a full read of the audio engine, client, sessions/share, Freesound
 - [ ] **D3 Evolve mode.** Layers slowly fade in/out on their own (generative radio).
 - [ ] **D4 Media Session + Wake Lock + sleep timer** (fade out after N min). Lock-screen controls on mobile. *Sleep timer done: moon button in the taskbar (15/30/60/90 min), 60s master fade then Stop All, master restored afterwards; a tap during the fade doesn't cancel it. Still open: Media Session / lock-screen controls + background playback need output routed through an `<audio>` element (MediaStreamDestination), which risks double output/latency, so test on real iOS/Android first. Wake Lock not added (sleep use wants the screen off).*
 - [ ] **D5 Session morph.** Crossfade from one saved session to another.
-- [ ] **D6 Compressed export.** Opus/WebM via MediaRecorder alongside WAV.
-- [ ] **D7 Retroactive record.** "Save the last 60s" ring buffer.
+- [x] **D6 Compressed export.** Opus/WebM via MediaRecorder alongside WAV. *Done: MediaRecorder (Opus/WebM, Ogg, or AAC on Safari) runs alongside the WAV; export dialog offers both with sizes.*
+- [x] **D7 Retroactive record.** "Save the last 60s" ring buffer. *Done: the capture tap starts with the engine and keeps a rolling 60s Int16 buffer (~11 MB); "60s" button next to REC exports it.*
 - [x] **D8 Sample credits.** Show Freesound name/author + link on sample/grain layers. *Done: Info menu shows "by <uploader> · CC0 via Freesound" linking to their profile; saved in sessions as `freesoundUser`.*
 
 ---

@@ -4,7 +4,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import * as Tone from 'tone';
 import { type RNG } from '@/lib/prng';
-import { encodeWavBlob, mergeFloat32Chunks } from '@/lib/wav-encode';
+import { encodeWavFromInt16Chunks, interleaveToInt16, pickCompressedRecordingMime } from '@/lib/wav-encode';
 import { loadDecodedAudioBuffer } from '@/lib/load-audio-buffer';
 
 export type SynthLayerInfo = {
@@ -92,6 +92,8 @@ const BYPASS_MASTER_COMP_AND_EQ = false;
 const BUFFER_LOAD_TIMEOUT_MS = 45000;
 
 const PCM_CAPTURE_WORKLET_URL = '/worklets/pcm-capture-processor.js';
+/** Length of the always-on "save what just happened" buffer. ~11 MB at 48 kHz. */
+export const RETRO_SECONDS = 60;
 
 /** DOMException from standardized-audio-context is often `NotSupportedError` with an empty message. */
 const describeCaughtError = (err: unknown): string => {
@@ -297,8 +299,15 @@ export type AudioEngineHandle = {
   getMasterLevel: () => number;
   getLissajousData: () => { left: Float32Array; right: Float32Array } | null;
   getVisualizerData: () => { frequency: Uint8Array; waveform: Float32Array } | null;
+  /** Start the always-on capture tap (feeds the rolling buffer). Idempotent. */
+  startCapture: () => Promise<void>;
+  /** Seconds currently held in the rolling buffer (≤ RETRO_SECONDS). */
+  getRetroSeconds: () => number;
+  /** WAV of the most recent `seconds` of master output. */
+  captureLastSeconds: (seconds?: number) => Promise<Blob>;
   startRecording: () => Promise<void>;
-  stopRecording: () => Promise<Blob>;
+  /** WAV always; `compressed` (Opus/AAC) when MediaRecorder supports it. */
+  stopRecording: () => Promise<{ wav: Blob; compressed: Blob | null }>;
   setMasterMute: (muted: boolean) => void;
   setRng: (rng: RNG | null) => void;
   /** Short sine into the real master bus (same path as layers). For debugging only. */
@@ -318,11 +327,19 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
   /** Debug taps after each master stage — created lazily by getMasterStageLevels. */
   const masterStageTaps = useRef<{ owner: Tone.Gain; taps: { stage: string; analyser: AnalyserNode; buf: Float32Array }[] } | null>(null);
   /** Master tap for PCM capture via AudioWorklet → WAV export. */
+  /**
+   * Always-on once started: feeds the rolling "last N seconds" buffer and, while
+   * recording, the recording itself. Chunks are interleaved Int16 (half the
+   * memory of Float32, and the WAV Blob references them without a copy).
+   */
   const pcmCaptureNode = useRef<AudioWorkletNode | null>(null);
-  const pcmLeftChunks = useRef<Float32Array[]>([]);
-  const pcmRightChunks = useRef<Float32Array[]>([]);
+  const pcmCaptureStarting = useRef<Promise<AudioWorkletNode> | null>(null);
   const pcmSampleRate = useRef(44100);
   const pcmWorkletLoaded = useRef(false);
+  const recordChunks = useRef<Int16Array[] | null>(null); // null = not recording
+  const retroChunks = useRef<{ chunks: Int16Array[]; frames: number }>({ chunks: [], frames: 0 });
+  /** Optional compressed recording alongside the WAV (MediaRecorder on the master). */
+  const compressedRec = useRef<{ recorder: MediaRecorder; dest: MediaStreamAudioDestinationNode; parts: Blob[] } | null>(null);
   const lissajousSplitter = useRef<ChannelSplitterNode | null>(null);
   const lissajousAnalyserL = useRef<AnalyserNode | null>(null);
   const lissajousAnalyserR = useRef<AnalyserNode | null>(null);
@@ -642,14 +659,17 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
                 /* ignore */
               }
               try {
+                pcmCaptureNode.current.port.onmessage = null;
                 pcmCaptureNode.current.disconnect();
               } catch {
                 /* ignore */
               }
             }
             pcmCaptureNode.current = null;
-            pcmLeftChunks.current = [];
-            pcmRightChunks.current = [];
+            recordChunks.current = null;
+            retroChunks.current = { chunks: [], frames: 0 };
+            if (compressedRec.current?.recorder.state === 'recording') compressedRec.current.recorder.stop();
+            compressedRec.current = null;
             masterBus.current?.dispose();
             masterGain.current?.dispose();
             masterCompressor.current?.dispose();
@@ -686,6 +706,71 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         }
     };
   }, []);
+
+  /** Route a capture batch: always into the rolling buffer, plus the recording if active. */
+  const onCaptureBatch = (left: Float32Array, right: Float32Array) => {
+    const block = interleaveToInt16(left, right);
+    recordChunks.current?.push(block);
+    const retro = retroChunks.current;
+    retro.chunks.push(block);
+    retro.frames += block.length / 2;
+    const maxFrames = RETRO_SECONDS * pcmSampleRate.current;
+    while (retro.chunks.length > 1 && retro.frames - retro.chunks[0].length / 2 >= maxFrames) {
+      retro.frames -= retro.chunks.shift()!.length / 2;
+    }
+  };
+
+  /** Load the worklet and connect the capture tap once; later calls reuse it. */
+  const ensureCapture = async (): Promise<AudioWorkletNode> => {
+    if (pcmCaptureNode.current) return pcmCaptureNode.current;
+    if (pcmCaptureStarting.current) return pcmCaptureStarting.current;
+    const limiter = masterLimiter.current;
+    if (!limiter) throw new Error('Audio engine not ready.');
+    const toneCtx = Tone.getContext();
+    // Tone.Context.addAudioWorkletModule only loads the first URL (Tone.BitCrusher
+    // already claimed it at init). Load ours on the raw context instead.
+    // https://github.com/Tonejs/Tone.js/issues/1326
+    const rawCtx = toneCtx.rawContext as AudioContext;
+    if (!rawCtx.audioWorklet) {
+      throw new Error('Recording needs AudioWorklet support — not available in this browser.');
+    }
+    pcmCaptureStarting.current = (async () => {
+      if (!pcmWorkletLoaded.current) {
+        await rawCtx.audioWorklet.addModule(PCM_CAPTURE_WORKLET_URL);
+        pcmWorkletLoaded.current = true;
+      }
+      pcmSampleRate.current = toneCtx.sampleRate;
+      const node = toneCtx.createAudioWorkletNode('pcm-capture-processor', {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [2],
+      });
+      node.port.onmessage = (e: MessageEvent) => {
+        const data = e.data as { left?: Float32Array; right?: Float32Array; flushed?: boolean };
+        if (data.left && data.right) onCaptureBatch(data.left, data.right);
+        if (data.flushed) flushWaiters.current.splice(0).forEach((fn) => fn());
+      };
+      limiter.connect(node as any);
+      // Worklet outputs silence; connecting to the destination keeps it pulled.
+      Tone.connect(node, Tone.getDestination());
+      pcmCaptureNode.current = node;
+      return node;
+    })();
+    try {
+      return await pcmCaptureStarting.current;
+    } finally {
+      pcmCaptureStarting.current = null;
+    }
+  };
+
+  const flushWaiters = useRef<(() => void)[]>([]);
+  /** Ask the worklet for its partial batch; resolves once it has been delivered. */
+  const flushCapture = (node: AudioWorkletNode) =>
+    new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 500); // never hang the UI on a stalled context
+      flushWaiters.current.push(() => { clearTimeout(timer); resolve(); });
+      node.port.postMessage('flush');
+    });
 
   useImperativeHandle(ref, () => ({
     initialize: () => {
@@ -747,105 +832,81 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       vizAnalyser.current.getFloatTimeDomainData(vizWaveformBuffer.current);
       return { frequency: vizFrequencyBuffer.current, waveform: vizWaveformBuffer.current };
     },
+    startCapture: async () => {
+      await ensureCapture();
+    },
+    getRetroSeconds: () => retroChunks.current.frames / pcmSampleRate.current,
+    captureLastSeconds: async (seconds = RETRO_SECONDS) => {
+      const node = pcmCaptureNode.current;
+      if (!node) return new Blob([], { type: 'audio/wav' });
+      await flushCapture(node);
+      // Take the newest chunks covering `seconds`; chunks are 8192-frame batches.
+      const wanted = Math.round(seconds * pcmSampleRate.current) * 2;
+      const picked: Int16Array[] = [];
+      let have = 0;
+      const all = retroChunks.current.chunks;
+      for (let i = all.length - 1; i >= 0 && have < wanted; i--) {
+        const c = all[i];
+        const need = wanted - have;
+        picked.unshift(c.length > need ? c.subarray(c.length - need) : c);
+        have += Math.min(c.length, need);
+      }
+      return encodeWavFromInt16Chunks(picked, pcmSampleRate.current);
+    },
     startRecording: async () => {
       if (!masterLimiter.current) return;
-      if (pcmCaptureNode.current) {
+      if (recordChunks.current) {
         throw new Error('Recording is already in progress.');
       }
-
-      await Tone.start();
-      const toneCtx = Tone.getContext();
-      // Tone.Context.addAudioWorkletModule only loads the first URL (Tone.BitCrusher
-      // already claimed it at init). Load ours on the raw context instead.
-      // https://github.com/Tonejs/Tone.js/issues/1326
-      const rawCtx = toneCtx.rawContext as AudioContext;
-
-      if (!rawCtx.audioWorklet) {
-        throw new Error('Recording needs AudioWorklet support — not available in this browser.');
-      }
-
       try {
-        if (!pcmWorkletLoaded.current) {
-          await rawCtx.audioWorklet.addModule(PCM_CAPTURE_WORKLET_URL);
-          pcmWorkletLoaded.current = true;
-        }
-
-        pcmLeftChunks.current = [];
-        pcmRightChunks.current = [];
-        pcmSampleRate.current = toneCtx.sampleRate;
-
-        const node = toneCtx.createAudioWorkletNode('pcm-capture-processor', {
-          numberOfInputs: 1,
-          numberOfOutputs: 1,
-          outputChannelCount: [2],
-        });
-
-        node.port.onmessage = (e: MessageEvent) => {
-          const data = e.data as { left?: Float32Array; right?: Float32Array };
-          if (data.left && data.right) {
-            pcmLeftChunks.current.push(data.left);
-            pcmRightChunks.current.push(data.right);
-          }
-        };
-
-        masterLimiter.current.connect(node as any);
-        Tone.connect(node, Tone.getDestination());
-        pcmCaptureNode.current = node;
+        await ensureCapture();
       } catch (err) {
         throw new Error(`Recording unavailable: ${describeCaughtError(err)}`);
+      }
+      recordChunks.current = [];
+
+      // Compressed copy via MediaRecorder — best effort; WAV is the source of truth.
+      const mime = pickCompressedRecordingMime();
+      if (mime) {
+        try {
+          const raw = Tone.getContext().rawContext as AudioContext;
+          const dest = raw.createMediaStreamDestination();
+          masterLimiter.current.connect(dest as any);
+          const recorder = new MediaRecorder(dest.stream, { mimeType: mime, audioBitsPerSecond: 192_000 });
+          const parts: Blob[] = [];
+          recorder.ondataavailable = (e) => { if (e.data.size) parts.push(e.data); };
+          recorder.start(1000);
+          compressedRec.current = { recorder, dest, parts };
+        } catch {
+          compressedRec.current = null;
+        }
       }
     },
     stopRecording: async () => {
       const node = pcmCaptureNode.current;
-      const limiter = masterLimiter.current;
-
-      if (!node || !limiter) {
-        pcmCaptureNode.current = null;
-        pcmLeftChunks.current = [];
-        pcmRightChunks.current = [];
-        return new Blob([], { type: 'audio/wav' });
+      const chunks = recordChunks.current;
+      if (!node || !chunks) {
+        recordChunks.current = null;
+        return { wav: new Blob([], { type: 'audio/wav' }), compressed: null };
       }
+      await flushCapture(node);
+      recordChunks.current = null;
+      const wav = chunks.length
+        ? encodeWavFromInt16Chunks(chunks, pcmSampleRate.current)
+        : new Blob([], { type: 'audio/wav' });
 
-      await new Promise<void>((resolve) => {
-        const handler = (e: MessageEvent) => {
-          const data = e.data as {
-            left?: Float32Array;
-            right?: Float32Array;
-            flushed?: boolean;
-          };
-          if (data.left && data.right) {
-            pcmLeftChunks.current.push(data.left);
-            pcmRightChunks.current.push(data.right);
-          }
-          if (data.flushed) {
-            node.port.removeEventListener('message', handler);
-            resolve();
-          }
-        };
-        node.port.addEventListener('message', handler);
-        node.port.postMessage('flush');
-      });
-
-      try {
-        limiter.disconnect(node as any);
-      } catch {
-        /* ignore */
+      let compressed: Blob | null = null;
+      const rec = compressedRec.current;
+      compressedRec.current = null;
+      if (rec) {
+        compressed = await new Promise<Blob | null>((resolve) => {
+          rec.recorder.onstop = () =>
+            resolve(rec.parts.length ? new Blob(rec.parts, { type: rec.recorder.mimeType }) : null);
+          try { rec.recorder.stop(); } catch { resolve(null); }
+        });
+        try { masterLimiter.current?.disconnect(rec.dest as any); } catch { /* ignore */ }
       }
-      try {
-        node.disconnect();
-      } catch {
-        /* ignore */
-      }
-      node.port.onmessage = null;
-      pcmCaptureNode.current = null;
-
-      const left = mergeFloat32Chunks(pcmLeftChunks.current);
-      const right = mergeFloat32Chunks(pcmRightChunks.current);
-      pcmLeftChunks.current = [];
-      pcmRightChunks.current = [];
-
-      if (left.length === 0) return new Blob([], { type: 'audio/wav' });
-      return encodeWavBlob(left, right, pcmSampleRate.current);
+      return { wav, compressed };
     },
     setMasterMute: (muted: boolean) => {
       Tone.getDestination().volume.value = muted ? -Infinity : 0;

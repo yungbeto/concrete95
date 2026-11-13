@@ -77,3 +77,52 @@ export function mergeFloat32Chunks(chunks: Float32Array[]): Float32Array {
   }
   return out;
 }
+
+/** Convert a stereo Float32 block (-1..1) to interleaved 16-bit PCM. */
+export function interleaveToInt16(left: Float32Array, right: Float32Array): Int16Array {
+  const n = Math.min(left.length, right.length);
+  const out = new Int16Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    const l = Math.max(-1, Math.min(1, left[i]));
+    const r = Math.max(-1, Math.min(1, right[i]));
+    out[i * 2] = l < 0 ? l * 0x8000 : l * 0x7fff;
+    out[i * 2 + 1] = r < 0 ? r * 0x8000 : r * 0x7fff;
+  }
+  return out;
+}
+
+/**
+ * Build a 16-bit stereo WAV from interleaved Int16 chunks without copying the
+ * audio: the Blob references the chunks directly behind a 44-byte header.
+ */
+export function encodeWavFromInt16Chunks(chunks: Int16Array[], sampleRate: number): Blob {
+  const numChannels = 2;
+  const bytesPerSample = 2;
+  const dataSize = chunks.reduce((sum, c) => sum + c.byteLength, 0);
+  const header = new ArrayBuffer(44);
+  const view = new DataView(header);
+  const writeString = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+  view.setUint16(32, numChannels * bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataSize, true);
+  return new Blob([header, ...chunks], { type: 'audio/wav' });
+}
+
+/** Best compressed format MediaRecorder supports here, or null. */
+export function pickCompressedRecordingMime(): string | null {
+  if (typeof MediaRecorder === 'undefined') return null;
+  const candidates = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4;codecs=mp4a.40.2', 'audio/mp4'];
+  return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? null;
+}
