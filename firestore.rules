@@ -22,7 +22,11 @@ service cloud.firestore {
         && request.resource.data.message is string
         && request.resource.data.message.size() > 0
         && request.resource.data.message.size() <= 500
-        && request.resource.data.createdAt is string;
+        && request.resource.data.createdAt is string
+        && request.resource.data.createdAt.size() <= 40
+        // Trusted time; createdAt is client-supplied (see src/lib/guestbook.ts).
+        && request.resource.data.serverCreatedAt == request.time
+        && request.resource.data.keys().hasOnly(['name', 'message', 'createdAt', 'serverCreatedAt']);
       allow update, delete: if false;
     }
     // Cached Freesound results, refreshed offline by scripts/refresh-freesound-pool.mjs

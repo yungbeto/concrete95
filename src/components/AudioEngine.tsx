@@ -309,6 +309,15 @@ export type AudioEngineHandle = {
   /** WAV always; `compressed` (Opus/AAC) when MediaRecorder supports it. */
   stopRecording: () => Promise<{ wav: Blob; compressed: Blob | null }>;
   setMasterMute: (muted: boolean) => void;
+  /**
+   * Lock-screen / background playback (beta): route the final output through an
+   * <audio> element (MediaStreamDestination) instead of straight to the speakers,
+   * so mobile OSes treat the page as a media player. Resolves false if the
+   * element refused to play (direct output is left in place).
+   */
+  setBackgroundPlayback: (on: boolean) => Promise<boolean>;
+  /** Pause/resume everything (Media Session play/pause). */
+  setOutputPaused: (paused: boolean) => Promise<void>;
   setRng: (rng: RNG | null) => void;
   /** Short sine into the real master bus (same path as layers). For debugging only. */
   debugPlayThroughMasterChain: () => void;
@@ -339,6 +348,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
   const recordChunks = useRef<Int16Array[] | null>(null); // null = not recording
   const retroChunks = useRef<{ chunks: Int16Array[]; frames: number }>({ chunks: [], frames: 0 });
   /** Optional compressed recording alongside the WAV (MediaRecorder on the master). */
+  const backgroundOut = useRef<{ dest: MediaStreamAudioDestinationNode; audio: HTMLAudioElement } | null>(null);
+  /** In-flight enable — concurrent gestures must not build two elements (double output). */
+  const backgroundStarting = useRef<Promise<boolean> | null>(null);
   const compressedRec = useRef<{ recorder: MediaRecorder; dest: MediaStreamAudioDestinationNode; parts: Blob[] } | null>(null);
   const lissajousSplitter = useRef<ChannelSplitterNode | null>(null);
   const lissajousAnalyserL = useRef<AnalyserNode | null>(null);
@@ -670,6 +682,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             retroChunks.current = { chunks: [], frames: 0 };
             if (compressedRec.current?.recorder.state === 'recording') compressedRec.current.recorder.stop();
             compressedRec.current = null;
+            teardownBackgroundOut();
             masterBus.current?.dispose();
             masterGain.current?.dispose();
             masterCompressor.current?.dispose();
@@ -761,6 +774,43 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     } finally {
       pcmCaptureStarting.current = null;
     }
+  };
+
+  /** Destination's final Gain (post master volume / mute / sleep fade). */
+  const destinationOut = () => (Tone.getDestination() as unknown as { output: Tone.Gain }).output;
+
+  const teardownBackgroundOut = () => {
+    const bg = backgroundOut.current;
+    if (!bg) return;
+    backgroundOut.current = null;
+    const raw = Tone.getContext().rawContext as AudioContext;
+    const out = destinationOut();
+    // Restore the direct path first so there's no gap.
+    try { out.connect(raw.destination as any); } catch { /* ignore */ }
+    try { out.disconnect(bg.dest as any); } catch { /* ignore */ }
+    bg.audio.pause();
+    bg.audio.srcObject = null;
+  };
+
+  const startBackgroundOut = async (): Promise<boolean> => {
+    const raw = Tone.getContext().rawContext as AudioContext;
+    if (typeof raw.createMediaStreamDestination !== 'function') return false;
+    const dest = raw.createMediaStreamDestination();
+    const audio = new Audio();
+    audio.setAttribute('playsinline', '');
+    audio.srcObject = dest.stream;
+    const out = destinationOut();
+    out.connect(dest as any);
+    try {
+      await audio.play();
+    } catch {
+      try { out.disconnect(dest as any); } catch { /* ignore */ }
+      return false;
+    }
+    // Element is playing — now drop the direct path so nothing plays twice.
+    try { out.disconnect(raw.destination as any); } catch { /* ignore */ }
+    backgroundOut.current = { dest, audio };
+    return true;
   };
 
   const flushWaiters = useRef<(() => void)[]>([]);
@@ -910,6 +960,35 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     },
     setMasterMute: (muted: boolean) => {
       Tone.getDestination().volume.value = muted ? -Infinity : 0;
+    },
+    setBackgroundPlayback: async (on: boolean) => {
+      if (!on) {
+        await backgroundStarting.current;
+        teardownBackgroundOut();
+        return true;
+      }
+      if (backgroundStarting.current) return backgroundStarting.current;
+      if (backgroundOut.current) {
+        await backgroundOut.current.audio.play().catch(() => undefined);
+        return true;
+      }
+      backgroundStarting.current = startBackgroundOut();
+      try {
+        return await backgroundStarting.current;
+      } finally {
+        backgroundStarting.current = null;
+      }
+    },
+    setOutputPaused: async (paused: boolean) => {
+      const raw = Tone.getContext().rawContext as AudioContext;
+      const audio = backgroundOut.current?.audio;
+      if (paused) {
+        audio?.pause();
+        await raw.suspend().catch(() => undefined);
+      } else {
+        await raw.resume().catch(() => undefined);
+        await audio?.play().catch(() => undefined);
+      }
     },
     setRng: (rng) => {
       rngRef.current = rng;

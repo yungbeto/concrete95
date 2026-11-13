@@ -33,7 +33,6 @@ function migrateSession(raw: Record<string, unknown>): SavedSession {
 
   return s as unknown as SavedSession;
 }
-const STORAGE_KEY = 'concrete95_sessions';
 
 // ─── Serialisable layer types ─────────────────────────────────────────────────
 
@@ -128,52 +127,6 @@ export type SavedSession = {
   settings: SavedGlobalSettings;
   layers: SavedLayer[];
 };
-
-// ─── localStorage CRUD ────────────────────────────────────────────────────────
-
-function readAll(): SavedSession[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeAll(sessions: SavedSession[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
-}
-
-/** Returns all sessions sorted newest-first. */
-export function listSessions(): SavedSession[] {
-  return readAll().sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
-}
-
-/** Creates or overwrites by session.id. */
-export function saveSession(session: SavedSession): void {
-  const all = readAll();
-  const idx = all.findIndex((s) => s.id === session.id);
-  if (idx >= 0) {
-    all[idx] = session;
-  } else {
-    all.push(session);
-  }
-  writeAll(all);
-}
-
-/** Returns null if not found. */
-export function getSession(id: string): SavedSession | null {
-  return readAll().find((s) => s.id === id) ?? null;
-}
-
-export function deleteSession(id: string): void {
-  writeAll(readAll().filter((s) => s.id !== id));
-}
 
 // ─── Build a session from runtime state ───────────────────────────────────────
 
@@ -297,47 +250,6 @@ export function decodeSession(encoded: string): SavedSession | null {
   } catch {
     return null;
   }
-}
-
-// ─── Export / import ──────────────────────────────────────────────────────────
-
-/** Triggers a .json download in the browser. */
-export function exportSessionFile(session: SavedSession): void {
-  const json = JSON.stringify(session, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${session.name.replace(/[^a-z0-9]/gi, '_')}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-/** Parses and validates a JSON string. Throws a descriptive error on failure. */
-export function importSessionFromString(jsonString: string): SavedSession {
-  let data: unknown;
-  try {
-    data = JSON.parse(jsonString);
-  } catch {
-    throw new Error('Invalid JSON — could not parse file.');
-  }
-
-  if (typeof data !== 'object' || data === null) {
-    throw new Error('Invalid session file format.');
-  }
-
-  const session = data as Record<string, unknown>;
-
-  if (typeof session.id !== 'string' || typeof session.name !== 'string') {
-    throw new Error('Session file is missing required fields (id, name).');
-  }
-  if (!Array.isArray(session.layers)) {
-    throw new Error('Session file has no layers array.');
-  }
-
-  const migrated = migrateSession(session);
-  // Assign a fresh id to avoid collisions with existing local sessions
-  return { ...migrated, id: crypto.randomUUID() };
 }
 
 // ─── Firestore public sharing ─────────────────────────────────────────────────

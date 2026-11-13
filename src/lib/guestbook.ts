@@ -6,7 +6,9 @@ import {
   orderBy,
   query,
   limit,
+  serverTimestamp,
   setDoc,
+  type Timestamp,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '@/lib/firebase';
 
@@ -24,6 +26,24 @@ const MAX_NAME = 50;
 const MAX_MESSAGE = 500;
 const MAX_ENTRIES = 200;
 export const GUESTBOOK_RECENT_MS = 3 * 24 * 60 * 60 * 1000;
+/**
+ * `createdAt` is written by the client (local entries migrate with their
+ * original, older timestamps), so it can't be trusted on its own. Every new
+ * doc also carries `serverCreatedAt` (rules enforce == request.time); a
+ * createdAt further ahead of it than normal clock skew is clamped, so an entry
+ * can't be future-dated to stay pinned at the bottom of the chat.
+ */
+const MAX_CLOCK_SKEW_MS = 10 * 60 * 1000;
+
+function trustedCreatedAt(createdAt: string, serverCreatedAt?: Timestamp): string {
+  if (!serverCreatedAt || typeof serverCreatedAt.toMillis !== 'function') return createdAt;
+  const serverMs = serverCreatedAt.toMillis();
+  const clientMs = new Date(createdAt).getTime();
+  if (!Number.isFinite(clientMs) || clientMs > serverMs + MAX_CLOCK_SKEW_MS) {
+    return new Date(serverMs).toISOString();
+  }
+  return createdAt;
+}
 
 function isRecentEntry(createdAt: string, withinMs = GUESTBOOK_RECENT_MS): boolean {
   const ts = new Date(createdAt).getTime();
@@ -154,6 +174,7 @@ async function migrateLocalEntries(
         name: entry.name,
         message: entry.message,
         createdAt: entry.createdAt,
+        serverCreatedAt: serverTimestamp(),
       });
     } catch {
       // Rules, network, or duplicate create — keep the local copy either way.
@@ -172,10 +193,17 @@ export async function listGuestbookEntries(): Promise<GuestbookEntry[]> {
       );
       const snap = await getDocs(q);
       const remote = snap.docs
-        .map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<GuestbookEntry, 'id'>),
-        }))
+        .map((d) => {
+          const data = d.data() as Omit<GuestbookEntry, 'id'> & {
+            serverCreatedAt?: Timestamp;
+          };
+          return {
+            id: d.id,
+            name: data.name,
+            message: data.message,
+            createdAt: trustedCreatedAt(data.createdAt, data.serverCreatedAt),
+          };
+        })
         .reverse();
       const merged = mergeGuestbookEntries(remote, local);
       writeLocalEntries(merged);
@@ -210,6 +238,7 @@ export async function addGuestbookEntry(
         name: entry.name,
         message: entry.message,
         createdAt: entry.createdAt,
+        serverCreatedAt: serverTimestamp(),
       });
       const saved = { ...entry, id: ref.id };
       writeLocalEntries(mergeGuestbookEntries(readLocalEntries(), [saved]));

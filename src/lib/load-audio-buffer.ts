@@ -1,54 +1,27 @@
 /**
  * Load + decode a Freesound preview without Tone's shared download list.
  *
- * cdn.freesound.org is blocked from the server's egress IP (same edge
- * block as the search API — see project notes), so the same-origin proxy
- * now fails fast every time in prod. The user's own browser isn't
- * affected, so try the direct CDN URL first with a generous timeout
- * (Freesound's CDN sits around 70KB/s) and keep the proxy only as a
- * short-timeout backup (useful locally, or if the block ever lifts).
+ * Fetched directly from cdn.freesound.org by the user's browser. (A same-origin
+ * proxy used to back this up, but the server's egress IP is blocked by
+ * Freesound, so it only ever failed in prod and was removed.) Generous timeout:
+ * Freesound's CDN sits around 70KB/s.
  */
 
-export const DIRECT_CANDIDATE_TIMEOUT_MS = 20_000;
-export const PROXY_CANDIDATE_TIMEOUT_MS = 4_000;
-
-export function proxyAudioUrl(url: string): string {
-  try {
-    const { pathname } = new URL(url);
-    return `/api/audio-proxy${pathname}`;
-  } catch {
-    return url;
-  }
-}
+export const CANDIDATE_TIMEOUT_MS = 20_000;
 
 /** Rewrite Freesound `-hq.` preview URLs to `-lq.` (no-op if already LQ). */
 export function lowQualityPreviewUrl(url: string): string {
   return url.replace('-hq.', '-lq.');
 }
 
-function isProxyUrl(url: string): boolean {
-  return url.includes('/api/audio-proxy');
-}
-
 export function audioLoadCandidates(previewUrl: string): string[] {
   const lq = lowQualityPreviewUrl(previewUrl);
-  const ordered = lq === previewUrl ? [lq] : [lq, previewUrl];
-  return [
-    ...new Set(
-      ordered.flatMap((url) => {
-        const proxied = proxyAudioUrl(url);
-        return proxied === url ? [url] : [url, proxied];
-      }),
-    ),
-  ];
+  return lq === previewUrl ? [lq] : [lq, previewUrl];
 }
 
 async function fetchAudioArrayBuffer(url: string): Promise<ArrayBuffer> {
-  const timeoutMs = isProxyUrl(url)
-    ? PROXY_CANDIDATE_TIMEOUT_MS
-    : DIRECT_CANDIDATE_TIMEOUT_MS;
   const res = await fetch(url, {
-    signal: AbortSignal.timeout(timeoutMs),
+    signal: AbortSignal.timeout(CANDIDATE_TIMEOUT_MS),
   });
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);

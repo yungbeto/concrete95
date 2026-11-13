@@ -133,6 +133,7 @@ type DragState = {
 const MAX_LAYERS = 8;
 /** Fade applied when a layer is removed / Stop All, before the undo window. */
 const REMOVE_FADE_SECONDS = 0.4;
+const BACKGROUND_PLAYBACK_KEY = 'concrete95:backgroundPlayback';
 /** How long a fetched Freesound list is reused before a background refresh. */
 const SOUND_POOL_TTL_MS = 10 * 60 * 1000;
 /** Sleep timer: master fades to silence over this final stretch, then all layers stop. */
@@ -365,6 +366,10 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
   const [discreetMode, setDiscreetMode] = useState(true);
   /** Evolve: the soundscape slowly adds, re-rolls and retires layers on its own. */
   const [evolveEnabled, setEvolveEnabled] = useState(false);
+  /** Lock-screen playback (beta): output via an <audio> element + Media Session. */
+  const [backgroundPlayback, setBackgroundPlayback] = useState(false);
+  const backgroundPlaybackRef = useRef(false);
+  backgroundPlaybackRef.current = backgroundPlayback;
   const [driftEnabled, setDriftEnabled] = useState(false);
   const [driftPeriod, setDriftPeriod] = useState(10);
   const [globalBPM, setGlobalBPM] = useState(120);
@@ -707,6 +712,10 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     // Assigning .value cancels scheduled ramps — don't undo a sleep-timer fade
     // just because the user tapped the screen or switched back to the tab.
     if (!sleepFadingRef.current) Tone.getDestination().volume.value = 0;
+    // Media elements also need a gesture to start; re-assert on each one (idempotent).
+    if (backgroundPlaybackRef.current) {
+      void audioEngineRef.current?.setBackgroundPlayback(true);
+    }
     audioDebugLog('ensureAudioUnlocked', {
       state: raw.state,
       destinationDb: Tone.getDestination().volume.value,
@@ -741,6 +750,71 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [ensureAudioUnlocked]);
+
+  // ── Lock-screen playback (beta) ──────────────────────────────────────────
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(BACKGROUND_PLAYBACK_KEY) === '1') setBackgroundPlayback(true);
+    } catch {
+      /* storage unavailable */
+    }
+  }, []);
+
+  const toggleBackgroundPlayback = useCallback(async () => {
+    const next = !backgroundPlaybackRef.current;
+    if (next) await ensureAudioUnlocked();
+    const ok = (await audioEngineRef.current?.setBackgroundPlayback(next)) ?? false;
+    if (next && !ok) {
+      toast({
+        title: 'Lock-screen playback unavailable',
+        description: 'This browser refused to play through a media element.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setBackgroundPlayback(next);
+    try {
+      localStorage.setItem(BACKGROUND_PLAYBACK_KEY, next ? '1' : '0');
+    } catch {
+      /* storage unavailable */
+    }
+  }, [ensureAudioUnlocked, toast]);
+
+  useEffect(() => {
+    if (!backgroundPlayback || !('mediaSession' in navigator)) return;
+    const ms = navigator.mediaSession;
+    const setPaused = async (paused: boolean) => {
+      if (!paused) await ensureAudioUnlocked();
+      await audioEngineRef.current?.setOutputPaused(paused);
+      ms.playbackState = paused ? 'paused' : 'playing';
+    };
+    const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
+      ['play', () => void setPaused(false)],
+      ['pause', () => void setPaused(true)],
+      ['stop', () => void setPaused(true)],
+    ];
+    for (const [action, handler] of handlers) {
+      try { ms.setActionHandler(action, handler); } catch { /* unsupported action */ }
+    }
+    ms.playbackState = 'playing';
+    return () => {
+      for (const [action] of handlers) {
+        try { ms.setActionHandler(action, null); } catch { /* ignore */ }
+      }
+      ms.metadata = null;
+      ms.playbackState = 'none';
+    };
+  }, [backgroundPlayback, ensureAudioUnlocked]);
+
+  useEffect(() => {
+    if (!backgroundPlayback || !('mediaSession' in navigator)) return;
+    const titles = layers.map((l) => l.title).slice(0, 3).join(' · ');
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: titles || 'Concrete 95',
+      artist: `Concrete 95 · ${layers.length} layer${layers.length === 1 ? '' : 's'}`,
+      artwork: [{ src: '/concreteicon.png', type: 'image/png' }],
+    });
+  }, [backgroundPlayback, layers]);
 
   const [windows, setWindows] = useState<WindowState[]>([
     {
@@ -1740,6 +1814,32 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             layers. Good for long listening — leave it running.
           </FeatureInfo>
         </Fieldset>
+
+        <Fieldset label='Lock screen (beta)'>
+          <button
+            role='checkbox'
+            aria-checked={backgroundPlayback}
+            onClick={() => void toggleBackgroundPlayback()}
+            className='flex items-center gap-2 cursor-pointer select-none'
+          >
+            <span className='w-3.5 h-3.5 flex-shrink-0 border-2 border-t-neutral-500 border-l-neutral-500 border-r-white border-b-white bg-white flex items-center justify-center'>
+              {backgroundPlayback && (
+                <span
+                  className='text-black leading-none'
+                  style={{ fontSize: '9px', marginTop: '-1px' }}
+                >
+                  ✓
+                </span>
+              )}
+            </span>
+            <span className='text-xs'>Keep playing with the screen locked</span>
+          </button>
+          <FeatureInfo>
+            Plays through a media element so phones show lock-screen
+            play/pause controls and keep the sound going in the background.
+            Adds a little output latency. Turn off if audio glitches.
+          </FeatureInfo>
+        </Fieldset>
       </div>
     ),
     [
@@ -1748,6 +1848,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
       layers.length,
       discreetMode,
       evolveEnabled,
+      backgroundPlayback,
+      toggleBackgroundPlayback,
       driftEnabled,
       driftPeriod,
       globalBPM,
