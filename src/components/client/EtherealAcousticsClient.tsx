@@ -145,6 +145,10 @@ const EVOLVE_MIN_LAYERS = 2;
 const EVOLVE_MAX_LAYERS = 6;
 /** Retiring a layer in Evolve fades it this slowly — it should never be noticed leaving. */
 const EVOLVE_RETIRE_FADE_SECONDS = 12;
+/** Session morph: crossfade length, and a shorter fade-out when old + new layers would be heavy. */
+const MORPH_SECONDS = 8;
+const MORPH_HEAVY_OUT_SECONDS = 3;
+const MORPH_MAX_COMBINED_LAYERS = 10;
 /** Crossfade between the old and new sound when a layer is re-rolled. */
 const REROLL_FADE_SECONDS = 1.5;
 const DESKTOP_ICON_Z_INDEX = 10;
@@ -2304,12 +2308,36 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
   const handleLoadSession = async (
     session: SavedSession,
     trackAsSession = true,
+    morph = false,
   ) => {
     if (!audioEngineRef.current || !isEngineInitialized) return;
     await ensureAudioUnlocked();
 
-    // Stop and clear all current layers
-    handleRemoveAllLayers();
+    // Morph overlaps old and new layers; keep that overlap short when the
+    // combined count would strain the audio thread (see CPU budget notes).
+    const heavy = layersRef.current.length + session.layers.length > MORPH_MAX_COMBINED_LAYERS;
+    const morphOutSeconds = heavy ? MORPH_HEAVY_OUT_SECONDS : MORPH_SECONDS;
+    if (morph && layersRef.current.length > 0) {
+      // Fade the current soundscape out slowly instead of cutting it.
+      const outgoing = [...layersRef.current];
+      const outgoingIds = new Set(outgoing.map((l) => l.id));
+      outgoing.forEach((l) => {
+        if (l.node) audioEngineRef.current?.setVolume(l.node, -Infinity, morphOutSeconds);
+      });
+      setTimeout(() => {
+        outgoing.forEach(stopLayerAudio);
+        setLayers((prev) => prev.filter((l) => !outgoingIds.has(l.id)));
+      }, morphOutSeconds * 1000 + 200);
+    } else {
+      // Stop and clear all current layers
+      handleRemoveAllLayers();
+    }
+    /** Incoming layers fade in during a morph; otherwise they jump to level. */
+    const applyLoadedVolume = (node: NonNullable<Layer['node']>, db: number) => {
+      if (!morph) return audioEngineRef.current?.setVolume(node, db);
+      audioEngineRef.current?.setVolume(node, -Infinity, 0.005);
+      audioEngineRef.current?.setVolume(node, db, MORPH_SECONDS);
+    };
 
     // Apply global settings
     const s = session.settings;
@@ -2400,7 +2428,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             continue;
           }
 
-          audioEngineRef.current.setVolume(
+          applyLoadedVolume(
             playerData.player,
             savedLayer.muted ? -Infinity : savedLayer.volume,
           );
@@ -2458,7 +2486,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             setLayers((prev) => prev.filter((l) => l.id !== id));
             continue;
           }
-          audioEngineRef.current.setVolume(
+          applyLoadedVolume(
             grainData.player,
             savedLayer.muted ? -Infinity : savedLayer.volume,
           );
@@ -2522,7 +2550,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             continue;
           }
 
-          audioEngineRef.current.setVolume(
+          applyLoadedVolume(
             atmoData.node,
             savedLayer.muted ? -Infinity : savedLayer.volume,
           );
@@ -2593,7 +2621,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             continue;
           }
 
-          audioEngineRef.current.setVolume(
+          applyLoadedVolume(
             loopData.sequence,
             savedLayer.muted ? -Infinity : savedLayer.volume,
           );
@@ -2658,7 +2686,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
       setActiveSession(session);
     }
     setIsSessionDirty(false);
-    toast({ title: 'Session loaded', description: session.name });
+    toast({ title: morph ? 'Morphed into session' : 'Session loaded', description: session.name });
   };
 
   // ── Sleep timer ───────────────────────────────────────────────────────────
@@ -3248,6 +3276,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
           isEngineInitialized={isEngineInitialized}
           onBuildSession={handleBuildSession}
           onLoadSession={handleLoadSession}
+          onMorphSession={(session) => void handleLoadSession(session, true, true)}
           onSignIn={() => setSessionsAuthOpen(true)}
           activeSession={activeSession}
           isSessionDirty={isSessionDirty}

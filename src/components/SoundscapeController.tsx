@@ -48,6 +48,8 @@ interface SoundscapeControllerProps {
   isEngineInitialized: boolean;
   onBuildSession: (name: string) => SavedSession;
   onLoadSession: (session: SavedSession) => void;
+  /** Load while crossfading out of the current soundscape. */
+  onMorphSession?: (session: SavedSession) => void;
   /** Opens the sign-in modal (managed by parent) */
   onSignIn: () => void;
   activeSession: SavedSession | null;
@@ -91,6 +93,7 @@ export default function SoundscapeController({
   isEngineInitialized,
   onBuildSession,
   onLoadSession,
+  onMorphSession,
   onSignIn,
   activeSession,
   isSessionDirty,
@@ -314,6 +317,19 @@ export default function SoundscapeController({
                   <Music2 className='w-3 h-3 shrink-0' />
                   <span className='truncate'>{s.name}</span>
                 </button>
+                {onMorphSession && (
+                  <button
+                    className='px-1.5 py-1 text-[10px] opacity-60 group-hover:opacity-100 shrink-0 hover:underline'
+                    title={`Morph into "${s.name}" — crossfade instead of switching`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMorphSession(s);
+                      close();
+                    }}
+                  >
+                    Morph
+                  </button>
+                )}
                 <button
                   className='px-2 py-1 opacity-30 group-hover:opacity-80 hover:!text-red-300 shrink-0'
                   title={`Delete "${s.name}"`}

@@ -29,6 +29,7 @@ Findings from a full read of the audio engine, client, sessions/share, Freesound
 - [x] **H2** Delete unused shadcn components whose deps aren't installed (`calendar`, `carousel`, `chart`, `form`). *Also removed `sidebar`, which was unused.*
 - [x] **H3** 23 build files under `.firebase/` are tracked. Ignore `.firebase/` entirely and `git rm --cached` them.
 - [ ] **H4** `/api/audio-proxy` is an open proxy and is now dead in prod (egress block). Remove it or restrict it.
+- [ ] **H5** `SessionManagerWindow.tsx` (613 lines) isn't rendered anywhere; sessions load from the Start menu (`SoundscapeController`). Wire it up as a desktop window or delete it.
 
 ### Performance
 
@@ -48,7 +49,7 @@ Findings from a full read of the audio engine, client, sessions/share, Freesound
 - [x] **D2 Re-roll layer.** Regenerate a layer's sound, keeping position/volume/send. *Done: ↻ in each card's title bar; 1.5s crossfade; respects key lock, mute, probability, drift; samples keep playing until the new one loads.*
 - [x] **D3 Evolve mode.** Layers slowly fade in/out on their own (generative radio). *Done: Settings → Evolve. Every 1.5–4 min: add / re-roll / retire (12s fade), bounded 2–6 layers; saved in sessions; the sleep timer turns it off when it ends.*
 - [ ] **D4 Media Session + Wake Lock + sleep timer** (fade out after N min). Lock-screen controls on mobile. *Sleep timer done: moon button in the taskbar (15/30/60/90 min), 60s master fade then Stop All, master restored afterwards; a tap during the fade doesn't cancel it. Still open: Media Session / lock-screen controls + background playback need output routed through an `<audio>` element (MediaStreamDestination), which risks double output/latency, so test on real iOS/Android first. Wake Lock not added (sleep use wants the screen off).*
-- [ ] **D5 Session morph.** Crossfade from one saved session to another.
+- [x] **D5 Session morph.** Crossfade from one saved session to another. *Done: "Morph" beside each saved session in the Start menu: old layers fade over 8s (3s if old + new > 10 layers, for CPU) while the new ones fade in. Not E2E-tested: the list needs a signed-in user.*
 - [x] **D6 Compressed export.** Opus/WebM via MediaRecorder alongside WAV. *Done: MediaRecorder (Opus/WebM, Ogg, or AAC on Safari) runs alongside the WAV; export dialog offers both with sizes.*
 - [x] **D7 Retroactive record.** "Save the last 60s" ring buffer. *Done: the capture tap starts with the engine and keeps a rolling 60s Int16 buffer (~11 MB); "60s" button next to REC exports it.*
 - [x] **D8 Sample credits.** Show Freesound name/author + link on sample/grain layers. *Done: Info menu shows "by <uploader> · CC0 via Freesound" linking to their profile; saved in sessions as `freesoundUser`.*
