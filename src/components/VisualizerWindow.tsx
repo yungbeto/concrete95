@@ -532,8 +532,23 @@ type GLState = {
   gl: WebGLRenderingContext;
   prog: WebGLProgram;
   tex: WebGLTexture;
+  buf: WebGLBuffer | null;
   uniforms: DynUniforms;
 };
+
+/** Free GPU objects before re-initialising on the same canvas (shuffle re-inits; the context is reused). */
+function disposeGL(state: GLState | null) {
+  if (!state) return;
+  const { gl, prog, tex, buf } = state;
+  if (gl.isContextLost()) return;
+  gl.deleteTexture(tex);
+  if (buf) gl.deleteBuffer(buf);
+  gl.getAttachedShaders(prog)?.forEach((sh) => {
+    gl.detachShader(prog, sh);
+    gl.deleteShader(sh);
+  });
+  gl.deleteProgram(prog);
+}
 
 function initGLOnCanvas(
   canvas: HTMLCanvasElement,
@@ -613,6 +628,7 @@ function initGLOnCanvas(
     gl,
     prog,
     tex,
+    buf,
     uniforms: { time: loc('u_time'), audio: loc('u_audio') },
   };
 }
@@ -743,6 +759,8 @@ export default function VisualizerWindow({
 
   const handleShuffle = useCallback(() => {
     cancelAnimationFrame(animIdRef.current);
+    disposeGL(glStateRef.current);
+    disposeGL(fsGlStateRef.current);
     glStateRef.current = null;
     fsGlStateRef.current = null;
     dnaRef.current = generateDNA();
@@ -762,6 +780,7 @@ export default function VisualizerWindow({
     }
 
     const silentWave = new Uint8Array(1024).fill(128);
+    const waveScratch = new Uint8Array(1024); // reused every frame — no per-frame GC
 
     const loop = () => {
       animIdRef.current = requestAnimationFrame(loop);
@@ -788,18 +807,19 @@ export default function VisualizerWindow({
         sm.high  = rawHigh  > sm.high  ? sm.high  * (1 - att) + rawHigh  * att : sm.high  * (1 - rel) + rawHigh  * rel;
 
         const wf = data.waveform;
-        const wb = new Uint8Array(Math.min(wf.length, 1024));
-        for (let i = 0; i < wb.length; i++)
-          wb[i] = Math.round((wf[i] * 0.5 + 0.5) * 255);
-        waveBytes = wb;
+        const n = Math.min(wf.length, waveScratch.length);
+        for (let i = 0; i < n; i++)
+          waveScratch[i] = Math.round((wf[i] * 0.5 + 0.5) * 255);
+        waveBytes = n === waveScratch.length ? waveScratch : waveScratch.subarray(0, n);
       } else {
         sm.bass *= 0.94;
         sm.mid  *= 0.94;
         sm.high *= 0.94;
       }
 
-      // Read actual pixel dimensions so the viewport tracks resizes automatically
-      if (glStateRef.current && canvasRef.current) {
+      // Read actual pixel dimensions so the viewport tracks resizes automatically.
+      // Skip the windowed canvas while fullscreen covers it — no point rendering twice.
+      if (glStateRef.current && canvasRef.current && !fsGlStateRef.current) {
         const { width: cw, height: ch } = canvasRef.current;
         drawFrame(
           glStateRef.current,
@@ -831,6 +851,7 @@ export default function VisualizerWindow({
     animIdRef.current = requestAnimationFrame(loop);
     return () => {
       cancelAnimationFrame(animIdRef.current);
+      disposeGL(glStateRef.current);
       glStateRef.current = null;
     };
   }, [audioEngineRef, genKey]);
@@ -838,6 +859,7 @@ export default function VisualizerWindow({
   // Fullscreen GL context
   useEffect(() => {
     if (!isFullscreen) {
+      disposeGL(fsGlStateRef.current);
       fsGlStateRef.current = null;
       return;
     }

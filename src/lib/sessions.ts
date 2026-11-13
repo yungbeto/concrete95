@@ -50,6 +50,7 @@ export type SavedFreesoundLayer = {
   filterResonance: number;
   freesoundId: number;
   freesoundName: string;
+  freesoundUser?: string;
   previewUrl: string;
 };
 
@@ -66,6 +67,7 @@ export type SavedGrainLayer = {
   filterResonance: number;
   freesoundId: number;
   freesoundName: string;
+  freesoundUser?: string;
   previewUrl: string;
   grainSize: number;
   grainDrift: number;
@@ -187,7 +189,7 @@ type RuntimeLayer = {
   grainSize?: number;
   grainDrift?: number;
   isMuted?: boolean;
-  info?: { type: string; id?: number; name?: string; previewUrl?: string };
+  info?: { type: string; id?: number; name?: string; previewUrl?: string; username?: string };
 };
 
 export function buildSession(
@@ -203,7 +205,7 @@ export function buildSession(
     .filter((l) => l.type !== undefined)
     .map((l): SavedLayer => {
       if (l.type === 'freesound') {
-        const info = l.info as { type: string; id?: number; name?: string; previewUrl?: string } | undefined;
+        const info = l.info as { type: string; id?: number; name?: string; previewUrl?: string; username?: string } | undefined;
         return {
           type: 'freesound',
           title: l.title,
@@ -217,10 +219,11 @@ export function buildSession(
           filterResonance: l.filterResonance ?? 1,
           freesoundId: info?.id ?? 0,
           freesoundName: info?.name ?? l.title,
+          freesoundUser: info?.username,
           previewUrl: info?.previewUrl ?? '',
         };
       } else if (l.type === 'grain') {
-        const info = l.info as { type: string; id?: number; name?: string; previewUrl?: string } | undefined;
+        const info = l.info as { type: string; id?: number; name?: string; previewUrl?: string; username?: string } | undefined;
         return {
           type: 'grain',
           title: l.title,
@@ -234,6 +237,7 @@ export function buildSession(
           filterResonance: l.filterResonance ?? 1,
           freesoundId: info?.id ?? 0,
           freesoundName: info?.name ?? l.title,
+          freesoundUser: info?.username,
           previewUrl: info?.previewUrl ?? '',
           grainSize: l.grainSize ?? 0.1,
           grainDrift: l.grainDrift ?? 1.0,

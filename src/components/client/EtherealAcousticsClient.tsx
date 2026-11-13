@@ -44,6 +44,7 @@ import {
   Eye,
   Radio,
   MessageSquare,
+  Moon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DesktopIcon from '../DesktopIcon';
@@ -132,6 +133,9 @@ const MAX_LAYERS = 8;
 const REMOVE_FADE_SECONDS = 0.4;
 /** How long a fetched Freesound list is reused before a background refresh. */
 const SOUND_POOL_TTL_MS = 10 * 60 * 1000;
+/** Sleep timer: master fades to silence over this final stretch, then all layers stop. */
+const SLEEP_FADE_SECONDS = 60;
+const SLEEP_OPTIONS_MIN = [15, 30, 60, 90] as const;
 /** Crossfade between the old and new sound when a layer is re-rolled. */
 const REROLL_FADE_SECONDS = 1.5;
 const DESKTOP_ICON_Z_INDEX = 10;
@@ -657,7 +661,9 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     if (raw.state === 'suspended') {
       await raw.resume().catch(() => undefined);
     }
-    Tone.getDestination().volume.value = 0;
+    // Assigning .value cancels scheduled ramps — don't undo a sleep-timer fade
+    // just because the user tapped the screen or switched back to the tab.
+    if (!sleepFadingRef.current) Tone.getDestination().volume.value = 0;
     audioDebugLog('ensureAudioUnlocked', {
       state: raw.state,
       destinationDb: Tone.getDestination().volume.value,
@@ -1201,7 +1207,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     const id = addLayer('drone', { volume: -18 });
     if (!id) return;
 
-    const droneData = audioEngineRef.current.startDroneLoop(keyRoot);
+    const droneData = audioEngineRef.current.startDroneLoop(keyRoot, globalScale);
     if (!droneData) {
       handleRemoveLayer(id);
       return;
@@ -2319,6 +2325,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             id: savedLayer.freesoundId,
             name: savedLayer.freesoundName,
             previewUrl: savedLayer.previewUrl,
+            username: savedLayer.freesoundUser,
           });
           if (!playerData) {
             setLayers((prev) => prev.filter((l) => l.id !== id));
@@ -2377,6 +2384,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             id: savedLayer.freesoundId,
             name: savedLayer.freesoundName,
             previewUrl: savedLayer.previewUrl,
+            username: savedLayer.freesoundUser,
           });
           if (!grainData) {
             setLayers((prev) => prev.filter((l) => l.id !== id));
@@ -2481,7 +2489,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             ),
           );
         } else if (savedLayer.type === 'drone') {
-          const droneData = audioEngineRef.current.startDroneLoop(s.keyRoot ?? null);
+          const droneData = audioEngineRef.current.startDroneLoop(s.keyRoot ?? null, s.scale);
           if (!droneData) {
             setLayers((prev) => prev.filter((l) => l.id !== id));
             continue;
@@ -2585,6 +2593,57 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     toast({ title: 'Session loaded', description: session.name });
   };
 
+  // ── Sleep timer ───────────────────────────────────────────────────────────
+  const [sleepEndsAt, setSleepEndsAt] = useState<number | null>(null);
+  const [sleepMenuOpen, setSleepMenuOpen] = useState(false);
+  const [sleepNow, setSleepNow] = useState(() => Date.now());
+  const sleepFadingRef = useRef(false);
+  const removeAllRef = useRef(handleRemoveAllLayers);
+  removeAllRef.current = handleRemoveAllLayers;
+
+  const restoreDestination = (seconds: number) => {
+    const vol = Tone.getDestination().volume;
+    const now = Tone.now();
+    vol.cancelAndHoldAtTime(now);
+    vol.linearRampToValueAtTime(0, now + seconds);
+  };
+
+  const cancelSleepTimer = () => {
+    if (sleepFadingRef.current) restoreDestination(1);
+    sleepFadingRef.current = false;
+    setSleepEndsAt(null);
+  };
+
+  useEffect(() => {
+    if (sleepEndsAt == null) return;
+    const tick = () => {
+      const now = Date.now();
+      setSleepNow(now);
+      const remainingSec = (sleepEndsAt - now) / 1000;
+      if (remainingSec <= SLEEP_FADE_SECONDS && !sleepFadingRef.current) {
+        // Linear in dB → perceptually even fade; -100 dB rather than -∞ keeps the ramp finite.
+        sleepFadingRef.current = true;
+        const vol = Tone.getDestination().volume;
+        const t = Tone.now();
+        vol.cancelAndHoldAtTime(t);
+        vol.linearRampToValueAtTime(-100, t + Math.max(0.5, remainingSec));
+      }
+      if (remainingSec <= 0) {
+        sleepFadingRef.current = false;
+        setSleepEndsAt(null);
+        removeAllRef.current();
+        // Layers are silent (and fading themselves); bring the master back for next time.
+        setTimeout(() => restoreDestination(0.1), 1500);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [sleepEndsAt]);
+
+  const sleepRemainingMin =
+    sleepEndsAt == null ? null : Math.max(0, Math.ceil((sleepEndsAt - sleepNow) / 60000));
+
   // ── Re-roll ────────────────────────────────────────────────────────────────
   /** Start a brand-new node of `type` with fresh random parameters. */
   const startFreshLayerNode = async (
@@ -2606,7 +2665,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
         return d && { node: d.node, patch: { info: d.info, filterCutoff: d.filterCutoff, filterResonance: d.filterResonance } };
       }
       case 'drone': {
-        const d = engine.startDroneLoop(keyRoot);
+        const d = engine.startDroneLoop(keyRoot, globalScale);
         return d && { node: d.node, patch: { info: d.info } };
       }
       case 'freesound':
@@ -3313,6 +3372,68 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
                   shareUrl={shareUrl}
                   onClose={() => setSharePanelOpen(false)}
                 />
+              )}
+            </div>
+          )}
+          {/* Sleep timer */}
+          {isEngineInitialized && (
+            <div className='relative flex items-center'>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='h-6 px-1 py-0 m-0 !bg-transparent hover:!bg-neutral-300 flex items-center gap-0.5 text-[10px] text-black'
+                onClick={() => setSleepMenuOpen((o) => !o)}
+                title={sleepRemainingMin != null ? `Sleep in ${sleepRemainingMin} min` : 'Sleep timer'}
+                aria-label='Sleep timer'
+              >
+                <Moon className='h-3 w-3' />
+                {sleepRemainingMin != null && <span className='font-mono'>{sleepRemainingMin}m</span>}
+              </Button>
+              {sleepMenuOpen && (
+                <div className='absolute bottom-full right-0 mb-1 z-50 bg-silver border-2 border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 w-40 font-sans text-black select-none shadow-md'>
+                  <div className='bg-blue-800 text-white flex items-center justify-between px-2 py-0.5'>
+                    <span className='font-bold text-xs'>Sleep Timer</span>
+                    <button
+                      className='w-4 h-4 bg-silver text-black text-[10px] font-bold flex items-center justify-center border border-t-white border-l-white border-r-neutral-600 border-b-neutral-600 leading-none'
+                      onClick={() => setSleepMenuOpen(false)}
+                      aria-label='Close'
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className='p-1 flex flex-col text-xs'>
+                    {SLEEP_OPTIONS_MIN.map((min) => (
+                      <button
+                        key={min}
+                        className='text-left px-2 py-1 hover:bg-blue-800 hover:text-white'
+                        onClick={() => {
+                          if (sleepFadingRef.current) restoreDestination(1);
+                          sleepFadingRef.current = false;
+                          setSleepEndsAt(Date.now() + min * 60_000);
+                          setSleepNow(Date.now());
+                          setSleepMenuOpen(false);
+                          toast({ title: 'Sleep timer set', description: `Fading out in ${min} minutes.` });
+                        }}
+                      >
+                        {min === 60 ? '1 hour' : `${min} minutes`}
+                      </button>
+                    ))}
+                    {sleepEndsAt != null && (
+                      <button
+                        className='text-left px-2 py-1 border-t border-neutral-400 mt-1 hover:bg-blue-800 hover:text-white'
+                        onClick={() => {
+                          cancelSleepTimer();
+                          setSleepMenuOpen(false);
+                        }}
+                      >
+                        Cancel ({sleepRemainingMin}m left)
+                      </button>
+                    )}
+                    <p className='px-2 pt-1 pb-0.5 text-[10px] text-neutral-600 leading-snug'>
+                      Fades out over the last minute, then stops all layers.
+                    </p>
+                  </div>
+                </div>
               )}
             </div>
           )}

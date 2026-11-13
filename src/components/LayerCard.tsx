@@ -293,6 +293,20 @@ function SoundRecorderDisplay({
 
     let animationFrameId: number;
 
+    // Back the canvas with device pixels (it had no size attrs, so it was a
+    // 300×150 bitmap stretched into a 40px-tall box — blurry, esp. on retina).
+    const fit = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const { width, height } = canvas.getBoundingClientRect();
+      if (width > 0 && height > 0) {
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
+      }
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(canvas);
+
     const draw = () => {
       if (!audioEngineRef.current || !node) return;
 
@@ -304,7 +318,7 @@ function SoundRecorderDisplay({
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.beginPath();
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.5 * (window.devicePixelRatio || 1);
       ctx.strokeStyle = '#39FF14'; // A bright green color
 
       const sliceWidth = canvas.width * 1.0 / waveformData.length;
@@ -333,6 +347,7 @@ function SoundRecorderDisplay({
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      ro.disconnect();
     };
   }, [node, audioEngineRef]);
 

@@ -37,21 +37,21 @@ Findings from a full read of the audio engine, client, sessions/share, Freesound
 - [x] **P3 Dragging re-renders everything.** Each mousemove calls `setLayers` → whole client + all LayerCards re-render, and the session is marked dirty. rAF-throttle (or transform via ref, commit on mouseup) + `React.memo(LayerCard)`; don't mark dirty until drop. *Done: rAF-coalesced drag, `React.memo(LayerCard)` with stable id-based handlers, dirty marked once on drop (and not for a plain title-bar click).*
 - [x] **P4 Freesound round-trip per layer.** A server action searches Freesound every add; the fallback reads 200 Firestore docs each call. Prefetch the list at boot and cache it client-side and server-side (TTL). *Done: client pool cache (10 min TTL, stale-while-revalidate, prefetched at engine init, avoids sounds already playing) + server-side 15 min cache of the Firestore fallback.*
 - [ ] **P5 Recording memory.** Float32 chunks: ~230MB for 10 min, doubled at merge. Convert to Int16 incrementally.
-- [ ] **P6 Visualizer:** both canvases render in fullscreen; new `Uint8Array` allocated per frame; GL resources not freed on shuffle.
-- [ ] **P7 Layer waveform canvas** has no width/height (blurry, no DPR handling).
-- [ ] **P8 Pad detune** uses a 50ms `setInterval` + `synth.set()` per layer. Slow it down / ramp.
-- [ ] **P9 Zipper noise.** Param setters use `.value =`. Use `rampTo(v, 0.05)` for gains, filters, sends. *Partly done: volume, sends, shimmer/freq-shift/space glide via `glideParam`; filters and master params still use `.value =`.*
+- [x] **P6 Visualizer:** both canvases render in fullscreen; new `Uint8Array` allocated per frame; GL resources not freed on shuffle. *Done: GL program/shader/texture/buffer freed on shuffle and unmount, wave buffer reused per frame, windowed canvas skipped while fullscreen is open.*
+- [x] **P7 Layer waveform canvas** has no width/height (blurry, no DPR handling). *Done: layer waveform canvas sized to CSS × devicePixelRatio via ResizeObserver.*
+- [x] **P8 Pad detune** uses a 50ms `setInterval` + `synth.set()` per layer. Slow it down / ramp. *Done: 250ms steps (< 0.5 cent per step).*
+- [x] **P9 Zipper noise.** Param setters use `.value =`. Use `rampTo(v, 0.05)` for gains, filters, sends. *Done: everything user-facing glides — volume, sends, filters, delay, reverb wet, warmth, lo-fi/warble (spliced out only after gliding dry), space/shimmer/freq shift.*
 
 ### Delight ideas
 
-- [x] **D1 Key lock.** Pads/Melodies get a random 0–11 semitone transpose, so layers in the same scale clash. Add a "lock to one key" option. *Done: Settings → Key (Free or C–B), defaults to a random locked key on fresh load; drones tune to the root; key shown in each layer's Info; saved in sessions (`keyRoot`, absent = Free so old links sound the same). Follow-up: drone partial 5 is a major 3rd, which rubs against minor/dorian scales, so pass the scale to `startDroneLoop` and drop partial 5 for minor modes.*
+- [x] **D1 Key lock.** Pads/Melodies get a random 0–11 semitone transpose, so layers in the same scale clash. Add a "lock to one key" option. *Done: Settings → Key (Free or C–B), defaults to a random locked key on fresh load; drones tune to the root; key shown in each layer's Info; saved in sessions (`keyRoot`, absent = Free so old links sound the same). Follow-up done: in minor modes the drone swaps partial 5 (major 3rd) for 4.*
 - [x] **D2 Re-roll layer.** Regenerate a layer's sound, keeping position/volume/send. *Done: ↻ in each card's title bar; 1.5s crossfade; respects key lock, mute, probability, drift; samples keep playing until the new one loads.*
 - [ ] **D3 Evolve mode.** Layers slowly fade in/out on their own (generative radio).
-- [ ] **D4 Media Session + Wake Lock + sleep timer** (fade out after N min). Lock-screen controls on mobile.
+- [ ] **D4 Media Session + Wake Lock + sleep timer** (fade out after N min). Lock-screen controls on mobile. *Sleep timer done: moon button in the taskbar (15/30/60/90 min), 60s master fade then Stop All, master restored afterwards; a tap during the fade doesn't cancel it. Still open: Media Session / lock-screen controls + background playback need output routed through an `<audio>` element (MediaStreamDestination), which risks double output/latency, so test on real iOS/Android first. Wake Lock not added (sleep use wants the screen off).*
 - [ ] **D5 Session morph.** Crossfade from one saved session to another.
 - [ ] **D6 Compressed export.** Opus/WebM via MediaRecorder alongside WAV.
 - [ ] **D7 Retroactive record.** "Save the last 60s" ring buffer.
-- [ ] **D8 Sample credits.** Show Freesound name/author + link on sample/grain layers. *Partly exists: the Info menu already links the sound name to its Freesound page; uploader name isn't fetched yet (add `username` to the search fields + pool docs).*
+- [x] **D8 Sample credits.** Show Freesound name/author + link on sample/grain layers. *Done: Info menu shows "by <uploader> · CC0 via Freesound" linking to their profile; saved in sessions as `freesoundUser`.*
 
 ---
 

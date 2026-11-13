@@ -8,6 +8,8 @@ export type FreesoundSound = {
   id: number;
   name: string;
   previewUrl: string;
+  /** Freesound uploader — shown as a credit on the layer. */
+  username?: string;
 };
 
 const DEFAULT_BLOCKED_FREESOUND_USERS = ['looplicator', 'CAT-FOX_ALEX'];
@@ -105,6 +107,7 @@ async function fetchFromFreesound(query: string, retries = 2) {
       .map((sound: any) => ({
         id: sound.id,
         name: sound.name,
+        username: typeof sound.username === 'string' ? sound.username : undefined,
         // LQ is ~3× smaller; HQ often exceeds the client load timeout on this CDN.
         previewUrl:
           sound.previews['preview-lq-mp3'] || sound.previews['preview-hq-mp3'],
@@ -154,7 +157,7 @@ async function fetchFromPool(): Promise<FreesoundSound[]> {
     const sounds = snap.docs
       .map((d) => d.data() as { id: number; name: string; previewUrl: string; username?: string })
       .filter((sound) => sound.previewUrl && !isBlockedUploader(sound.username))
-      .map(({ id, name, previewUrl }) => ({ id, name, previewUrl }));
+      .map(({ id, name, previewUrl, username }) => ({ id, name, previewUrl, username: username || undefined }));
     if (sounds.length > 0) poolCache = { sounds, fetchedAt: Date.now() };
     return sounds;
   } catch (error) {

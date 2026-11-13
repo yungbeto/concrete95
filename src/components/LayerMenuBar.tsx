@@ -88,6 +88,21 @@ export default function LayerMenuBar({
           >
             {info.name}
           </a>
+          {info.username && (
+            <p className="text-xs text-neutral-700">
+              by{' '}
+              <a
+                href={`https://freesound.org/people/${encodeURIComponent(info.username)}/`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 underline hover:text-blue-800"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {info.username}
+              </a>{' '}
+              · CC0 via Freesound
+            </p>
+          )}
           <p className="text-xs">{info.description}</p>
         </div>
       );

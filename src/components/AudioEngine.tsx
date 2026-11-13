@@ -23,6 +23,7 @@ export type FreesoundLayerInfo = {
   name: string;
   description: string;
   previewUrl: string;
+  username?: string;
 };
 
 export type GrainLayerInfo = {
@@ -31,6 +32,7 @@ export type GrainLayerInfo = {
   name: string;
   description: string;
   previewUrl: string;
+  username?: string;
 };
 
 export type DroneLayerInfo = {
@@ -246,11 +248,11 @@ export type AudioEngineHandle = {
   } | null;
   stopSynthLoop: (synth: Tone.Sequence) => void;
   startFreesoundLoop: (
-    sound: { id: number; name: string; previewUrl: string }
+    sound: { id: number; name: string; previewUrl: string; username?: string }
   ) => Promise<{ player: Tone.Player; info: FreesoundLayerInfo; filterCutoff: number; filterResonance: number } | null>;
   stopFreesoundLoop: (player: Tone.Player) => void;
   startGrainLoop: (
-    sound: { id: number; name: string; previewUrl: string }
+    sound: { id: number; name: string; previewUrl: string; username?: string }
   ) => Promise<{ player: Tone.GrainPlayer; info: GrainLayerInfo; filterCutoff: number; filterResonance: number; grainSize: number; grainDrift: number; playbackRate: number } | null>;
   stopGrainLoop: (player: Tone.GrainPlayer) => void;
   setGrainSize: (player: Tone.GrainPlayer, size: number) => void;
@@ -289,7 +291,8 @@ export type AudioEngineHandle = {
   stopAtmosphereLoop: (noise: Tone.Noise) => void;
   setLofi: (amount: number) => void;
   setWarble: (amount: number) => void;
-  startDroneLoop: (keyRoot?: KeyRoot) => { node: Tone.Gain; info: DroneLayerInfo } | null;
+  /** `scale` lets the drone avoid a major 3rd (partial 5) against minor modes. */
+  startDroneLoop: (keyRoot?: KeyRoot, scale?: ScaleName) => { node: Tone.Gain; info: DroneLayerInfo } | null;
   stopDroneLoop: (node: Tone.Gain) => void;
   getMasterLevel: () => number;
   getLissajousData: () => { left: Float32Array; right: Float32Array } | null;
@@ -394,6 +397,35 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       if (!stillUsed) prev[i].disconnect(prev[i + 1]);
     }
     masterTailState.current = { ...next };
+  };
+
+  const tailSpliceOutTimers = useRef<{ lofi?: ReturnType<typeof setTimeout>; warble?: ReturnType<typeof setTimeout> }>({});
+  /**
+   * Set a spliceable master stage's wet amount without clicks: splice in at
+   * wet 0 then glide up; when going to 0, glide down first and splice out
+   * once the stage is fully dry (so removing it from the path is silent).
+   */
+  const setMasterTailStage = (
+    stage: 'lofi' | 'warble',
+    wetParam: Tone.Signal<'normalRange'>,
+    wet: number,
+  ) => {
+    clearTimeout(tailSpliceOutTimers.current[stage]);
+    if (wet > 0) {
+      if (!masterTailState.current[stage]) {
+        wetParam.cancelScheduledValues(Tone.now());
+        wetParam.value = 0;
+        rewireMasterTail({ ...masterTailState.current, [stage]: true });
+      }
+      glideParam(wetParam, wet);
+      return;
+    }
+    glideParam(wetParam, 0);
+    if (masterTailState.current[stage]) {
+      tailSpliceOutTimers.current[stage] = setTimeout(() => {
+        rewireMasterTail({ ...masterTailState.current, [stage]: false });
+      }, PARAM_RAMP_SECONDS * 1000 + 30);
+    }
   };
 
   /**
@@ -916,11 +948,14 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const detuneLfoFreq = 0.01 + r() * 0.03;
       const detuneDepth = 8;
       let detunePhase = r() * Math.PI * 2;
+      // 250ms steps: at ≤0.04Hz × ±8 cents each step moves < 0.5 cent (inaudible),
+      // at a fifth of the main-thread wakeups of the old 50ms timer.
+      const DETUNE_STEP_MS = 250;
       const detuneDriftInterval = setInterval(() => {
         if (synth.disposed) { clearInterval(detuneDriftInterval); return; }
-        detunePhase += 2 * Math.PI * detuneLfoFreq * 0.05; // 50ms step
+        detunePhase += 2 * Math.PI * detuneLfoFreq * (DETUNE_STEP_MS / 1000);
         synth.set({ detune: Math.sin(detunePhase) * detuneDepth });
-      }, 50);
+      }, DETUNE_STEP_MS);
 
       // Phaser — slowly sweeping all-pass notches give pads a breathing, 3D quality
       const phaser = new Tone.Phaser({
@@ -1199,6 +1234,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         name: sound.name,
         description: `${sound.name} · ${playbackRate.toFixed(2)}x · filter ${(filterFreq / 1000).toFixed(1)}kHz${loopLabel}`,
         previewUrl: sound.previewUrl,
+        username: sound.username,
       };
 
       return { player, info, filterCutoff: filterFreq, filterResonance: filter.Q.value };
@@ -1391,6 +1427,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         name: sound.name,
         description: `${sound.name} · ${(grainSize * 1000).toFixed(0)}ms grains · ${GRAIN_VOICE_COUNT}-voice scatter ${drift.toFixed(2)}s · ${playbackRate.toFixed(2)}x`,
         previewUrl: sound.previewUrl,
+        username: sound.username,
       };
 
       return { player, info, filterCutoff: filterFreq, filterResonance: filter.Q.value, grainSize, grainDrift: drift, playbackRate };
@@ -1938,13 +1975,13 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
           (node as any).driftOriginalCenter = freq;
         }
       } else if (filter && !filter.disposed) {
-        filter.frequency.value = freq;
+        glideParam(filter.frequency, freq);
       }
     },
     setLayerFilterResonance: (node, q) => {
       const filter = (node as any).filter;
       if (filter && !filter.disposed) {
-        filter.Q.value = q;
+        glideParam(filter.Q, q);
       }
     },
     setProbability: (node, probability) => {
@@ -2001,7 +2038,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     },
     setWarmth: (value) => {
       if (masterSaturation.current && !masterSaturation.current.disposed) {
-        masterSaturation.current.wet.value = value;
+        glideParam(masterSaturation.current.wet, value);
       }
     },
     setShimmer: (value) => {
@@ -2049,7 +2086,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     },
     setDelayFeedback: (value) => {
         if (fxBus.current?.delay && !fxBus.current.delay.disposed) {
-            fxBus.current.delay.feedback.value = value;
+            glideParam(fxBus.current.delay.feedback, value);
         }
     },
     setDelayTime: (value) => {
@@ -2059,7 +2096,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     },
     setDelayCutoff: (value) => {
         if (fxBus.current?.delayFilter && !fxBus.current.delayFilter.disposed) {
-            fxBus.current.delayFilter.frequency.value = value;
+            glideParam(fxBus.current.delayFilter.frequency, value);
         }
     },
     setReverbDecay: (value) => {
@@ -2069,7 +2106,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     },
     setReverbWet: (value) => {
         if (fxBus.current?.reverb && !fxBus.current.reverb.disposed) {
-            fxBus.current.reverb.wet.value = value;
+            glideParam(fxBus.current.reverb.wet, value);
         }
     },
     setBPM: (bpm) => {
@@ -2081,27 +2118,19 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       return Tone.Transport?.bpm.value || 120;
     },
     setLofi: (amount) => {
-      if (masterBitcrusher.current && !masterBitcrusher.current.disposed) {
-        if (amount <= 0) {
-          masterBitcrusher.current.wet.value = 0;
-        } else {
-          masterBitcrusher.current.bits.value = Math.max(1, Math.round(16 - amount * 12));
-          masterBitcrusher.current.wet.value = Math.min(1, amount);
-        }
-        if ((amount > 0) !== masterTailState.current.lofi) {
-          rewireMasterTail({ ...masterTailState.current, lofi: amount > 0 });
-        }
+      const crush = masterBitcrusher.current;
+      if (crush && !crush.disposed) {
+        if (amount > 0) crush.bits.value = Math.max(1, Math.round(16 - amount * 12));
+        setMasterTailStage('lofi', crush.wet, Math.min(1, Math.max(0, amount)));
       }
     },
     setWarble: (amount) => {
-      if (masterWarble.current && !masterWarble.current.disposed) {
-        masterWarble.current.wet.value = amount * 0.6;
-        if ((amount > 0) !== masterTailState.current.warble) {
-          rewireMasterTail({ ...masterTailState.current, warble: amount > 0 });
-        }
+      const warble = masterWarble.current;
+      if (warble && !warble.disposed) {
+        setMasterTailStage('warble', warble.wet, Math.max(0, amount) * 0.6);
       }
     },
-    startDroneLoop: (keyRoot = null) => {
+    startDroneLoop: (keyRoot = null, scale) => {
       if (!masterBus.current || !fxBus.current) return null;
       Tone.start();
       const r = rngRef.current ?? Math.random;
@@ -2121,7 +2150,12 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       }
 
       const partialSets = [[1, 2, 3], [1, 2, 5], [1, 3, 5], [1, 2, 3, 5], [2, 3, 5]];
-      const partials = partialSets[Math.floor(r() * partialSets.length)];
+      // Partial 5 is a just major 3rd — it rubs against the minor 3rd in these
+      // modes, so swap it for 4 (another octave of the root). Same RNG draw.
+      const minorModes: ScaleName[] = ['naturalMinor', 'minorPentatonic', 'blues', 'dorian'];
+      const avoidMajorThird = scale != null && minorModes.includes(scale);
+      const partials = partialSets[Math.floor(r() * partialSets.length)]
+        .map((p) => (avoidMajorThird && p === 5 ? 4 : p));
 
       const outputGain = new Tone.Gain(0);
 
