@@ -2,6 +2,59 @@
 
 ---
 
+## Code Review Backlog (2026-11-13)
+
+Findings from a full read of the audio engine, client, sessions/share, Freesound path, Firestore rules and canvas components. Tick items off as they land.
+
+### Bugs
+
+- [x] **R1 Auto-save loses edits.** The 30s auto-save effect (`EtherealAcousticsClient.tsx`, deps `[isSessionDirty, activeSession?.id, user?.uid]`) captures `layers`/settings from the *first* dirty render, saves that stale snapshot, then marks the session clean, so later edits are lost and the beforeunload warning disappears. Read current state from refs when the timer fires.
+- [x] **R2 Drone layers restore as Pads.** `handleLoadSession`'s `else` branch handles `drone` with `startSynthLoop`. Removing it later calls `stopDroneLoop` on a Sequence, which leaks the synth, FX and detune interval.
+- [x] **R3 Settings not saved or tracked.** `collectSettings()` omits `convolverMix` (Space), `lofiAmount`, `warbleAmount`, and the dirty-tracking deps also miss `freqShift`. Layer `isMuted` isn't saved.
+- [x] **R4 Diffusion slider is a no-op.** `Tone.Reverb` has no `diffusion` property. *Done: control removed; value kept in sessions for compatibility.*
+- [x] **R5 Share has no error handling.** If `saveSharedSession` throws, the share panel spins forever. `firestore.rules` has no `shared_sessions` match (default deny), so verify the deployed rules. Each panel open writes a new doc, so reuse the ID while the session is unchanged. *Done: falls back to an lz-string link if Firestore fails, reuses the link while unchanged, recipient sees a toast for a broken link, `shared_sessions` rule added to `firestore.rules`. **Not deployed:** run `firebase deploy --only firestore:rules`.*
+- [x] **R6 Seeded melodies aren't reproducible.** The `random`/`randomWalk` patterns in `startMelodicLoop` use `Math.random()` when building events, so share links get different notes.
+- [x] **R7 Disabling Drift reverts the user's cutoff.** `setLayerFilterCutoff` updates `driftCenter` but not `driftOriginalCenter`.
+- [x] **R8 Grain seek doesn't stick.** `handleSeek` restarts only voice 0 and doesn't update `grainStartedAt`/`grainStartOffset`, so the scatter timer snaps it back.
+- [x] **R9 `createdAt` overwritten on every save** (`buildSession`: `existingId ? now : now`).
+- [ ] **R10 Guestbook `createdAt` is client-supplied**, so ordering can be spoofed. Use `serverTimestamp()` / validate against `request.time`. *Blocker: existing docs store an ISO string and `migrateLocalEntries` intentionally writes past timestamps. Needs a schema decision (e.g. add `serverCreatedAt` validated `== request.time`, order by it, backfill old docs).*
+- [x] **R11 Remove / Stop All clicks.** Volume jumps to -∞ and dispose cuts release tails. Add a ~300ms fade.
+- [x] **R12 Shortcuts fire on focused sliders/buttons.** Space = Stop All, Backspace = delete layer. Ignore `role=slider`, buttons, etc.
+- [x] **R13 FX/Master sliders were uncontrolled** (`defaultValue`), so loading a session moved the labels but not the thumbs. *Now `value`.*
+- [x] **R14 Drift toggle skipped the newest layer.** The memoized Settings window captured a stale `layers` array (memo keyed on `layers.length`; the node arrives after). *Handlers read `layersRef`.*
+
+### Hygiene
+
+- [x] **H1** `ignoreBuildErrors: true` hides 6 real TS errors in `AudioEngine.tsx`. Fix them, then turn the flag off. *Done: `tsc` clean, flag removed, `next build` passes.*
+- [x] **H2** Delete unused shadcn components whose deps aren't installed (`calendar`, `carousel`, `chart`, `form`). *Also removed `sidebar`, which was unused.*
+- [x] **H3** 23 build files under `.firebase/` are tracked. Ignore `.firebase/` entirely and `git rm --cached` them.
+- [ ] **H4** `/api/audio-proxy` is an open proxy and is now dead in prod (egress block). Remove it or restrict it.
+
+### Performance
+
+- [x] **P1 Reverb Decay slider regenerates the IR on every drag tick** (offline render of up to 10s). Apply on `onValueCommit` / debounce.
+- [x] **P2 Always-on FX at 0:** FX-bus convolver (3.5s stereo), shimmer PitchShift, FrequencyShifter, master BitCrusher + Chorus at wet 0, per-grain BitCrusher at wet 0 (~60% of grain layers). Connect only when amount > 0 / create lazily. *Done: FX-bus branches fed only when > 0, Lo-fi/Warble spliced out of the master chain at 0 (`rewireMasterTail`), grain BitCrusher only built when it rolls on. Dry routing verified headless; the CPU win and wet-path sound still need a real-device listen.*
+- [x] **P3 Dragging re-renders everything.** Each mousemove calls `setLayers` → whole client + all LayerCards re-render, and the session is marked dirty. rAF-throttle (or transform via ref, commit on mouseup) + `React.memo(LayerCard)`; don't mark dirty until drop. *Done: rAF-coalesced drag, `React.memo(LayerCard)` with stable id-based handlers, dirty marked once on drop (and not for a plain title-bar click).*
+- [x] **P4 Freesound round-trip per layer.** A server action searches Freesound every add; the fallback reads 200 Firestore docs each call. Prefetch the list at boot and cache it client-side and server-side (TTL). *Done: client pool cache (10 min TTL, stale-while-revalidate, prefetched at engine init, avoids sounds already playing) + server-side 15 min cache of the Firestore fallback.*
+- [ ] **P5 Recording memory.** Float32 chunks: ~230MB for 10 min, doubled at merge. Convert to Int16 incrementally.
+- [ ] **P6 Visualizer:** both canvases render in fullscreen; new `Uint8Array` allocated per frame; GL resources not freed on shuffle.
+- [ ] **P7 Layer waveform canvas** has no width/height (blurry, no DPR handling).
+- [ ] **P8 Pad detune** uses a 50ms `setInterval` + `synth.set()` per layer. Slow it down / ramp.
+- [ ] **P9 Zipper noise.** Param setters use `.value =`. Use `rampTo(v, 0.05)` for gains, filters, sends. *Partly done: volume, sends, shimmer/freq-shift/space glide via `glideParam`; filters and master params still use `.value =`.*
+
+### Delight ideas
+
+- [x] **D1 Key lock.** Pads/Melodies get a random 0–11 semitone transpose, so layers in the same scale clash. Add a "lock to one key" option. *Done: Settings → Key (Free or C–B), defaults to a random locked key on fresh load; drones tune to the root; key shown in each layer's Info; saved in sessions (`keyRoot`, absent = Free so old links sound the same). Follow-up: drone partial 5 is a major 3rd, which rubs against minor/dorian scales, so pass the scale to `startDroneLoop` and drop partial 5 for minor modes.*
+- [x] **D2 Re-roll layer.** Regenerate a layer's sound, keeping position/volume/send. *Done: ↻ in each card's title bar; 1.5s crossfade; respects key lock, mute, probability, drift; samples keep playing until the new one loads.*
+- [ ] **D3 Evolve mode.** Layers slowly fade in/out on their own (generative radio).
+- [ ] **D4 Media Session + Wake Lock + sleep timer** (fade out after N min). Lock-screen controls on mobile.
+- [ ] **D5 Session morph.** Crossfade from one saved session to another.
+- [ ] **D6 Compressed export.** Opus/WebM via MediaRecorder alongside WAV.
+- [ ] **D7 Retroactive record.** "Save the last 60s" ring buffer.
+- [ ] **D8 Sample credits.** Show Freesound name/author + link on sample/grain layers. *Partly exists: the Info menu already links the sound name to its Freesound page; uploader name isn't fetched yet (add `username` to the search fields + pool docs).*
+
+---
+
 ## Audio Engine
 
 ### Master Bus

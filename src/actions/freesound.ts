@@ -137,16 +137,26 @@ const POOL_FETCH_LIMIT = 200;
  * refreshed offline by scripts/refresh-freesound-pool.mjs, which runs from
  * a machine that isn't blocked.
  */
+// Module-level cache: the pool only changes when the offline refresh script
+// runs, so re-reading 200 docs on every layer add is wasted reads + latency.
+const POOL_CACHE_TTL_MS = 15 * 60 * 1000;
+let poolCache: { sounds: FreesoundSound[]; fetchedAt: number } | null = null;
+
 async function fetchFromPool(): Promise<FreesoundSound[]> {
   if (!isFirebaseConfigured) return [];
+  if (poolCache && Date.now() - poolCache.fetchedAt < POOL_CACHE_TTL_MS) {
+    return poolCache.sounds;
+  }
   try {
     const snap = await getDocs(
       fsQuery(collection(db, POOL_COLLECTION), limit(POOL_FETCH_LIMIT)),
     );
-    return snap.docs
+    const sounds = snap.docs
       .map((d) => d.data() as { id: number; name: string; previewUrl: string; username?: string })
       .filter((sound) => sound.previewUrl && !isBlockedUploader(sound.username))
       .map(({ id, name, previewUrl }) => ({ id, name, previewUrl }));
+    if (sounds.length > 0) poolCache = { sounds, fetchedAt: Date.now() };
+    return sounds;
   } catch (error) {
     console.error('Failed to read Freesound pool fallback:', error);
     return [];

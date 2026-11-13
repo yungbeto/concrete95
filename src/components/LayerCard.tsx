@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { X, Zap, Waves, Music, Sparkles, Wind, Volume2, VolumeX, AlertTriangle, Radio } from 'lucide-react';
 import LayerMenuBar from './LayerMenuBar';
-import { type AudioEngineHandle, type FreesoundLayerInfo, type GrainLayerInfo, type SynthLayerInfo, type AtmosphereLayerInfo, type DroneLayerInfo } from './AudioEngine';
+import { seekGrainPlayer, type AudioEngineHandle, type FreesoundLayerInfo, type GrainLayerInfo, type SynthLayerInfo, type AtmosphereLayerInfo, type DroneLayerInfo } from './AudioEngine';
 import * as Tone from 'tone';
-import { useRef, useEffect, useState } from 'react';
+import { memo, useRef, useEffect, useState } from 'react';
 
 type LayerInfo = FreesoundLayerInfo | GrainLayerInfo | SynthLayerInfo | AtmosphereLayerInfo | DroneLayerInfo;
 
@@ -38,13 +38,16 @@ interface LayerCardProps {
   onFilterCutoffChange: (id: string, freq: number) => void;
   onFilterResonanceChange: (id: string, q: number) => void;
   onProbabilityChange: (id: string, value: number) => void;
-  onGrainSizeChange: (size: number) => void;
-  onGrainDriftChange: (drift: number) => void;
-  onMouseDown: (e: React.MouseEvent) => void;
-  onTouchStart: (e: React.TouchEvent) => void;
+  // All callbacks take the layer id so the parent can pass stable functions
+  // (LayerCard is memoized; per-layer closures would defeat that).
+  onGrainSizeChange: (id: string, size: number) => void;
+  onGrainDriftChange: (id: string, drift: number) => void;
+  onDragStart: (id: string, e: React.MouseEvent | React.TouchEvent) => void;
   isMuted: boolean;
-  onMuteToggle: () => void;
-  onRenameLayer: (newTitle: string) => void;
+  onMuteToggle: (id: string) => void;
+  onRenameLayer: (id: string, newTitle: string) => void;
+  /** Regenerate this layer's sound (same type) keeping volume/send/position. */
+  onReroll: (id: string) => void;
 }
 
 const layerIcons = {
@@ -143,8 +146,7 @@ function GrainVisualizerDisplay({
     if (!buf?.duration) return;
     const offsetSec = fraction * buf.duration;
     seekRef.current = { fraction, transportTime: Tone.getTransport().seconds };
-    node.stop();
-    node.start(Tone.now(), offsetSec);
+    seekGrainPlayer(node, offsetSec);
   };
 
   useEffect(() => {
@@ -346,7 +348,7 @@ function SoundRecorderDisplay({
   );
 }
 
-export default function LayerCard({
+function LayerCard({
   id,
   title,
   volume,
@@ -375,11 +377,11 @@ export default function LayerCard({
   onProbabilityChange,
   onGrainSizeChange,
   onGrainDriftChange,
-  onMouseDown,
-  onTouchStart,
+  onDragStart,
   isMuted,
   onMuteToggle,
   onRenameLayer,
+  onReroll,
 }: LayerCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(title);
@@ -400,8 +402,8 @@ export default function LayerCard({
         {/* Title Bar */}
         <div
             className={`${LAYER_TYPE_COLORS[type] ?? 'bg-blue-800'} ${isMuted ? 'opacity-60' : ''} text-white flex items-center justify-between p-1 cursor-move`}
-            onMouseDown={onMouseDown}
-            onTouchStart={onTouchStart}
+            onMouseDown={(e) => onDragStart(id, e)}
+            onTouchStart={(e) => onDragStart(id, e)}
         >
             <div className="flex items-center gap-1 min-w-0 flex-1">
                 {layerIcons[type]}
@@ -411,9 +413,9 @@ export default function LayerCard({
                     className="bg-blue-900 text-white text-sm font-bold px-0.5 outline-none border-b border-white w-32 min-w-0"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    onBlur={() => { onRenameLayer(editName.trim() || title); setIsEditing(false); }}
+                    onBlur={() => { onRenameLayer(id, editName.trim() || title); setIsEditing(false); }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') { onRenameLayer(editName.trim() || title); setIsEditing(false); }
+                      if (e.key === 'Enter') { onRenameLayer(id, editName.trim() || title); setIsEditing(false); }
                       if (e.key === 'Escape') { setEditName(title); setIsEditing(false); }
                       e.stopPropagation();
                     }}
@@ -431,12 +433,23 @@ export default function LayerCard({
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <button
+                className="w-5 h-5 flex items-center justify-center border border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 bg-silver text-black hover:bg-neutral-200 text-[11px] font-bold leading-none select-none disabled:opacity-50"
+                onClick={(e) => { e.stopPropagation(); onReroll(id); }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                disabled={isLoading}
+                title="Re-roll — new sound, same settings"
+                aria-label="Re-roll layer"
+              >
+                ↻
+              </button>
+              <button
                 className={`w-5 h-5 flex items-center justify-center border text-[9px] font-bold leading-none select-none
                   ${isMuted
                     ? 'border-t-neutral-500 border-l-neutral-500 border-r-white border-b-white bg-neutral-200 text-neutral-600'
                     : 'border-t-white border-l-white border-r-neutral-500 border-b-neutral-500 bg-silver text-black hover:bg-neutral-200'
                   }`}
-                onClick={(e) => { e.stopPropagation(); onMuteToggle(); }}
+                onClick={(e) => { e.stopPropagation(); onMuteToggle(id); }}
                 onMouseDown={(e) => e.stopPropagation()}
                 onTouchStart={(e) => e.stopPropagation()}
                 title={isMuted ? 'Unmute' : 'Mute'}
@@ -493,8 +506,8 @@ export default function LayerCard({
                     onFilterCutoffChange={(value) => onFilterCutoffChange(id, value)}
                     onFilterResonanceChange={(value) => onFilterResonanceChange(id, value)}
                     onProbabilityChange={(value) => onProbabilityChange(id, value)}
-                    onGrainSizeChange={onGrainSizeChange}
-                    onGrainDriftChange={onGrainDriftChange}
+                    onGrainSizeChange={(size) => onGrainSizeChange(id, size)}
+                    onGrainDriftChange={(drift) => onGrainDriftChange(id, drift)}
                 />
             </div>
 
@@ -513,7 +526,7 @@ export default function LayerCard({
               onTouchStart={(e) => e.stopPropagation()}
             >
               <button
-                onClick={onMuteToggle}
+                onClick={() => onMuteToggle(id)}
                 className="shrink-0 focus:outline-none"
                 aria-label={isMuted ? 'Unmute' : 'Mute'}
               >
@@ -542,3 +555,6 @@ export default function LayerCard({
     </div>
   );
 }
+
+// Parent re-renders on every drag frame / slider tick; skip cards whose props didn't change.
+export default memo(LayerCard);

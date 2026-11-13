@@ -10,6 +10,8 @@ import AudioEngine, {
   type AtmosphereLayerInfo,
   type DroneLayerInfo,
   type ScaleName,
+  type KeyRoot,
+  KEY_NAMES,
   scaleNames,
   delayTimeOptions,
   type DelayTime,
@@ -60,6 +62,7 @@ import { useAuth } from '@/hooks/use-auth';
 import {
   buildSession,
   decodeSession,
+  encodeSession,
   type SavedGlobalSettings,
   type SavedSession,
   saveSharedSession,
@@ -125,6 +128,12 @@ type DragState = {
 } | null;
 
 const MAX_LAYERS = 8;
+/** Fade applied when a layer is removed / Stop All, before the undo window. */
+const REMOVE_FADE_SECONDS = 0.4;
+/** How long a fetched Freesound list is reused before a background refresh. */
+const SOUND_POOL_TTL_MS = 10 * 60 * 1000;
+/** Crossfade between the old and new sound when a layer is re-rolled. */
+const REROLL_FADE_SECONDS = 1.5;
 const DESKTOP_ICON_Z_INDEX = 10;
 
 const LAYER_TYPE_LABELS: Record<Layer['type'], string> = {
@@ -293,6 +302,10 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     };
   }, [booted]);
   const [layers, setLayers] = useState<Layer[]>([]);
+  // Memoized window content captures handlers from an older render; handlers that
+  // iterate all layers read this ref so they see nodes that arrived since.
+  const layersRef = useRef<Layer[]>(layers);
+  layersRef.current = layers;
   const { toast } = useToast();
   // Undo state — audio nodes are kept alive (muted) during the 5s window
   const undoSingleRef = useRef<{
@@ -304,9 +317,20 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     timeoutId: ReturnType<typeof setTimeout>;
   } | null>(null);
   const [dragState, setDragState] = useState<DragState>(null);
+  const dragStateRef = useRef<DragState>(null);
+  dragStateRef.current = dragState;
+  const dragMovedRef = useRef(false);
+  const dragJustEndedRef = useRef(false);
   const [isAlertDismissed, setIsAlertDismissed] = useState(false);
   const [openStartMenu, setOpenStartMenu] = useState(false);
   const [globalScale, setGlobalScale] = useState<ScaleName>('major');
+  // Locked key for new pads/melodies/drones (0 = C … 11 = B); null = each layer
+  // picks a random key, the original behaviour. Randomised on mount (client-only,
+  // avoids an SSR mismatch) so fresh soundscapes start coherent but varied.
+  const [keyRoot, setKeyRoot] = useState<KeyRoot>(0);
+  useEffect(() => {
+    setKeyRoot(Math.floor(Math.random() * 12));
+  }, []);
   const [delayFeedback, setDelayFeedback] = useState(0.4);
   const [delayTime, setDelayTime] = useState<DelayTime>('4n');
   const [delayCutoff, setDelayCutoff] = useState(5000);
@@ -352,6 +376,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
   const [displaySeed, setDisplaySeed] = useState<number | null>(null);
   const [sharePanelOpen, setSharePanelOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const lastShareRef = useRef<{ fingerprint: string; url: string } | null>(null);
   const [desktopPattern, setDesktopPattern] = useState<string>('grid');
   // Randomize on mount (client-only, avoids SSR hydration mismatch) so each
   // fresh visit gets a different desktop pattern instead of always 'grid'.
@@ -371,12 +396,20 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     const params = new URLSearchParams(window.location.search);
     const s = params.get('s');
     if (s) {
+      const notifyBroken = () =>
+        toast({
+          variant: 'destructive',
+          title: "Couldn't open shared soundscape",
+          description: 'The link may be incomplete or expired.',
+        });
       if (s.length <= 12) {
         // Short Firestore ID — fetch async
         loadSharedSession(s).then((session) => {
           if (session) {
             pendingSharedSessionRef.current = session;
             setPendingSharedSessionLoaded(true);
+          } else {
+            notifyBroken();
           }
         });
       } else {
@@ -385,10 +418,13 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
         if (session) {
           pendingSharedSessionRef.current = session;
           setPendingSharedSessionLoaded(true);
+        } else {
+          notifyBroken();
         }
       }
       return;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const applySeed = useCallback((seed: number) => {
@@ -523,18 +559,29 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
       skipNextDirtyRef.current = false;
       return;
     }
+    // A drag re-sets `layers` every frame — mark dirty once on drop instead.
+    if (dragStateRef.current) return;
+    if (dragJustEndedRef.current) {
+      dragJustEndedRef.current = false;
+      if (!dragMovedRef.current) return; // a click on a title bar isn't an edit
+    }
     setIsSessionDirty(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeSession,
     layers,
     globalScale,
+    keyRoot,
     discreetMode,
     driftEnabled,
     driftPeriod,
     globalBPM,
     warmth,
     shimmer,
+    freqShift,
+    convolverMix,
+    lofiAmount,
+    warbleAmount,
     breatheEnabled,
     breathePeriod,
     delayFeedback,
@@ -543,18 +590,30 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     reverbDecay,
     reverbWet,
     reverbDiffusion,
+    dragState,
   ]);
+
+  // Updated every render (below, once collectSettings exists) so timers read fresh state.
+  const latestSessionStateRef = useRef<{
+    layers: Layer[];
+    collectSettings: () => SavedGlobalSettings;
+  } | null>(null);
 
   // Auto-save dirty sessions for authenticated users (30s debounce)
   useEffect(() => {
     if (!isSessionDirty || !activeSession || !user) return;
     const t = setTimeout(async () => {
       try {
+        // Read the latest state at fire time — this effect doesn't re-run on
+        // every edit, so the closure's `layers`/settings would be stale.
+        const latest = latestSessionStateRef.current;
+        if (!latest) return;
         const updated = buildSession(
           activeSession.name,
-          layers,
-          collectSettings(),
+          latest.layers,
+          latest.collectSettings(),
           activeSession.id,
+          activeSession.createdAt,
         );
         await saveUserSession(user.uid, updated);
         skipNextDirtyRef.current = true;
@@ -739,24 +798,31 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
         return;
       }
 
+      // Focused controls own Space (activate) and Backspace/Delete;
+      // without this, Space on a focused button or slider would Stop All.
+      const ownsKeys = !!target.closest(
+        'button, a, select, [role="slider"], [role="button"], [role="menuitem"], [role="option"], [role="combobox"], [role="checkbox"], [role="switch"], [role="tab"]',
+      );
+
       const activeLayer = layers.find((l) => l.id === activeItemId);
 
       switch (e.key) {
         case 'm':
         case 'M':
-          if (activeLayer) {
+          if (activeLayer && !e.metaKey && !e.ctrlKey && !e.altKey) {
             e.preventDefault();
             handleMuteToggle(activeLayer.id);
           }
           break;
         case 'Delete':
         case 'Backspace':
-          if (activeLayer) {
+          if (activeLayer && !ownsKeys) {
             e.preventDefault();
             handleRemoveLayer(activeLayer.id);
           }
           break;
         case ' ':
+          if (ownsKeys) break;
           e.preventDefault();
           if (layers.length > 0) handleRemoveAllLayers();
           break;
@@ -886,6 +952,63 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     return false;
   };
 
+  // ── Freesound pool cache ─────────────────────────────────────────────────
+  // Each search is a server-action round trip to Freesound (or a 200-doc
+  // Firestore read on fallback). Fetch once, reuse for a while, refresh in
+  // the background, and prefer sounds that aren't already playing.
+  const soundPoolRef = useRef<{
+    sounds: FreesoundSound[];
+    fetchedAt: number;
+    inflight: Promise<FreesoundSound[] | { error: string }> | null;
+  }>({ sounds: [], fetchedAt: 0, inflight: null });
+
+  const refreshSoundPool = useCallback(() => {
+    const pool = soundPoolRef.current;
+    if (pool.inflight) return pool.inflight;
+    pool.inflight = searchFreesound('')
+      .then((res) => {
+        if (!('error' in res) && res.length > 0) {
+          pool.sounds = res;
+          pool.fetchedAt = Date.now();
+        }
+        return res;
+      })
+      .catch((err: unknown) => ({
+        error: err instanceof Error ? err.message : 'Failed to reach Freesound.',
+      }))
+      .finally(() => {
+        pool.inflight = null;
+      });
+    return pool.inflight;
+  }, []);
+
+  const pickFreesoundSound = async (): Promise<
+    { sound: FreesoundSound } | { error: string }
+  > => {
+    const pool = soundPoolRef.current;
+    if (pool.sounds.length === 0) {
+      const res = await refreshSoundPool();
+      if ('error' in res) return res;
+      if (res.length === 0) return { error: 'No sounds found.' };
+    } else if (Date.now() - pool.fetchedAt > SOUND_POOL_TTL_MS) {
+      void refreshSoundPool(); // stale-while-revalidate
+    }
+    const inUse = new Set(
+      layersRef.current
+        .map((l) => (l.info && 'id' in l.info ? l.info.id : null))
+        .filter((v): v is number => v != null),
+    );
+    const fresh = pool.sounds.filter((snd) => !inUse.has(snd.id));
+    const choices = fresh.length > 0 ? fresh : pool.sounds;
+    return { sound: choices[Math.floor(Math.random() * choices.length)] };
+  };
+
+  // Warm the pool as soon as the engine is ready so the first sample layer
+  // only waits on the audio download.
+  useEffect(() => {
+    if (isEngineInitialized) void refreshSoundPool();
+  }, [isEngineInitialized, refreshSoundPool]);
+
   const stopLayerAudio = useCallback((layer: Layer) => {
     if (!layer.node || !audioEngineRef.current) return;
     if (layer.type === 'freesound') {
@@ -910,11 +1033,12 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
       return;
     }
 
-    // Mute immediately so silence is instant — audio node stays alive for undo
+    // Quick fade (not a hard cut, which clicks) — node stays alive for undo
     if (layerToRemove.node && audioEngineRef.current) {
       audioEngineRef.current.setVolume(
         layerToRemove.node as Tone.Player,
         -Infinity,
+        REMOVE_FADE_SECONDS,
       );
     }
 
@@ -943,6 +1067,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     const newSynthData = audioEngineRef.current.startSynthLoop(
       globalScale,
       discreetMode,
+      keyRoot,
     );
     if (!newSynthData) {
       handleRemoveLayer(id);
@@ -980,19 +1105,19 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     if (!id) return;
 
     try {
-      const sounds = await searchFreesound('');
+      const pick = await pickFreesoundSound();
 
-      if ('error' in sounds || sounds.length === 0) {
+      if ('error' in pick) {
         toast({
           variant: 'destructive',
           title: 'Freesound Error',
-          description: 'error' in sounds ? sounds.error : `No sounds found.`,
+          description: pick.error,
         });
         handleRemoveLayer(id);
         return;
       }
 
-      const randomSound = sounds[Math.floor(Math.random() * sounds.length)];
+      const randomSound = pick.sound;
       if (!audioEngineRef.current) {
         handleRemoveLayer(id);
         return;
@@ -1076,7 +1201,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     const id = addLayer('drone', { volume: -18 });
     if (!id) return;
 
-    const droneData = audioEngineRef.current.startDroneLoop();
+    const droneData = audioEngineRef.current.startDroneLoop(keyRoot);
     if (!droneData) {
       handleRemoveLayer(id);
       return;
@@ -1108,19 +1233,19 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     if (!id) return;
 
     try {
-      const sounds = await searchFreesound('');
+      const pick = await pickFreesoundSound();
 
-      if ('error' in sounds || sounds.length === 0) {
+      if ('error' in pick) {
         toast({
           variant: 'destructive',
           title: 'Freesound Error',
-          description: 'error' in sounds ? sounds.error : `No sounds found.`,
+          description: pick.error,
         });
         handleRemoveLayer(id);
         return;
       }
 
-      const randomSound = sounds[Math.floor(Math.random() * sounds.length)];
+      const randomSound = pick.sound;
       if (!audioEngineRef.current) {
         handleRemoveLayer(id);
         return;
@@ -1179,6 +1304,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     const newMelodicData = audioEngineRef.current.startMelodicLoop(
       globalScale,
       discreetMode,
+      keyRoot,
     );
     if (!newMelodicData) {
       handleRemoveLayer(id);
@@ -1227,6 +1353,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
 
+    dragMovedRef.current = false;
     setDragState({
       id: id,
       type,
@@ -1235,37 +1362,55 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     });
   };
 
+  // Pointer events can arrive faster than the display refreshes (high-poll mice);
+  // coalesce to one state update per animation frame.
+  const dragFrameRef = useRef<number | null>(null);
+  const dragPointRef = useRef<{ x: number; y: number } | null>(null);
+
   const handleMouseMove = useCallback(
     (e: MouseEvent | TouchEvent) => {
       if (!dragState) return;
 
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
       const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+      dragPointRef.current = { x: clientX, y: clientY };
+      if (dragFrameRef.current != null) return;
 
-      const moveItem = (items: any[]) => {
-        return items.map((item) =>
-          item.id === dragState.id
-            ? {
-                ...item,
-                position: {
-                  x: clientX - dragState.offsetX,
-                  y: clientY - dragState.offsetY,
-                },
-              }
-            : item,
-        );
-      };
+      dragFrameRef.current = requestAnimationFrame(() => {
+        dragFrameRef.current = null;
+        const pt = dragPointRef.current;
+        if (!pt) return;
+        dragMovedRef.current = true;
+        const moveItem = <T extends { id: string; position: { x: number; y: number } }>(items: T[]) =>
+          items.map((item) =>
+            item.id === dragState.id
+              ? {
+                  ...item,
+                  position: {
+                    x: pt.x - dragState.offsetX,
+                    y: pt.y - dragState.offsetY,
+                  },
+                }
+              : item,
+          );
 
-      if (dragState.type === 'layer') {
-        setLayers((prev) => moveItem(prev));
-      } else {
-        setWindows((prev) => moveItem(prev));
-      }
+        if (dragState.type === 'layer') {
+          setLayers((prev) => moveItem(prev));
+        } else {
+          setWindows((prev) => moveItem(prev));
+        }
+      });
     },
     [dragState],
   );
 
   const handleMouseUp = useCallback(() => {
+    if (dragFrameRef.current != null) {
+      cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = null;
+    }
+    dragPointRef.current = null;
+    dragJustEndedRef.current = true;
     setDragState(null);
   }, []);
 
@@ -1320,9 +1465,10 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     audioEngineRef.current?.setReverbWet(value);
   };
 
+  // Tone.Reverb has no diffusion parameter — the value is kept only so older
+  // saved sessions round-trip unchanged. No UI control.
   const handleReverbDiffusionChange = (value: number) => {
     setReverbDiffusion(value);
-    audioEngineRef.current?.setReverbDiffusion(value);
   };
 
   const handleWarmthChange = (value: number) => {
@@ -1411,10 +1557,30 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
               ))}
             </SelectContent>
           </Select>
+          <p className='text-xs mt-3 mb-2'>
+            Key — lock pads, melodies and drones to one root so layers
+            harmonise.
+          </p>
+          <Select
+            value={keyRoot == null ? 'free' : String(keyRoot)}
+            onValueChange={(v) => setKeyRoot(v === 'free' ? null : Number(v))}
+          >
+            <SelectTrigger className='w-full'>
+              <SelectValue placeholder='Select a key' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='free'>Free (random key per layer)</SelectItem>
+              {KEY_NAMES.map((name, i) => (
+                <SelectItem key={name} value={String(i)}>
+                  {name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {layers.length > 0 && (
             <Fieldset label='Warning' variant='warning' className='mt-4'>
               <p className='text-xs'>
-                Changing the scale only affects new layers. For a consistent
+                Changing the scale or key only affects new layers. For a consistent
                 soundscape, please Stop All layers and start fresh.
               </p>
             </Fieldset>
@@ -1463,7 +1629,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             Period: {driftPeriod.toFixed(0)} min
           </p>
           <Slider
-            defaultValue={[driftPeriod]}
+            value={[driftPeriod]}
             max={30}
             min={5}
             step={1}
@@ -1503,6 +1669,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     ),
     [
       globalScale,
+      keyRoot,
       layers.length,
       discreetMode,
       driftEnabled,
@@ -1534,7 +1701,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             Feedback: {delayFeedback.toFixed(2)}
           </p>
           <Slider
-            defaultValue={[delayFeedback]}
+            value={[delayFeedback]}
             max={0.95}
             min={0}
             step={0.01}
@@ -1544,7 +1711,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             Hi-Cut: {(delayCutoff / 1000).toFixed(1)} kHz
           </p>
           <Slider
-            defaultValue={[delayCutoff]}
+            value={[delayCutoff]}
             max={20000}
             min={500}
             step={100}
@@ -1555,36 +1722,29 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
         <Fieldset label='Master Reverb'>
           <p className='text-xs mb-2'>Decay: {reverbDecay.toFixed(1)}s</p>
           <Slider
-            defaultValue={[reverbDecay]}
+            value={[reverbDecay]}
             max={20}
             min={0.5}
             step={0.1}
-            onValueChange={(value) => handleReverbDecayChange(value[0])}
+            // Tone.Reverb re-renders its whole impulse response on every decay
+            // change — only apply it when the drag ends.
+            onValueChange={(value) => setReverbDecay(value[0])}
+            onValueCommit={(value) => handleReverbDecayChange(value[0])}
           />
           <p className='text-xs mt-4 mb-2'>Wet/Dry: {reverbWet.toFixed(2)}</p>
           <Slider
-            defaultValue={[reverbWet]}
+            value={[reverbWet]}
             max={1}
             min={0}
             step={0.01}
             onValueChange={(value) => handleReverbWetChange(value[0])}
-          />
-          <p className='text-xs mt-4 mb-2'>
-            Diffusion: {reverbDiffusion.toFixed(2)}
-          </p>
-          <Slider
-            defaultValue={[reverbDiffusion]}
-            max={1}
-            min={0}
-            step={0.01}
-            onValueChange={(value) => handleReverbDiffusionChange(value[0])}
           />
         </Fieldset>
 
         <Fieldset label='Shimmer'>
           <p className='text-xs mb-2'>Amount: {shimmer.toFixed(2)}</p>
           <Slider
-            defaultValue={[shimmer]}
+            value={[shimmer]}
             max={1}
             min={0}
             step={0.01}
@@ -1599,7 +1759,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
         <Fieldset label='Frequency Drift'>
           <p className='text-xs mb-2'>Amount: {freqShift.toFixed(2)}</p>
           <Slider
-            defaultValue={[freqShift]}
+            value={[freqShift]}
             max={1}
             min={0}
             step={0.01}
@@ -1622,7 +1782,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             )
           </p>
           <Slider
-            defaultValue={[convolverMix]}
+            value={[convolverMix]}
             max={1}
             min={0}
             step={0.01}
@@ -1654,7 +1814,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
         <Fieldset label='Tape Warmth'>
           <p className='text-xs mb-2'>Warmth: {warmth.toFixed(2)}</p>
           <Slider
-            defaultValue={[warmth]}
+            value={[warmth]}
             max={1}
             min={0}
             step={0.01}
@@ -1688,7 +1848,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             Period: {breathePeriod.toFixed(0)} min
           </p>
           <Slider
-            defaultValue={[breathePeriod]}
+            value={[breathePeriod]}
             max={8}
             min={2}
             step={0.5}
@@ -1702,7 +1862,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
         <Fieldset label='Lo-fi'>
           <p className='text-xs mb-2'>Degradation: {lofiAmount.toFixed(2)}</p>
           <Slider
-            defaultValue={[lofiAmount]}
+            value={[lofiAmount]}
             max={1}
             min={0}
             step={0.01}
@@ -1717,7 +1877,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
         <Fieldset label='Tape Warble'>
           <p className='text-xs mb-2'>Wow: {warbleAmount.toFixed(2)}</p>
           <Slider
-            defaultValue={[warbleAmount]}
+            value={[warbleAmount]}
             max={1}
             min={0}
             step={0.01}
@@ -1748,10 +1908,14 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
   const handleRemoveAllLayers = () => {
     if (layers.length === 0) return;
 
-    // Mute everything immediately
+    // Fade everything out quickly (a hard cut clicks)
     layers.forEach((layer) => {
       if (layer.node && audioEngineRef.current) {
-        audioEngineRef.current.setVolume(layer.node as Tone.Player, -Infinity);
+        audioEngineRef.current.setVolume(
+          layer.node as Tone.Player,
+          -Infinity,
+          REMOVE_FADE_SECONDS,
+        );
       }
     });
 
@@ -1928,7 +2092,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
 
   const handleDriftToggle = (enabled: boolean) => {
     setDriftEnabled(enabled);
-    layers.forEach((layer) => {
+    layersRef.current.forEach((layer) => {
       if (layer.node) {
         audioEngineRef.current?.setLayerDrift(layer.node, enabled, driftPeriod);
       }
@@ -1938,7 +2102,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
   const handleDriftPeriodChange = (value: number) => {
     setDriftPeriod(value);
     if (driftEnabled) {
-      layers.forEach((layer) => {
+      layersRef.current.forEach((layer) => {
         if (layer.node) {
           audioEngineRef.current?.setLayerDrift(layer.node, true, value);
         }
@@ -1986,6 +2150,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
 
   const collectSettings = (): SavedGlobalSettings => ({
     scale: globalScale,
+    keyRoot,
     bpm: globalBPM,
     discreetMode,
     driftEnabled,
@@ -1993,6 +2158,9 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     warmth,
     shimmer,
     freqShift,
+    convolverMix,
+    lofiAmount,
+    warbleAmount,
     breatheEnabled,
     breathePeriod,
     delayFeedback,
@@ -2003,6 +2171,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     reverbDiffusion,
     seed: sessionSeedRef.current ?? undefined,
   });
+  latestSessionStateRef.current = { layers, collectSettings };
 
   const handleBuildSession = (name: string): SavedSession => {
     return buildSession(name, layers, collectSettings());
@@ -2043,6 +2212,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
         layers,
         collectSettings(),
         activeSession.id,
+        activeSession.createdAt,
       );
       await saveUserSession(user.uid, updated);
       skipNextDirtyRef.current = true;
@@ -2071,6 +2241,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     // Apply global settings
     const s = session.settings;
     setGlobalScale(s.scale);
+    // Sessions saved before key lock existed played each layer in a random key.
+    setKeyRoot(s.keyRoot ?? null);
     setDiscreetMode(s.discreetMode);
     setDriftEnabled(s.driftEnabled);
     setDriftPeriod(s.driftPeriod);
@@ -2078,6 +2250,9 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     handleWarmthChange(s.warmth);
     handleShimmerChange(s.shimmer ?? 0);
     handleFreqShiftChange(s.freqShift ?? 0);
+    handleConvolverMixChange(s.convolverMix ?? 0);
+    handleLofiChange(s.lofiAmount ?? 0);
+    handleWarbleChange(s.warbleAmount ?? 0);
     handleBreatheToggle(s.breatheEnabled);
     setBreathePeriod(s.breathePeriod);
     if (s.breatheEnabled)
@@ -2116,6 +2291,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
           | 'atmosphere'
           | 'drone',
         status: 'loading' as const,
+        isMuted: savedLayer.muted ?? false,
         // On mobile use fresh clamped positions; saved positions may be off-screen
         position: isMobile
           ? getNewLayerPosition(i)
@@ -2151,7 +2327,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
 
           audioEngineRef.current.setVolume(
             playerData.player,
-            savedLayer.volume,
+            savedLayer.muted ? -Infinity : savedLayer.volume,
           );
           audioEngineRef.current.setSendAmount(
             playerData.player,
@@ -2206,7 +2382,10 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             setLayers((prev) => prev.filter((l) => l.id !== id));
             continue;
           }
-          audioEngineRef.current.setVolume(grainData.player, savedLayer.volume);
+          audioEngineRef.current.setVolume(
+            grainData.player,
+            savedLayer.muted ? -Infinity : savedLayer.volume,
+          );
           audioEngineRef.current.setSendAmount(
             grainData.player,
             savedLayer.send,
@@ -2267,7 +2446,10 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             continue;
           }
 
-          audioEngineRef.current.setVolume(atmoData.node, savedLayer.volume);
+          audioEngineRef.current.setVolume(
+            atmoData.node,
+            savedLayer.muted ? -Infinity : savedLayer.volume,
+          );
           audioEngineRef.current.setSendAmount(atmoData.node, savedLayer.send);
           audioEngineRef.current.setLayerFilterCutoff(
             atmoData.node,
@@ -2298,11 +2480,38 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
                 : l,
             ),
           );
+        } else if (savedLayer.type === 'drone') {
+          const droneData = audioEngineRef.current.startDroneLoop(s.keyRoot ?? null);
+          if (!droneData) {
+            setLayers((prev) => prev.filter((l) => l.id !== id));
+            continue;
+          }
+          // Drone fades in from silence over 6s toward a default level — retarget
+          // that fade at the saved volume instead of letting it land on -18 dB.
+          droneData.node.gain.cancelScheduledValues(Tone.now());
+          droneData.node.gain.rampTo(
+            savedLayer.muted ? 0 : Tone.dbToGain(savedLayer.volume),
+            6,
+          );
+          audioEngineRef.current.setSendAmount(droneData.node, savedLayer.send);
+
+          setLayers((prev) =>
+            prev.map((l) =>
+              l.id === id
+                ? {
+                    ...l,
+                    node: droneData.node,
+                    info: droneData.info,
+                    status: 'playing',
+                  }
+                : l,
+            ),
+          );
         } else {
           const loopData =
             savedLayer.type === 'melodic'
-              ? audioEngineRef.current.startMelodicLoop(s.scale, s.discreetMode)
-              : audioEngineRef.current.startSynthLoop(s.scale, s.discreetMode);
+              ? audioEngineRef.current.startMelodicLoop(s.scale, s.discreetMode, s.keyRoot ?? null)
+              : audioEngineRef.current.startSynthLoop(s.scale, s.discreetMode, s.keyRoot ?? null);
           if (!loopData) {
             setLayers((prev) => prev.filter((l) => l.id !== id));
             continue;
@@ -2310,7 +2519,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
 
           audioEngineRef.current.setVolume(
             loopData.sequence,
-            savedLayer.volume,
+            savedLayer.muted ? -Infinity : savedLayer.volume,
           );
           audioEngineRef.current.setSendAmount(
             loopData.sequence,
@@ -2375,6 +2584,157 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     setIsSessionDirty(false);
     toast({ title: 'Session loaded', description: session.name });
   };
+
+  // ── Re-roll ────────────────────────────────────────────────────────────────
+  /** Start a brand-new node of `type` with fresh random parameters. */
+  const startFreshLayerNode = async (
+    type: Layer['type'],
+  ): Promise<{ node: NonNullable<Layer['node']>; patch: Partial<Layer> } | { error: string } | null> => {
+    const engine = audioEngineRef.current;
+    if (!engine) return null;
+    switch (type) {
+      case 'synth': {
+        const d = engine.startSynthLoop(globalScale, discreetMode, keyRoot);
+        return d && { node: d.sequence, patch: { info: d.info, filterCutoff: d.filterCutoff, filterResonance: d.filterResonance } };
+      }
+      case 'melodic': {
+        const d = engine.startMelodicLoop(globalScale, discreetMode, keyRoot);
+        return d && { node: d.sequence, patch: { info: d.info, filterCutoff: d.filterCutoff, filterResonance: d.filterResonance } };
+      }
+      case 'atmosphere': {
+        const d = engine.startAtmosphereLoop();
+        return d && { node: d.node, patch: { info: d.info, filterCutoff: d.filterCutoff, filterResonance: d.filterResonance } };
+      }
+      case 'drone': {
+        const d = engine.startDroneLoop(keyRoot);
+        return d && { node: d.node, patch: { info: d.info } };
+      }
+      case 'freesound':
+      case 'grain': {
+        const pick = await pickFreesoundSound();
+        if ('error' in pick) return pick;
+        if (type === 'freesound') {
+          const d = await engine.startFreesoundLoop(pick.sound);
+          return d && { node: d.player, patch: { info: d.info, filterCutoff: d.filterCutoff, filterResonance: d.filterResonance, playbackRate: 1, reverse: false } };
+        }
+        const d = await engine.startGrainLoop(pick.sound);
+        return d && { node: d.player, patch: { info: d.info, filterCutoff: d.filterCutoff, filterResonance: d.filterResonance, playbackRate: d.playbackRate, grainSize: d.grainSize, grainDrift: d.grainDrift, reverse: false } };
+      }
+    }
+  };
+
+  const rerollingRef = useRef<Set<string>>(new Set());
+  /**
+   * Swap a layer's sound for a freshly generated one of the same type, keeping
+   * its title, position, volume, send and mute. The old node keeps playing
+   * until the new one is ready (samples take a while), then crossfades out.
+   */
+  const handleRerollLayer = async (id: string) => {
+    const engine = audioEngineRef.current;
+    const layer = layersRef.current.find((l) => l.id === id);
+    if (!engine || !layer?.node || layer.status !== 'playing') return;
+    if (rerollingRef.current.has(id)) return;
+    rerollingRef.current.add(id);
+    try {
+      await ensureAudioUnlocked();
+      const fresh = await startFreshLayerNode(layer.type);
+      if (!fresh || 'error' in fresh) {
+        toast({
+          variant: 'destructive',
+          title: "Couldn't re-roll layer",
+          description: fresh && 'error' in fresh ? fresh.error : undefined,
+        });
+        return;
+      }
+      // The layer may have been removed while a sample was loading.
+      const current = layersRef.current.find((l) => l.id === id);
+      if (!current) {
+        stopLayerAudio({ ...layer, node: fresh.node });
+        return;
+      }
+      // Fade the new sound in from silence while the old one fades out.
+      engine.setVolume(fresh.node, -Infinity, 0.005);
+      engine.setVolume(fresh.node, current.isMuted ? -Infinity : current.volume, REROLL_FADE_SECONDS);
+      engine.setSendAmount(fresh.node, current.send);
+      if (fresh.node instanceof Tone.Sequence && current.probability != null) {
+        engine.setProbability(fresh.node, current.probability);
+      }
+      if (driftEnabled) engine.setLayerDrift(fresh.node, true, driftPeriod);
+
+      const old = current;
+      engine.setVolume(old.node!, -Infinity, REROLL_FADE_SECONDS);
+      setTimeout(() => stopLayerAudio(old), REROLL_FADE_SECONDS * 1000 + 100);
+
+      setLayers((prev) =>
+        prev.map((l) =>
+          l.id === id ? { ...l, ...fresh.patch, node: fresh.node, probability: current.probability } : l,
+        ),
+      );
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: "Couldn't re-roll layer",
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      rerollingRef.current.delete(id);
+    }
+  };
+
+  // Stable identities for LayerCard (memoized): each delegates to this render's
+  // handler via a ref, so cards don't re-render just because the parent did.
+  const layerHandlersRef = useRef({
+    handleRemoveLayer,
+    handleVolumeChange,
+    handleSendChange,
+    handlePlaybackRateChange,
+    handleReverseChange,
+    handleLayerFilterCutoffChange,
+    handleLayerFilterResonanceChange,
+    handleProbabilityChange,
+    handleGrainSizeChange,
+    handleGrainDriftChange,
+    handleMuteToggle,
+    handleRenameLayer,
+    handleDragStart,
+    handleRerollLayer,
+  });
+  layerHandlersRef.current = {
+    handleRemoveLayer,
+    handleVolumeChange,
+    handleSendChange,
+    handlePlaybackRateChange,
+    handleReverseChange,
+    handleLayerFilterCutoffChange,
+    handleLayerFilterResonanceChange,
+    handleProbabilityChange,
+    handleGrainSizeChange,
+    handleGrainDriftChange,
+    handleMuteToggle,
+    handleRenameLayer,
+    handleDragStart,
+    handleRerollLayer,
+  };
+  const stableLayerHandlers = useMemo(() => {
+    const h = () => layerHandlersRef.current;
+    return {
+      onRemove: (id: string) => h().handleRemoveLayer(id),
+      onVolumeChange: (id: string, v: number) => h().handleVolumeChange(id, v),
+      onSendChange: (id: string, v: number) => h().handleSendChange(id, v),
+      onPlaybackRateChange: (id: string, v: number) => h().handlePlaybackRateChange(id, v),
+      onReverseChange: (id: string, v: boolean) => h().handleReverseChange(id, v),
+      onFilterCutoffChange: (id: string, v: number) => h().handleLayerFilterCutoffChange(id, v),
+      onFilterResonanceChange: (id: string, v: number) => h().handleLayerFilterResonanceChange(id, v),
+      onProbabilityChange: (id: string, v: number) => h().handleProbabilityChange(id, v),
+      onGrainSizeChange: (id: string, v: number) => h().handleGrainSizeChange(id, v),
+      onGrainDriftChange: (id: string, v: number) => h().handleGrainDriftChange(id, v),
+      onMuteToggle: (id: string) => h().handleMuteToggle(id),
+      onRenameLayer: (id: string, title: string) => h().handleRenameLayer(id, title),
+      onDragStart: (id: string, e: React.MouseEvent | React.TouchEvent) =>
+        h().handleDragStart(id, 'layer', e),
+      onReroll: (id: string) => void h().handleRerollLayer(id),
+    };
+  }, []);
 
   const handleStartAudio = async () => {
     await ensureAudioUnlocked();
@@ -2548,27 +2908,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
               reverse={layer.reverse}
               grainSize={layer.grainSize}
               grainDrift={layer.grainDrift}
-              onRemove={handleRemoveLayer}
-              onVolumeChange={handleVolumeChange}
-              onSendChange={handleSendChange}
-              onPlaybackRateChange={handlePlaybackRateChange}
-              onReverseChange={handleReverseChange}
-              onFilterCutoffChange={handleLayerFilterCutoffChange}
-              onFilterResonanceChange={handleLayerFilterResonanceChange}
-              onProbabilityChange={handleProbabilityChange}
-              onGrainSizeChange={(size) =>
-                handleGrainSizeChange(layer.id, size)
-              }
-              onGrainDriftChange={(drift) =>
-                handleGrainDriftChange(layer.id, drift)
-              }
               isMuted={layer.isMuted ?? false}
-              onMuteToggle={() => handleMuteToggle(layer.id)}
-              onRenameLayer={(newTitle) =>
-                handleRenameLayer(layer.id, newTitle)
-              }
-              onMouseDown={(e) => handleDragStart(layer.id, 'layer', e)}
-              onTouchStart={(e) => handleDragStart(layer.id, 'layer', e)}
+              {...stableLayerHandlers}
             />
           ))}
           {/* FX Send Bus — off-canvas drawer sliding in from the right */}
@@ -2936,11 +3277,30 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
                     const session = handleBuildSession(
                       activeSession?.name ?? 'Shared Soundscape',
                     );
-                    const id = await saveSharedSession(session);
+                    // Fingerprint ignores id/timestamps so re-opening the panel on
+                    // an unchanged soundscape reuses the link instead of writing a new doc.
+                    const fingerprint = JSON.stringify({
+                      name: session.name,
+                      settings: session.settings,
+                      layers: session.layers,
+                    });
                     const url = new URL(
                       window.location.origin + window.location.pathname,
                     );
-                    url.searchParams.set('s', id);
+                    if (lastShareRef.current?.fingerprint === fingerprint) {
+                      setShareUrl(lastShareRef.current.url);
+                      return;
+                    }
+                    try {
+                      const id = await saveSharedSession(session);
+                      url.searchParams.set('s', id);
+                    } catch (err) {
+                      // Firestore unavailable (rules, offline, quota) — fall back to a
+                      // self-contained compressed link; decodeSession handles both.
+                      console.warn('Short share link failed, using encoded link:', err);
+                      url.searchParams.set('s', encodeSession(session));
+                    }
+                    lastShareRef.current = { fingerprint, url: url.toString() };
                     setShareUrl(url.toString());
                   }
                 }}

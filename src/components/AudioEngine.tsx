@@ -52,6 +52,20 @@ const scales = {
 
 export type ScaleName = keyof typeof scales;
 
+/** Pitch class of the locked key: 0 = C … 11 = B. null = each layer picks its own. */
+export type KeyRoot = number | null;
+export const KEY_NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'] as const;
+
+/**
+ * The scale tables are written in C, so the key is a transposition. Always
+ * draw from the RNG (even when locked) so seeded sessions consume the same
+ * sequence either way and the layer's other parameters don't shift.
+ */
+const pickTransposition = (r: () => number, keyRoot: KeyRoot | undefined) => {
+  const random = Math.floor(r() * 12);
+  return keyRoot == null ? random : ((keyRoot % 12) + 12) % 12;
+};
+
 export const scaleNames = Object.keys(scales) as ScaleName[];
 export const delayTimeOptions = ['1n', '2n', '4n', '8n', '16n', '32n', '2t', '4t', '8t', '16t'] as const;
 export type DelayTime = typeof delayTimeOptions[number];
@@ -127,10 +141,31 @@ const getGrainVoices = (player: Tone.GrainPlayer): Tone.GrainPlayer[] => {
   return voices?.length ? voices : [player];
 };
 
-const setGrainVoiceVolumes = (player: Tone.GrainPlayer, volume: number) => {
+/** Default smoothing for user-facing level changes — long enough to avoid zipper noise and clicks. */
+const PARAM_RAMP_SECONDS = 0.05;
+/** -∞ dB can't be ramped toward; this is inaudible and keeps the ramp math finite. */
+const SILENT_DB = -100;
+
+/**
+ * Glide a param from wherever it is right now. cancelAndHold (rather than
+ * assigning .value) also supersedes in-flight ramps, e.g. the drone fade-in,
+ * which would otherwise overwrite a user change when it completes.
+ * Linear on purpose: Tone's rampTo is exponential for decibels, which
+ * misbehaves around silence.
+ */
+const glideParam = (param: Tone.Param<any> | Tone.Signal<any>, value: number, seconds = PARAM_RAMP_SECONDS) => {
+  const now = Tone.now();
+  param.cancelAndHoldAtTime(now);
+  param.linearRampToValueAtTime(value, now + seconds);
+};
+
+const glideDb = (param: Tone.Param<'decibels'>, db: number, seconds = PARAM_RAMP_SECONDS) =>
+  glideParam(param, Number.isFinite(db) ? db : SILENT_DB, seconds);
+
+const setGrainVoiceVolumes = (player: Tone.GrainPlayer, volume: number, seconds = PARAM_RAMP_SECONDS) => {
   getGrainVoices(player).forEach((voice) => {
     if (!voice.disposed) {
-      voice.volume.value = volume - GRAIN_VOICE_GAIN_COMPENSATION_DB;
+      glideDb(voice.volume, volume - GRAIN_VOICE_GAIN_COMPENSATION_DB, seconds);
     }
   });
 };
@@ -177,9 +212,33 @@ const startGrainScatter = (player: Tone.GrainPlayer) => {
   }, intervalMs);
 };
 
+/**
+ * Move a grain layer's scan position. Restarts every voice (not just the
+ * primary) around the new offset and updates the bookkeeping the scatter
+ * interval reads, otherwise the next scatter tick snaps voices back.
+ */
+export const seekGrainPlayer = (player: Tone.GrainPlayer, offsetSec: number) => {
+  if (player.disposed) return;
+  const scatter = (player as any).grainScatter as GrainScatterState | undefined;
+  const drift = scatter?.drift ?? 0;
+  const rng = scatter?.rng ?? Math.random;
+  const now = Tone.now();
+  getGrainVoices(player).forEach((voice, i) => {
+    if (voice.disposed) return;
+    const duration = voice.buffer?.duration ?? 0;
+    if (!duration) return;
+    const spread = i === 0 ? 0 : (rng() - 0.5) * 2 * drift;
+    const offset = wrapSeconds(offsetSec + spread, duration);
+    voice.restart(now, offset);
+    (voice as any).grainStartedAt = now;
+    (voice as any).grainStartOffset = offset;
+  });
+};
+
 export type AudioEngineHandle = {
   initialize: () => void;
-  startSynthLoop: (scale?: ScaleName, discreetMode?: boolean) => {
+  /** `keyRoot` 0–11 (C…B) locks the layer's key; null/undefined = random key per layer. */
+  startSynthLoop: (scale?: ScaleName, discreetMode?: boolean, keyRoot?: KeyRoot) => {
     sequence: Tone.Sequence;
     info: SynthLayerInfo;
     filterCutoff: number;
@@ -196,14 +255,15 @@ export type AudioEngineHandle = {
   stopGrainLoop: (player: Tone.GrainPlayer) => void;
   setGrainSize: (player: Tone.GrainPlayer, size: number) => void;
   setGrainDrift: (player: Tone.GrainPlayer, drift: number) => void;
-  startMelodicLoop: (scale?: ScaleName, discreetMode?: boolean) => {
+  startMelodicLoop: (scale?: ScaleName, discreetMode?: boolean, keyRoot?: KeyRoot) => {
     sequence: Tone.Sequence;
     info: SynthLayerInfo;
     filterCutoff: number;
     filterResonance: number;
   } | null;
   stopMelodicLoop: (sequence: Tone.Sequence) => void;
-  setVolume: (node: Tone.Player | Tone.GrainPlayer | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence | Tone.Noise | Tone.Gain, volume: number) => void;
+  /** `rampSeconds` defaults to a short anti-zipper glide; pass longer for fades. */
+  setVolume: (node: Tone.Player | Tone.GrainPlayer | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence | Tone.Noise | Tone.Gain, volume: number, rampSeconds?: number) => void;
   setSendAmount: (node: Tone.Player | Tone.GrainPlayer | Tone.PolySynth | Tone.PluckSynth | Tone.Sequence | Tone.Noise | Tone.Gain, amount: number) => void;
   setPlaybackRate: (node: Tone.Player | Tone.GrainPlayer, rate: number) => void;
   setReverse: (node: Tone.Player | Tone.GrainPlayer, reverse: boolean) => void;
@@ -221,7 +281,6 @@ export type AudioEngineHandle = {
   setDelayCutoff: (value: number) => void;
   setReverbDecay: (value: number) => void;
   setReverbWet: (value: number) => void;
-  setReverbDiffusion: (value: number) => void;
   setBPM: (bpm: number) => void;
   getBPM: () => number;
   disposeAll: () => void;
@@ -230,7 +289,7 @@ export type AudioEngineHandle = {
   stopAtmosphereLoop: (noise: Tone.Noise) => void;
   setLofi: (amount: number) => void;
   setWarble: (amount: number) => void;
-  startDroneLoop: () => { node: Tone.Gain; info: DroneLayerInfo } | null;
+  startDroneLoop: (keyRoot?: KeyRoot) => { node: Tone.Gain; info: DroneLayerInfo } | null;
   stopDroneLoop: (node: Tone.Gain) => void;
   getMasterLevel: () => number;
   getLissajousData: () => { left: Float32Array; right: Float32Array } | null;
@@ -291,6 +350,52 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     crossFade: Tone.CrossFade;
   } | null>(null);
 
+  /** Which optional FX-bus branches currently receive signal from fxEQ. */
+  const fxBranchFed = useRef({ shimmer: false, freqShift: false, convolver: false });
+  /** Master Lo-fi / Warble stages are spliced out of the chain while at 0. */
+  const masterTailState = useRef({ lofi: false, warble: false });
+
+  /**
+   * Connect/disconnect an FX-bus branch input. Disconnecting (rather than just
+   * zeroing a gain) lets the browser stop processing the node once its tail
+   * has rung out — the input stays "active" as long as anything feeds it.
+   */
+  const feedFxBranch = (branch: 'shimmer' | 'freqShift' | 'convolver', on: boolean) => {
+    const bus = fxBus.current;
+    if (!bus || fxBranchFed.current[branch] === on) return;
+    const target =
+      branch === 'shimmer' ? bus.shimmerPitchShift
+      : branch === 'freqShift' ? bus.freqShiftGain
+      : bus.convolver;
+    if (on) bus.fxEQ.connect(target);
+    else bus.fxEQ.disconnect(target);
+    fxBranchFed.current[branch] = on;
+  };
+
+  /** Rewire saturation → [bitcrusher] → [warble] → HPF, skipping stages that are off. */
+  const rewireMasterTail = (next: { lofi: boolean; warble: boolean }) => {
+    const sat = masterSaturation.current;
+    const crush = masterBitcrusher.current;
+    const warble = masterWarble.current;
+    const hpf = masterHPF.current;
+    if (!sat || !crush || !warble || !hpf) return;
+    const path = (st: { lofi: boolean; warble: boolean }) => [
+      sat,
+      ...(st.lofi ? [crush] : []),
+      ...(st.warble ? [warble] : []),
+      hpf,
+    ];
+    const prev = path(masterTailState.current);
+    const upcoming = path(next);
+    // Connect the new path before tearing down the old one so there's no gap.
+    for (let i = 0; i < upcoming.length - 1; i++) upcoming[i].connect(upcoming[i + 1]);
+    for (let i = 0; i < prev.length - 1; i++) {
+      const stillUsed = upcoming.some((n, j) => n === prev[i] && upcoming[j + 1] === prev[i + 1]);
+      if (!stillUsed) prev[i].disconnect(prev[i + 1]);
+    }
+    masterTailState.current = { ...next };
+  };
+
   /**
    * One long reverb shared by every melodic layer (created on first use). A
    * per-layer Tone.Reverb is a 5–11s stereo convolver each — several of them
@@ -325,12 +430,11 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         masterLimiter.current = new Tone.Limiter(-1.2).toDestination();
         // Keep destination routing on the final limiter node; intermediate nodes stay in-graph.
         masterHPF.current = new Tone.Filter(40, 'highpass');
+        masterTailState.current = { lofi: false, warble: false };
         if (BYPASS_MASTER_COMP_AND_EQ) {
           masterBus.current.chain(
             masterGain.current,
             masterSaturation.current,
-            masterBitcrusher.current,
-            masterWarble.current,
             masterHPF.current,
             masterLimiter.current,
           );
@@ -340,8 +444,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             masterCompressor.current,
             masterEQ.current,
             masterSaturation.current,
-            masterBitcrusher.current,
-            masterWarble.current,
+            // Bitcrusher + warble (both wet 0 by default) are spliced in by
+            // rewireMasterTail when Lo-fi / Warble are turned up.
             masterHPF.current,
             masterLimiter.current,
           );
@@ -411,7 +515,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         // shimmerGain starts at 0 (off) — user controls via Shimmer slider.
         const shimmerPitchShift = new Tone.PitchShift(12);
         const shimmerGain = new Tone.Gain(0);
-        fxEQ.connect(shimmerPitchShift);
+        // fxEQ → shimmerPitchShift is connected lazily by setShimmer (CPU: idle at 0).
         shimmerPitchShift.connect(shimmerGain);
         shimmerGain.connect(reverb);
 
@@ -424,7 +528,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         // freqShiftGain starts at 0 (off) — user controls via Frequency Drift slider.
         const freqShiftGain = new Tone.Gain(0);
         const freqShifter = new Tone.FrequencyShifter({ frequency: 2, wet: 1 });
-        fxEQ.connect(freqShiftGain);
+        // fxEQ → freqShiftGain is connected lazily by setFreqShift.
         freqShiftGain.connect(freqShifter);
         freqShifter.connect(reverb);
 
@@ -444,7 +548,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
           }
         }
         convolver.buffer = new Tone.ToneAudioBuffer(irBuffer);
-        fxEQ.connect(convolver);
+        // fxEQ → convolver is connected lazily by setConvolverMix: a 3.5s stereo
+        // convolution costs CPU every block while fed, even when crossFaded out.
 
         const crossFade = new Tone.CrossFade(0); // 0 = algorithmic reverb, 1 = convolver
         reverb.connect(crossFade.a);
@@ -452,6 +557,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         crossFade.connect(masterBus.current);
 
         fxBus.current = { fxInput, fxEQ, delay, delayFilter, reverb, shimmerPitchShift, shimmerGain, freqShiftGain, freqShifter, convolver, crossFade };
+        fxBranchFed.current = { shimmer: false, freqShift: false, convolver: false };
         // Export flow mutes Tone.Destination; new graph must always be audible.
         Tone.getDestination().volume.value = 0;
         isInitialized.current = true;
@@ -749,14 +855,14 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         }
         return null;
     },
-    startSynthLoop: (scale, discreetMode = false) => {
+    startSynthLoop: (scale, discreetMode = false, keyRoot = null) => {
       if (!masterBus.current || !fxBus.current) return null;
       Tone.start();
       const r = rngRef.current ?? Math.random;
 
       // Pure, warm oscillators only — sine and triangle for a soft, Eno-style timbre.
       // Chorus below provides the width that 'fat' oscillators would otherwise give.
-      const oscillatorTypes: Tone.ToneOscillatorType[] = ['sine', 'triangle', 'sine', 'sine']; // bias toward sine
+      const oscillatorTypes = ['sine', 'triangle', 'sine', 'sine'] as const; // bias toward sine
       const selectedOscillator = oscillatorTypes[Math.floor(r() * oscillatorTypes.length)];
 
       // Very slow attack and long release so notes bleed into each other
@@ -848,7 +954,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const basePool = upperScale.length >= 5 ? upperScale : currentScaleNotes;
 
       // Random transposition per layer so two "major" pads never share the same pitch center
-      const semitoneOffset = Math.floor(r() * 12);
+      const semitoneOffset = pickTransposition(r, keyRoot);
       const notePool = semitoneOffset === 0
         ? basePool
         : basePool.map(note => Tone.Frequency(note).transpose(semitoneOffset).toNote());
@@ -908,7 +1014,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
           if (event && Math.random() <= state.probability) {
             const velocity = 0.4 + Math.random() * 0.6;
             const dur = padDurations[Math.floor(Math.random() * padDurations.length)];
-            synth.triggerAttackRelease(event as Tone.Frequency | Tone.Frequency[], dur, time, velocity);
+            synth.triggerAttackRelease(event as Tone.Unit.Frequency | Tone.Unit.Frequency[], dur, time, velocity);
           }
         },
         events,
@@ -940,7 +1046,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const loopLabel = discreetMode ? ` · ${sequenceLength}m loop` : '';
       const info: SynthLayerInfo = {
         type: 'synth',
-        description: `Pad (${selectedOscillator}) · ${scaleName} · A:${attack.toFixed(1)}s R:${release.toFixed(1)}s · Filter ${filterFreq.toFixed(0)}Hz${loopLabel}`
+        description: `Pad (${selectedOscillator}) · ${KEY_NAMES[semitoneOffset]} ${scaleName} · A:${attack.toFixed(1)}s R:${release.toFixed(1)}s · Filter ${filterFreq.toFixed(0)}Hz${loopLabel}`
       };
 
       return { sequence, info, filterCutoff: filterFreq, filterResonance: filter.Q.value };
@@ -1156,7 +1262,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         playbackRate,
         rng: r,
       } satisfies GrainScatterState;
-      setGrainVoiceVolumes(player, -12);
+      getGrainVoices(player).forEach((voice) => {
+        voice.volume.value = -12 - GRAIN_VOICE_GAIN_COMPENSATION_DB;
+      });
 
       // Same filter + autopan chain as freesound layers
       const highPass = new Tone.Filter(60 + r() * 60, 'highpass');
@@ -1183,8 +1291,15 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
 
       // 40% chance of a BitCrusher — lo-fi digital texture, adds character to dense grain clouds.
       // Higher bit depths (6–10) give subtle grit rather than full destruction.
-      const bitCrusher = new Tone.BitCrusher(Math.floor(r() * 5) + 6); // bits 6–10
-      bitCrusher.wet.value = r() < 0.4 ? 0.12 + r() * 0.18 : 0; // 12–30% wet or off
+      // Only constructed when it rolls on — a wet-0 BitCrusher is still a full
+      // AudioWorklet running every block. Draw order is unchanged for seeds.
+      const crushBits = Math.floor(r() * 5) + 6; // bits 6–10
+      const crushWet = r() < 0.4 ? 0.12 + r() * 0.18 : 0; // 12–30% wet or off
+      let bitCrusher: Tone.BitCrusher | null = null;
+      if (crushWet > 0) {
+        bitCrusher = new Tone.BitCrusher(crushBits);
+        bitCrusher.wet.value = crushWet;
+      }
 
       // Chorus — always present, thickens grain clouds by adding detuned copies.
       // Low frequency (0.3–1.5Hz) + moderate depth keeps it spatial rather than warbling.
@@ -1198,7 +1313,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const sendGain = new Tone.Gain(0).connect(fxBus.current.fxInput);
       const waveform = new Tone.Waveform(1024);
 
-      player.chain(highPass, filter, exciter, bitCrusher, chorus, panner, masterBus.current);
+      player.chain(highPass, filter, exciter, ...(bitCrusher ? [bitCrusher] : []), chorus, panner, masterBus.current);
       player.connect(sendGain);
       grainVoices.slice(1).forEach((voice) => {
         voice.connect(highPass);
@@ -1215,7 +1330,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         );
         grainVoices.forEach((voice) => voice.buffer.set(audioBuffer));
       } catch (err) {
-        lfo.dispose(); exciter.dispose(); bitCrusher.dispose(); chorus.dispose();
+        lfo.dispose(); exciter.dispose(); bitCrusher?.dispose(); chorus.dispose();
         panner.dispose(); filter.dispose(); highPass.dispose();
         sendGain.dispose(); waveform.dispose();
         grainVoices.forEach((voice) => voice.dispose());
@@ -1334,7 +1449,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         }
       }
     },
-    startMelodicLoop: (scale, discreetMode = false) => {
+    startMelodicLoop: (scale, discreetMode = false, keyRoot = null) => {
       if (!masterBus.current || !fxBus.current) return null;
       Tone.start();
       const r = rngRef.current ?? Math.random;
@@ -1373,7 +1488,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const synthTypes = ['pure', 'bell', 'mallet', 'electric', 'glass', 'duo', 'metal', 'membrane'];
       const randomSynthType = synthTypes[Math.floor(r() * synthTypes.length)];
 
-      let synth: Tone.PolySynth | Tone.PluckSynth | Tone.MetalSynth | Tone.MembraneSynth;
+      // PolySynth<any>: voices differ (Synth, FMSynth, AMSynth, DuoSynth)
+      let synth: Tone.PolySynth<any> | Tone.PluckSynth | Tone.MetalSynth | Tone.MembraneSynth;
       let synthDescription = '';
       let noteDuration: string;
 
@@ -1522,7 +1638,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const basePool = upperScale.length >= 4 ? upperScale : currentScale;
 
       // Random transposition per layer so layers never share the same pitch center
-      const semitoneOffset = Math.floor(r() * 12);
+      const semitoneOffset = pickTransposition(r, keyRoot);
       const notePool = semitoneOffset === 0
         ? basePool
         : basePool.map(note => Tone.Frequency(note).transpose(semitoneOffset).toNote());
@@ -1554,12 +1670,14 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             else if (cursorIdx <= 0) { cursorIdx = 0; cursorDir = 1; }
             break;
           case 'randomWalk': {
-            const step = Math.random() < 0.5 ? 1 : -1;
+            // Seeded r(), not Math.random — this runs while building the event
+            // list, so it decides which notes a shared seed reproduces.
+            const step = r() < 0.5 ? 1 : -1;
             cursorIdx = Math.max(0, Math.min(notePool.length - 1, cursorIdx + step));
             break;
           }
           default: // 'random'
-            cursorIdx = Math.floor(Math.random() * notePool.length);
+            cursorIdx = Math.floor(r() * notePool.length);
         }
         return notePool[cursorIdx];
       };
@@ -1608,9 +1726,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             } else if (synth instanceof Tone.MembraneSynth) {
               synth.triggerAttackRelease(note as string, '8n', time, velocity);
             } else if (synth instanceof Tone.PluckSynth) {
-              synth.triggerAttack(note as string, time, velocity);
+              synth.triggerAttack(note as string, time); // PluckSynth takes no velocity
             } else if (synth instanceof Tone.PolySynth) {
-              synth.triggerAttackRelease(note as Tone.Frequency | Tone.Frequency[], noteDuration, time, velocity);
+              synth.triggerAttackRelease(note as Tone.Unit.Frequency | Tone.Unit.Frequency[], noteDuration, time, velocity);
             }
           }
         },
@@ -1637,7 +1755,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const loopLabel = discreetMode ? ` · ${sequenceLength}m loop` : '';
       const info: SynthLayerInfo = {
         type: 'melodic',
-        description: `${synthDescription} · ${scaleName} · ${patternType} · ${sequenceInterval} interval · reverb ${Math.round(reverbMix * 100)}% wet${loopLabel}`
+        description: `${synthDescription} · ${KEY_NAMES[semitoneOffset]} ${scaleName} · ${patternType} · ${sequenceInterval} interval · reverb ${Math.round(reverbMix * 100)}% wet${loopLabel}`
       };
 
       return { sequence, info, filterCutoff: filterFreq, filterResonance: filter.Q.value };
@@ -1742,20 +1860,20 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       if (waveform && !waveform.disposed) waveform.dispose();
       if (noise && !noise.disposed) { noise.stop(); noise.dispose(); }
     },
-    setVolume: (node, volume) => {
+    setVolume: (node, volume, rampSeconds = PARAM_RAMP_SECONDS) => {
       if (node && !node.disposed) {
         if (node instanceof Tone.Sequence) {
           const synth = (node as any).synth;
           if (synth && !synth.disposed) {
-             synth.volume.value = volume;
+            glideDb(synth.volume, volume, rampSeconds);
           }
         } else if (node instanceof Tone.GrainPlayer) {
-          setGrainVoiceVolumes(node, volume);
+          setGrainVoiceVolumes(node, volume, rampSeconds);
         } else if (node instanceof Tone.Gain) {
-          // Drone layer — gain.value is linear, so convert from dB
-          node.gain.value = Tone.dbToGain(volume);
+          // Drone layer — gain is linear, so convert from dB (dbToGain(-∞) = 0)
+          glideParam(node.gain, Tone.dbToGain(volume), rampSeconds);
         } else {
-            (node as Tone.Player | Tone.PolySynth | Tone.PluckSynth).volume.value = volume;
+          glideDb((node as Tone.Player | Tone.PolySynth | Tone.PluckSynth).volume, volume, rampSeconds);
         }
       }
     },
@@ -1764,7 +1882,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         const sendGain = (node as any).sendGain;
         if (sendGain && !sendGain.disposed) {
           const gainValue = amount > -40 ? Tone.dbToGain(amount) : 0;
-          sendGain.gain.value = gainValue;
+          glideParam(sendGain.gain, gainValue);
         }
       }
     },
@@ -1815,6 +1933,9 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         if ((node as any).driftInterval != null) {
           (node as any).driftCenter = freq;
           (node as any).driftRange  = freq * 0.6;
+          // Disabling drift restores to this — keep it in step with the user's
+          // cutoff, otherwise turning drift off snaps back to the pre-drift value.
+          (node as any).driftOriginalCenter = freq;
         }
       } else if (filter && !filter.disposed) {
         filter.frequency.value = freq;
@@ -1885,17 +2006,20 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
     },
     setShimmer: (value) => {
       if (fxBus.current?.shimmerGain && !fxBus.current.shimmerGain.disposed) {
-        fxBus.current.shimmerGain.gain.value = value;
+        glideParam(fxBus.current.shimmerGain.gain, value);
+        feedFxBranch('shimmer', value > 0);
       }
     },
     setFreqShift: (value) => {
       if (fxBus.current?.freqShiftGain && !fxBus.current.freqShiftGain.disposed) {
-        fxBus.current.freqShiftGain.gain.value = value;
+        glideParam(fxBus.current.freqShiftGain.gain, value);
+        feedFxBranch('freqShift', value > 0);
       }
     },
     setConvolverMix: (value) => {
       if (fxBus.current?.crossFade && !fxBus.current.crossFade.disposed) {
-        fxBus.current.crossFade.fade.value = value;
+        glideParam(fxBus.current.crossFade.fade, value);
+        feedFxBranch('convolver', value > 0);
       }
     },
     setBreatheEnabled: (enabled, periodMinutes) => {
@@ -1948,11 +2072,6 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
             fxBus.current.reverb.wet.value = value;
         }
     },
-    setReverbDiffusion: (value) => {
-        if (fxBus.current?.reverb && !fxBus.current.reverb.disposed) {
-            (fxBus.current.reverb as any).diffusion = value;
-        }
-    },
     setBPM: (bpm) => {
       if (Tone.Transport) {
         Tone.Transport.bpm.value = bpm;
@@ -1969,20 +2088,37 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
           masterBitcrusher.current.bits.value = Math.max(1, Math.round(16 - amount * 12));
           masterBitcrusher.current.wet.value = Math.min(1, amount);
         }
+        if ((amount > 0) !== masterTailState.current.lofi) {
+          rewireMasterTail({ ...masterTailState.current, lofi: amount > 0 });
+        }
       }
     },
     setWarble: (amount) => {
       if (masterWarble.current && !masterWarble.current.disposed) {
         masterWarble.current.wet.value = amount * 0.6;
+        if ((amount > 0) !== masterTailState.current.warble) {
+          rewireMasterTail({ ...masterTailState.current, warble: amount > 0 });
+        }
       }
     },
-    startDroneLoop: () => {
+    startDroneLoop: (keyRoot = null) => {
       if (!masterBus.current || !fxBus.current) return null;
       Tone.start();
       const r = rngRef.current ?? Math.random;
 
       const fundamentalChoices = [30, 37, 40, 49, 55, 65, 73, 80, 110];
-      const fundamental = fundamentalChoices[Math.floor(r() * fundamentalChoices.length)];
+      const pick = r();
+      let fundamental = fundamentalChoices[Math.floor(pick * fundamentalChoices.length)];
+      if (keyRoot != null) {
+        // Root in octave 1 and 2 (C1 = MIDI 24), kept inside the same 30–110Hz
+        // sub/low-mid band as the free choices. Partials are harmonic, so the
+        // drone then sits on the key's root + 5th (+ major 3rd for partial 5).
+        const pc = ((keyRoot % 12) + 12) % 12;
+        const inKey = [24 + pc, 36 + pc]
+          .map((midi) => 440 * Math.pow(2, (midi - 69) / 12))
+          .filter((hz) => hz >= 30 && hz <= 110);
+        if (inKey.length) fundamental = Math.round(inKey[Math.floor(pick * inKey.length)] * 100) / 100;
+      }
 
       const partialSets = [[1, 2, 3], [1, 2, 5], [1, 3, 5], [1, 2, 3, 5], [2, 3, 5]];
       const partials = partialSets[Math.floor(r() * partialSets.length)];
@@ -2040,7 +2176,7 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
       const partialNames = partials.map((p) => `${p}×`).join(', ');
       const info: DroneLayerInfo = {
         type: 'drone',
-        description: `${fundamental}Hz · partials [${partialNames}] · ${(lfoFreq * 60).toFixed(1)} cpm filter`,
+        description: `${keyRoot != null ? `${KEY_NAMES[((keyRoot % 12) + 12) % 12]} · ` : ''}${fundamental}Hz · partials [${partialNames}] · ${(lfoFreq * 60).toFixed(1)} cpm filter`,
       };
 
       (outputGain as any).oscillators = oscillators;

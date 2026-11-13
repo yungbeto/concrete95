@@ -43,6 +43,7 @@ export type SavedFreesoundLayer = {
   volume: number;
   send: number;
   position: { x: number; y: number };
+  muted?: boolean;
   playbackRate: number;
   reverse: boolean;
   filterCutoff: number;
@@ -58,6 +59,7 @@ export type SavedGrainLayer = {
   volume: number;
   send: number;
   position: { x: number; y: number };
+  muted?: boolean;
   playbackRate: number;
   reverse: boolean;
   filterCutoff: number;
@@ -75,6 +77,7 @@ export type SavedSynthLayer = {
   volume: number;
   send: number;
   position: { x: number; y: number };
+  muted?: boolean;
   filterCutoff: number;
   filterResonance: number;
   probability: number;
@@ -86,6 +89,8 @@ export type SavedLayer = SavedFreesoundLayer | SavedGrainLayer | SavedSynthLayer
 
 export type SavedGlobalSettings = {
   scale: ScaleName;
+  /** Locked key 0–11 (C…B); null or absent (older sessions) = random key per layer. */
+  keyRoot?: number | null;
   bpm: number;
   discreetMode: boolean;
   driftEnabled: boolean;
@@ -101,6 +106,10 @@ export type SavedGlobalSettings = {
   reverbDiffusion: number;
   shimmer: number;
   freqShift?: number;
+  /** "Space" — crossfade between algorithmic reverb and convolver (0–1). */
+  convolverMix?: number;
+  lofiAmount?: number;
+  warbleAmount?: number;
   seed?: number;
 };
 
@@ -177,6 +186,7 @@ type RuntimeLayer = {
   probability?: number;
   grainSize?: number;
   grainDrift?: number;
+  isMuted?: boolean;
   info?: { type: string; id?: number; name?: string; previewUrl?: string };
 };
 
@@ -184,7 +194,8 @@ export function buildSession(
   name: string,
   layers: RuntimeLayer[],
   settings: SavedGlobalSettings,
-  existingId?: string
+  existingId?: string,
+  existingCreatedAt?: string,
 ): SavedSession {
   const now = new Date().toISOString();
 
@@ -199,6 +210,7 @@ export function buildSession(
           volume: l.volume,
           send: l.send,
           position: l.position,
+          muted: l.isMuted || undefined,
           playbackRate: l.playbackRate ?? 1,
           reverse: l.reverse ?? false,
           filterCutoff: l.filterCutoff ?? 2000,
@@ -215,6 +227,7 @@ export function buildSession(
           volume: l.volume,
           send: l.send,
           position: l.position,
+          muted: l.isMuted || undefined,
           playbackRate: l.playbackRate ?? 1,
           reverse: l.reverse ?? false,
           filterCutoff: l.filterCutoff ?? 2000,
@@ -232,6 +245,7 @@ export function buildSession(
           volume: l.volume,
           send: l.send,
           position: l.position,
+          muted: l.isMuted || undefined,
           filterCutoff: l.filterCutoff ?? 2000,
           filterResonance: l.filterResonance ?? 1,
           probability: l.probability ?? 1,
@@ -243,7 +257,7 @@ export function buildSession(
     version: SESSION_VERSION,
     id: existingId ?? crypto.randomUUID(),
     name,
-    createdAt: existingId ? now : now,
+    createdAt: existingCreatedAt ?? now,
     updatedAt: now,
     settings,
     layers: savedLayers,

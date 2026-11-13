@@ -4,6 +4,17 @@ service cloud.firestore {
     match /users/{userId}/sessions/{sessionId} {
       allow read, write, delete: if request.auth != null && request.auth.uid == userId;
     }
+    // Public share links (src/lib/sessions.ts saveSharedSession). Write-once.
+    match /shared_sessions/{shareId} {
+      allow read: if true;
+      allow create: if request.resource.data.version is int
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.settings is map
+        && request.resource.data.layers is list
+        && request.resource.data.layers.size() <= 8;
+      allow update, delete: if false;
+    }
     match /guestbook_entries/{entryId} {
       allow read: if true;
       allow create: if request.resource.data.name is string

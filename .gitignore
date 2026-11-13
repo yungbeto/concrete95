@@ -6,10 +6,8 @@
 .pnp.js
 .yarn/install-state.gz
 
-# Firebase Studio / nested Next app build artifacts
-.firebase/**/node_modules/
-.firebase/**/.next/
-.firebase/**/hosting/
+# Firebase Studio / App Hosting build output (generated on deploy)
+.firebase/
 
 # env files (secrets — use .env.local for local dev, Firebase Secret Manager for prod)
 .env
