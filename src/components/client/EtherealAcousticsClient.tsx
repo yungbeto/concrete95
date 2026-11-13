@@ -138,6 +138,13 @@ const SOUND_POOL_TTL_MS = 10 * 60 * 1000;
 /** Sleep timer: master fades to silence over this final stretch, then all layers stop. */
 const SLEEP_FADE_SECONDS = 60;
 const SLEEP_OPTIONS_MIN = [15, 30, 60, 90] as const;
+/** Evolve mode pacing and bounds. */
+const EVOLVE_MIN_INTERVAL_MS = 90_000;
+const EVOLVE_MAX_INTERVAL_MS = 240_000;
+const EVOLVE_MIN_LAYERS = 2;
+const EVOLVE_MAX_LAYERS = 6;
+/** Retiring a layer in Evolve fades it this slowly — it should never be noticed leaving. */
+const EVOLVE_RETIRE_FADE_SECONDS = 12;
 /** Crossfade between the old and new sound when a layer is re-rolled. */
 const REROLL_FADE_SECONDS = 1.5;
 const DESKTOP_ICON_Z_INDEX = 10;
@@ -352,6 +359,8 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
   const [lofiAmount, setLofiAmount] = useState(0);
   const [warbleAmount, setWarbleAmount] = useState(0);
   const [discreetMode, setDiscreetMode] = useState(true);
+  /** Evolve: the soundscape slowly adds, re-rolls and retires layers on its own. */
+  const [evolveEnabled, setEvolveEnabled] = useState(false);
   const [driftEnabled, setDriftEnabled] = useState(false);
   const [driftPeriod, setDriftPeriod] = useState(10);
   const [globalBPM, setGlobalBPM] = useState(120);
@@ -605,6 +614,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     layers,
     globalScale,
     keyRoot,
+    evolveEnabled,
     discreetMode,
     driftEnabled,
     driftPeriod,
@@ -1700,6 +1710,32 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             re-align, creating a slowly shifting phase relationship.
           </FeatureInfo>
         </Fieldset>
+
+        <Fieldset label='Evolve'>
+          <button
+            role='checkbox'
+            aria-checked={evolveEnabled}
+            onClick={() => setEvolveEnabled((v) => !v)}
+            className='flex items-center gap-2 cursor-pointer select-none'
+          >
+            <span className='w-3.5 h-3.5 flex-shrink-0 border-2 border-t-neutral-500 border-l-neutral-500 border-r-white border-b-white bg-white flex items-center justify-center'>
+              {evolveEnabled && (
+                <span
+                  className='text-black leading-none'
+                  style={{ fontSize: '9px', marginTop: '-1px' }}
+                >
+                  ✓
+                </span>
+              )}
+            </span>
+            <span className='text-xs'>Let the soundscape evolve on its own</span>
+          </button>
+          <FeatureInfo>
+            Every few minutes a layer is quietly added, re-rolled or faded
+            out, keeping between {EVOLVE_MIN_LAYERS} and {EVOLVE_MAX_LAYERS}{' '}
+            layers. Good for long listening — leave it running.
+          </FeatureInfo>
+        </Fieldset>
       </div>
     ),
     [
@@ -1707,6 +1743,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
       keyRoot,
       layers.length,
       discreetMode,
+      evolveEnabled,
       driftEnabled,
       driftPeriod,
       globalBPM,
@@ -2186,6 +2223,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
   const collectSettings = (): SavedGlobalSettings => ({
     scale: globalScale,
     keyRoot,
+    evolveEnabled,
     bpm: globalBPM,
     discreetMode,
     driftEnabled,
@@ -2278,6 +2316,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     setGlobalScale(s.scale);
     // Sessions saved before key lock existed played each layer in a random key.
     setKeyRoot(s.keyRoot ?? null);
+    setEvolveEnabled(s.evolveEnabled ?? false);
     setDiscreetMode(s.discreetMode);
     setDriftEnabled(s.driftEnabled);
     setDriftPeriod(s.driftPeriod);
@@ -2660,6 +2699,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
       if (remainingSec <= 0) {
         sleepFadingRef.current = false;
         setSleepEndsAt(null);
+        setEvolveEnabled(false); // otherwise Evolve would start filling the silence again
         removeAllRef.current();
         // Layers are silent (and fading themselves); bring the master back for next time.
         setTimeout(() => restoreDestination(0.1), 1500);
@@ -2768,6 +2808,59 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
       rerollingRef.current.delete(id);
     }
   };
+
+  // ── Evolve ────────────────────────────────────────────────────────────────
+  const retiringRef = useRef<Set<string>>(new Set());
+  /** Fade a layer out very slowly, then remove it (no undo — this is ambient housekeeping). */
+  const retireLayer = (id: string) => {
+    const layer = layersRef.current.find((l) => l.id === id);
+    if (!layer?.node || !audioEngineRef.current) return;
+    retiringRef.current.add(id);
+    audioEngineRef.current.setVolume(layer.node, -Infinity, EVOLVE_RETIRE_FADE_SECONDS);
+    setTimeout(() => {
+      retiringRef.current.delete(id);
+      const still = layersRef.current.find((l) => l.id === id);
+      if (!still) return;
+      stopLayerAudio(still);
+      setLayers((prev) => prev.filter((l) => l.id !== id));
+    }, EVOLVE_RETIRE_FADE_SECONDS * 1000 + 200);
+  };
+
+  const evolveStepRef = useRef<() => void>(() => {});
+  evolveStepRef.current = () => {
+    const live = layersRef.current.filter(
+      (l) => l.status === 'playing' && l.node && !retiringRef.current.has(l.id),
+    );
+    if (layersRef.current.some((l) => l.status === 'loading')) return; // let loads settle
+    const adders = [
+      addSynthLayer, addSynthLayer, addMelodicLayer, addMelodicLayer,
+      addAtmosphereLayer, addDroneLayer, addGrainLayer, addFreesoundLayer,
+    ];
+    const add = () => void adders[Math.floor(Math.random() * adders.length)]();
+    const pickLive = () => live[Math.floor(Math.random() * live.length)];
+    if (live.length < EVOLVE_MIN_LAYERS) return add();
+    if (live.length >= EVOLVE_MAX_LAYERS) return retireLayer(pickLive().id);
+    const roll = Math.random();
+    if (roll < 0.4) void handleRerollLayer(pickLive().id);
+    else if (roll < 0.7) add();
+    else retireLayer(pickLive().id);
+  };
+
+  useEffect(() => {
+    if (!evolveEnabled || !isEngineInitialized) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = (first = false) => {
+      const wait = first
+        ? 5_000 // react promptly when switched on (e.g. fill an empty desktop)
+        : EVOLVE_MIN_INTERVAL_MS + Math.random() * (EVOLVE_MAX_INTERVAL_MS - EVOLVE_MIN_INTERVAL_MS);
+      timer = setTimeout(() => {
+        evolveStepRef.current();
+        schedule();
+      }, wait);
+    };
+    schedule(true);
+    return () => clearTimeout(timer);
+  }, [evolveEnabled, isEngineInitialized]);
 
   // Stable identities for LayerCard (memoized): each delegates to this render's
   // handler via a ref, so cards don't re-render just because the parent did.

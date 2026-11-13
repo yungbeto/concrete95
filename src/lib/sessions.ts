@@ -93,6 +93,8 @@ export type SavedGlobalSettings = {
   scale: ScaleName;
   /** Locked key 0–11 (C…B); null or absent (older sessions) = random key per layer. */
   keyRoot?: number | null;
+  /** Evolve mode — layers are added/re-rolled/retired automatically. */
+  evolveEnabled?: boolean;
   bpm: number;
   discreetMode: boolean;
   driftEnabled: boolean;
