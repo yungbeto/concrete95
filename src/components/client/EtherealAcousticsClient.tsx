@@ -133,6 +133,29 @@ type DragState = {
 const MAX_LAYERS = 8;
 /** Fade applied when a layer is removed / Stop All, before the undo window. */
 const REMOVE_FADE_SECONDS = 0.4;
+/** Taskbar (footer h-10) — windows and cards must stay grabbable above it. */
+const TASKBAR_HEIGHT = 40;
+/** How much of a window/card (px) must stay on screen horizontally and above the taskbar. */
+const MIN_VISIBLE_PX = 64;
+/** The grabbed point stays this far inside the visible desktop. */
+const GRIP_MARGIN_PX = 8;
+
+/**
+ * The grabbed point is always on the title bar, so keeping the pointer inside
+ * the desktop keeps part of the title bar reachable (and closable).
+ */
+function clampGrip(v: number, max: number): number {
+  return Math.min(Math.max(v, GRIP_MARGIN_PX), max - GRIP_MARGIN_PX);
+}
+
+/** Top edge never above the viewport (title bar hidden); some part always on screen. */
+function clampToDesktop(pos: { x: number; y: number }): { x: number; y: number } {
+  if (typeof window === 'undefined') return pos;
+  return {
+    x: Math.min(pos.x, window.innerWidth - MIN_VISIBLE_PX),
+    y: Math.min(Math.max(pos.y, 0), window.innerHeight - TASKBAR_HEIGHT - MIN_VISIBLE_PX / 2),
+  };
+}
 const BACKGROUND_PLAYBACK_KEY = 'concrete95:backgroundPlayback';
 /** How long a fetched Freesound list is reused before a background refresh. */
 const SOUND_POOL_TTL_MS = 10 * 60 * 1000;
@@ -1509,10 +1532,10 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
             item.id === dragState.id
               ? {
                   ...item,
-                  position: {
-                    x: pt.x - dragState.offsetX,
-                    y: pt.y - dragState.offsetY,
-                  },
+                  position: clampToDesktop({
+                    x: clampGrip(pt.x, window.innerWidth) - dragState.offsetX,
+                    y: clampGrip(pt.y, window.innerHeight - TASKBAR_HEIGHT) - dragState.offsetY,
+                  }),
                 }
               : item,
           );
@@ -1526,6 +1549,34 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     },
     [dragState],
   );
+
+  // Shrinking the browser can strand windows/cards past the new edges — pull them back.
+  useEffect(() => {
+    let frame: number | null = null;
+    const onResize = () => {
+      if (frame != null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        const fix = <T extends { position: { x: number; y: number } }>(items: T[]) => {
+          let changed = false;
+          const next = items.map((item) => {
+            const p = clampToDesktop(item.position);
+            if (p.x === item.position.x && p.y === item.position.y) return item;
+            changed = true;
+            return { ...item, position: p };
+          });
+          return changed ? next : items;
+        };
+        setWindows(fix);
+        setLayers(fix);
+      });
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      if (frame != null) cancelAnimationFrame(frame);
+    };
+  }, []);
 
   const handleMouseUp = useCallback(() => {
     if (dragFrameRef.current != null) {
