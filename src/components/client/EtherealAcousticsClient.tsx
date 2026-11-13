@@ -1496,6 +1496,17 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
 
     if (!item) return;
 
+    if (!('touches' in e)) {
+      // Without this, mousedown on selected text starts the browser's native
+      // drag-and-drop (a ghost of the whole selection follows the cursor instead
+      // of the card), and a text-selection drag can auto-scroll the desktop.
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest('input, textarea, select, [contenteditable="true"]')) {
+        e.preventDefault();
+        window.getSelection()?.removeAllRanges();
+      }
+    }
+
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
 
@@ -1549,6 +1560,22 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
     },
     [dragState],
   );
+
+  // The desktop clips (overflow-hidden) but is still programmatically scrollable
+  // when a tall window hangs past the bottom; focus changes, scrollIntoView or a
+  // selection auto-scroll would then shift every window and card at once.
+  // It's never meant to scroll — snap it back.
+  const desktopRootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = desktopRootRef.current;
+    if (!el) return;
+    const pin = () => {
+      if (el.scrollTop !== 0) el.scrollTop = 0;
+      if (el.scrollLeft !== 0) el.scrollLeft = 0;
+    };
+    el.addEventListener('scroll', pin, { passive: true });
+    return () => el.removeEventListener('scroll', pin);
+  }, []);
 
   // Shrinking the browser can strand windows/cards past the new edges — pull them back.
   useEffect(() => {
@@ -3113,6 +3140,7 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
 
   return (
     <div
+      ref={desktopRootRef}
       className='relative w-full h-dvh flex flex-col overflow-hidden bg-background'
       style={(() => {
         const p =
