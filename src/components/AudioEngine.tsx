@@ -1554,7 +1554,8 @@ const AudioEngine = forwardRef<AudioEngineHandle, { isMobile?: boolean }>((props
         voice.connect(highPass);
         voice.connect(sendGain);
       });
-      player.connect(waveform);
+      // Tap every voice so meters see the whole cloud, not just voice 0.
+      grainVoices.forEach((voice) => voice.connect(waveform));
 
       try {
         const audioBuffer = await withLoadTimeout(

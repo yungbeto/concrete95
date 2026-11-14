@@ -15,6 +15,8 @@ interface InfoWindowProps {
   children: React.ReactNode;
   /** Desktop width classes (default w-80). */
   widthClassName?: string;
+  /** Content padding (default p-4). */
+  contentClassName?: string;
 }
 
 export default function InfoWindow({
@@ -26,6 +28,7 @@ export default function InfoWindow({
   onTouchStart,
   children,
   widthClassName = 'w-80',
+  contentClassName = 'p-4',
 }: InfoWindowProps) {
   const isMobile = useIsMobile();
 
@@ -65,7 +68,7 @@ export default function InfoWindow({
 
       {/* Content */}
       <div
-        className={`p-4 ${isMobile ? 'overflow-y-auto flex-1' : 'overflow-y-auto max-h-[calc(100vh-8rem)]'}`}
+        className={`${contentClassName} ${isMobile ? 'overflow-y-auto flex-1' : 'overflow-y-auto max-h-[calc(100vh-8rem)]'}`}
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
       >

@@ -3434,12 +3434,14 @@ export default function EtherealAcousticsClient({ booted = true }: { booted?: bo
                 onMouseDown={(e) => handleDragStart(win.id, 'window', e)}
                 onTouchStart={(e) => handleDragStart(win.id, 'window', e)}
                 widthClassName={win.id === 'mixer' ? 'w-max min-w-80 max-w-[calc(100vw-2rem)]' : undefined}
+                contentClassName={win.id === 'mixer' ? 'p-1' : undefined}
               >
                 {win.id === 'about' ? (
                   <AboutConcrete95Body />
                 ) : win.id === 'mixer' ? (
                   <MixerWindowContent
                     layers={layers}
+                    audioEngineRef={audioEngineRef}
                     onVolumeChange={stableLayerHandlers.onVolumeChange}
                     onSendChange={stableLayerHandlers.onSendChange}
                     onMuteToggle={stableLayerHandlers.onMuteToggle}
